@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Uno.UI.Tests.Windows_UI_Xaml.Controls;
 using Uno.UI.Tests.Windows_UI_Xaml_Data.xBindTests.Controls;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -945,6 +946,45 @@ namespace Uno.UI.Tests.Windows_UI_Xaml_Data.xBindTests
 		}
 
 		[TestMethod]
+		public void When_xLoad_FallbackValue()
+		{
+			var SUT = new Binding_xLoad_FallbackValue();
+
+			SUT.ForceLoaded();
+
+			Assert.AreEqual(Visibility.Collapsed, SUT.topLevelContent.Visibility);
+
+			SUT.Model = new Binding_xLoad_FallbackValue_Model();
+
+			Assert.AreEqual(Visibility.Collapsed, SUT.topLevelContent.Visibility);
+
+			SUT.Model.Visible = true;
+
+			Assert.AreEqual(Visibility.Visible, SUT.topLevelContent.Visibility);
+		}
+
+		[TestMethod]
+		public void When_xLoad_FallbackValue_Converter()
+		{
+			var SUT = new Binding_xLoad_FallbackValue_Converter();
+
+			SUT.ForceLoaded();
+
+			Assert.IsNull(SUT.topLevelContent);
+			Assert.IsNull(SUT.innerTextBlock);
+
+			SUT.Model = new Binding_xLoad_FallbackValue_Model();
+
+			Assert.IsNotNull(SUT.topLevelContent);
+			Assert.IsNotNull(SUT.innerTextBlock);
+
+			SUT.Model = null;
+
+			AssertIsNullAsync(() => SUT.topLevelContent);
+			AssertIsNullAsync(() => SUT.innerTextBlock);
+		}
+
+		[TestMethod]
 		public void When_PropertyChanged_Empty()
 		{
 			var SUT = new Binding_PropertyChangedAll();
@@ -1014,7 +1054,7 @@ namespace Uno.UI.Tests.Windows_UI_Xaml_Data.xBindTests
 			var SUT = new Binding_xLoad_Setter();
 
 			SUT.ForceLoaded();
-
+			
 			Assert.IsNull(SUT.ellipse);
 			Assert.IsNotNull(SUT.square);
 			Assert.AreEqual(4, SUT.square.StrokeThickness);
@@ -1068,6 +1108,24 @@ namespace Uno.UI.Tests.Windows_UI_Xaml_Data.xBindTests
 			AssertIsNullAsync(() => SUT.square);
 			Assert.AreEqual(4, SUT.ellipse.StrokeThickness);
 		}
+
+		[TestMethod]
+		public async Task When_xLoad_xBind_xLoad_Initial()
+		{
+			var grid = new Grid();
+			grid.ForceLoaded();
+
+			var SUT = new When_xLoad_xBind_xLoad_Initial();
+			grid.Children.Add(SUT);
+
+			Assert.IsNotNull(SUT.tb01);
+			Assert.AreEqual(1, SUT.tb01.Tag);
+
+			SUT.Model.MyValue = 42;
+
+			Assert.AreEqual(42, SUT.tb01.Tag);
+		}
+
 
 		[TestMethod]
 		public async Task When_Binding_xNull()

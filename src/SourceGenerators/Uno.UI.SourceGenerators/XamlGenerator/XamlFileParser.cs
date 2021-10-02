@@ -1,4 +1,5 @@
-﻿#nullable enable
+﻿extern alias __uno;
+#nullable enable
 
 using System;
 using System.Collections.Generic;
@@ -33,18 +34,19 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 			this._metadataHelper = roslynMetadataHelper;
 		}
 
-		public XamlFileDefinition[] ParseFiles(string[] xamlSourceFiles)
+		public XamlFileDefinition[] ParseFiles(string[] xamlSourceFiles, System.Threading.CancellationToken cancellationToken)
 		{
 			var files = new List<XamlFileDefinition>();
 
 			return xamlSourceFiles
 				.AsParallel()
-				.Select(ParseFile)
+				.WithCancellation(cancellationToken)
+				.Select(f => ParseFile(f, cancellationToken))
 				.Where(f => f != null)
 				.ToArray()!;
 		}
 
-		private XamlFileDefinition? ParseFile(string file)
+		private XamlFileDefinition? ParseFile(string file, System.Threading.CancellationToken cancellationToken)
 		{
 			try
 			{
@@ -64,15 +66,25 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 				{
 					if (reader.Read())
 					{
+						cancellationToken.ThrowIfCancellationRequested();
+
 						return Visit(reader, file);
 					}
 				}
 
 				return null;
 			}
+			catch (__uno::Uno.Xaml.XamlParseException e)
+			{
+				throw new XamlParsingException(e.Message, null, e.LineNumber, e.LinePosition, file);
+			}
+			catch (XmlException e)
+			{
+				throw new XamlParsingException(e.Message, null, e.LineNumber, e.LinePosition, file);
+			}
 			catch (Exception e)
 			{
-				throw new InvalidOperationException($"Failed to parse file {file}", e);
+				throw new XamlParsingException($"Failed to parse file", e, 1, 1, file);
 			}
 		}
 
@@ -453,7 +465,7 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 		private bool IsLiteralInlineText(object value, XamlMemberDefinition member, XamlObjectDefinition xamlObject)
 		{
 			return value is string
-				&& xamlObject.Type.Name == "TextBlock"
+				&& (xamlObject.Type.Name == "TextBlock" || xamlObject.Type.Name == "Span")
 				&& (member.Member.Name == "_UnknownContent" || member.Member.Name == "Inlines");
 		}
 

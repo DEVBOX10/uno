@@ -1,4 +1,6 @@
-﻿using System;
+﻿#nullable enable
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
@@ -77,7 +79,7 @@ namespace Uno.UI.Toolkit
 			get
 			{
 				var visibleBounds = ApplicationView.GetForCurrentView().VisibleBounds;
-				var bounds = Window.Current.Bounds;
+				var bounds = Window.Current?.Bounds ?? Rect.Empty;
 				var result = new Thickness {
 					Left = visibleBounds.Left - bounds.Left,
 					Top = visibleBounds.Top - bounds.Top,
@@ -102,9 +104,13 @@ namespace Uno.UI.Toolkit
 			get
 			{
 				var visibleBounds = ApplicationView.GetForCurrentView().VisibleBounds;
-				var bounds = Window.Current.Bounds;
-				visibleBounds.X -= bounds.X;
-				visibleBounds.Y -= bounds.Y;
+
+				if (Window.Current is Window window)
+				{
+					var bounds = window.Bounds;
+					visibleBounds.X -= bounds.X;
+					visibleBounds.Y -= bounds.Y;
+				}
 
 				return visibleBounds;
 			}
@@ -121,17 +127,32 @@ namespace Uno.UI.Toolkit
 		public static void SetPaddingMask(DependencyObject obj, PaddingMask value)
 			=> obj.SetValue(PaddingMaskProperty, value);
 
+#pragma warning disable RS0030 // Do not used banned APIs, This can't be changed because it's built by UWP.
 		public static DependencyProperty PaddingMaskProperty { get; } =
 			DependencyProperty.RegisterAttached("PaddingMask", typeof(PaddingMask), typeof(_VisibleBoundsPadding), new PropertyMetadata(PaddingMask.None, OnIsPaddingMaskChanged));
+#pragma warning restore RS0030 // Do not used banned APIs
 
 		private static void OnIsPaddingMaskChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
-			=> VisibleBoundsDetails.GetInstance(dependencyObject as FrameworkElement).OnIsPaddingMaskChanged((PaddingMask)args.OldValue, (PaddingMask)args.NewValue);
+		{
+			if (dependencyObject is FrameworkElement fe)
+			{
+				VisibleBoundsDetails.GetInstance(fe).OnIsPaddingMaskChanged((PaddingMask)args.OldValue, (PaddingMask)args.NewValue);
+			}
+			else
+			{
+				if (dependencyObject.Log().IsEnabled(LogLevel.Debug))
+				{
+					dependencyObject.Log().LogDebug($"PaddingMask is only supported on FrameworkElement (Found {dependencyObject?.GetType()})");
+				}
+			}
+		}
 
 		/// <summary>
 		/// If false, ApplicationView.VisibleBounds and Window.Current.Bounds have different aspect ratios (eg portrait vs landscape) which 
 		/// might arise transiently when the screen orientation changes.
 		/// </summary>
-		private static bool AreBoundsAspectRatiosConsistent => ApplicationView.GetForCurrentView().VisibleBounds.GetOrientation() == Window.Current.Bounds.GetOrientation();
+		private static bool AreBoundsAspectRatiosConsistent
+			=> ApplicationView.GetForCurrentView().VisibleBounds.GetOrientation() == Window.Current?.Bounds.GetOrientation();
 
 		public class VisibleBoundsDetails
 		{
@@ -166,11 +187,11 @@ namespace Uno.UI.Toolkit
 				owner.Unloaded += (s, e) => ApplicationView.GetForCurrentView().VisibleBoundsChanged -= _visibleBoundsChanged;
 			}
 
-			private FrameworkElement Owner => _owner.Target as FrameworkElement;
+			private FrameworkElement? Owner => _owner.Target as FrameworkElement;
 
 			private void UpdatePadding()
 			{
-				if (Window.Current.Content == null)
+				if (Window.Current?.Content == null)
 				{
 					return;
 				}
@@ -180,7 +201,7 @@ namespace Uno.UI.Toolkit
 					return;
 				}
 
-				if (!Owner.IsLoaded)
+				if (Owner is null || !Owner.IsLoaded)
 				{
 					return;
 				}
@@ -252,7 +273,7 @@ namespace Uno.UI.Toolkit
 					scrollableRoot = null;
 				}
 #endif
-				if (scrollableRoot != null)
+				if (scrollableRoot != null && Owner is { })
 				{
 					// Get the spacing already provided by the alignment of the child relative to it ancestor at the root of the scrollable hierarchy.
 					var controlBounds = GetRelativeBounds(Owner, scrollableRoot);
@@ -303,7 +324,9 @@ namespace Uno.UI.Toolkit
 
 			private void ApplyPadding(Thickness padding)
 			{
-				if (Owner.SetPadding(padding) && _log.Value.IsEnabled(LogLevel.Debug))
+				if (Owner is { } owner
+					&& owner.SetPadding(padding)
+					&& _log.Value.IsEnabled(LogLevel.Debug))
 				{
 					_log.Value.LogDebug($"ApplyPadding={padding}");
 				}
@@ -319,9 +342,9 @@ namespace Uno.UI.Toolkit
 				UpdatePadding();
 			}
 
-			private ScrollViewer GetScrollAncestor()
+			private ScrollViewer? GetScrollAncestor()
 			{
-				return Owner.FindFirstParent<ScrollViewer>();
+				return Owner?.FindFirstParent<ScrollViewer>();
 			}
 
 			private static Rect GetRelativeBounds(FrameworkElement boundsOf, UIElement relativeTo)

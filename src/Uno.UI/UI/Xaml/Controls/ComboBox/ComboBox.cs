@@ -88,6 +88,14 @@ namespace Windows.UI.Xaml.Controls
 
 			if (_popup is PopupBase popup)
 			{
+				//TODO Uno specific: Ensures popup does not take focus when opened.
+				//This can be removed when the actual ComboBox code is fully ported
+				//from WinUI.
+				if (_popupBorder is { } border)
+				{
+					border.AllowFocusOnInteraction = false;
+				}
+
 				popup.CustomLayouter = new DropDownLayouter(this, popup);
 
 				popup.BindToEquivalentProperty(this, nameof(LightDismissOverlayMode));
@@ -127,16 +135,6 @@ namespace Windows.UI.Xaml.Controls
 			}
 		}
 
-#if __ANDROID__
-		protected override void OnPointerPressed(PointerRoutedEventArgs args)
-		{
-			base.OnPointerPressed(args);
-
-			// For some reasons, PointerReleased is not raised unless PointerPressed is Handled.
-			args.Handled = true;
-		}
-#endif
-
 		private protected override void OnLoaded()
 		{
 			base.OnLoaded();
@@ -165,17 +163,27 @@ namespace Windows.UI.Xaml.Controls
 			Xaml.Window.Current.SizeChanged -= OnWindowSizeChanged;
 		}
 
+		protected virtual void OnDropDownClosed(object e)
+		{
+			DropDownClosed?.Invoke(this, null!);
+		}
+
+		protected virtual void OnDropDownOpened(object e)
+		{
+			DropDownOpened?.Invoke(this, null!);
+		}
+
 		private void OnWindowSizeChanged(object sender, Windows.UI.Core.WindowSizeChangedEventArgs e)
 		{
 			IsDropDownOpen = false;
 		}
 
-		private void OnPopupOpened(object sender, object e)
+		private void OnPopupOpened(object? sender, object e)
 		{
 			IsDropDownOpen = true;
 		}
 
-		private void OnPopupClosed(object sender, object e)
+		private void OnPopupClosed(object? sender, object e)
 		{
 			IsDropDownOpen = false;
 		}
@@ -370,9 +378,10 @@ namespace Windows.UI.Xaml.Controls
 				_popup.IsOpen = newIsDropDownOpen;
 			}
 
+			var args = new RoutedEventArgs() { OriginalSource = this };
 			if (newIsDropDownOpen)
 			{
-				DropDownOpened?.Invoke(this, newIsDropDownOpen);
+				OnDropDownOpened(args);
 
 				RestoreSelectedItem();
 
@@ -383,16 +392,33 @@ namespace Windows.UI.Xaml.Controls
 			}
 			else
 			{
-				DropDownClosed?.Invoke(this, newIsDropDownOpen);
+				OnDropDownClosed(args);
 				UpdateContentPresenter();
+
+				// Focus moves to ComboBox after item is selected.
+				Focus(FocusState.Programmatic);
 			}
 
 			UpdateDropDownState();
 		}
 
-		protected override void OnPointerReleased(PointerRoutedEventArgs e)
+		protected override void OnPointerPressed(PointerRoutedEventArgs args)
 		{
+			base.OnPointerPressed(args);
+
+			// On UWP ComboBox does handle the pressed event ... but does not capture it!
+			args.Handled = true;
+		}
+
+		protected override void OnPointerReleased(PointerRoutedEventArgs args)
+		{
+			base.OnPointerReleased(args);
+
+			Focus(FocusState.Programmatic);
 			IsDropDownOpen = true;
+
+			// On UWP ComboBox does handle the released event.
+			args.Handled = true;
 		}
 
 		/// <summary>
@@ -420,6 +446,29 @@ namespace Windows.UI.Xaml.Controls
 		protected override AutomationPeer OnCreateAutomationPeer()
 		{
 			return new ComboBoxAutomationPeer(this);
+		}
+
+		protected override void OnGotFocus(RoutedEventArgs e) => UpdateVisualState();
+
+		protected override void OnLostFocus(RoutedEventArgs e) => UpdateVisualState();
+
+		private protected override void ChangeVisualState(bool useTransitions)
+		{
+			if (FocusState != FocusState.Unfocused && IsEnabled)
+			{
+				if (FocusState == FocusState.Pointer)
+				{
+					GoToState(useTransitions, "PointerFocused");
+				}
+				else
+				{
+					GoToState(useTransitions, "Focused");
+				}
+			}
+			else
+			{
+				GoToState(useTransitions, "Unfocused");
+			}
 		}
 
 		public LightDismissOverlayMode LightDismissOverlayMode

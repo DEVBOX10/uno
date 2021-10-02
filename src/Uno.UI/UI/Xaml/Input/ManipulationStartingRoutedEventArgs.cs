@@ -1,9 +1,10 @@
+using Windows.Devices.Input;
 using Windows.UI.Input;
 using Uno.UI.Xaml.Input;
 
 namespace Windows.UI.Xaml.Input
 {
-	public partial class ManipulationStartingRoutedEventArgs : RoutedEventArgs, ICancellableRoutedEventArgs
+	public partial class ManipulationStartingRoutedEventArgs : RoutedEventArgs, IHandleableRoutedEventArgs
 	{
 		private readonly ManipulationStartingEventArgs _args;
 		private ManipulationModes _mode;
@@ -19,8 +20,15 @@ namespace Windows.UI.Xaml.Input
 
 			// We should convert back the enum from the args.Settings, but its the same value of the container.ManipulationMode
 			// so we use the easiest path!
-			_mode = container.ManipulationMode; 
+			_mode = container.ManipulationMode;
+
+			Pointer = args.Pointer;
 		}
+
+		/// <summary>
+		/// Gets identifier of the first pointer for which a manipulation is considered
+		/// </summary>
+		internal PointerIdentifier Pointer { get; }
 
 		public bool Handled { get; set; }
 

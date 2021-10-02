@@ -1,30 +1,41 @@
 ﻿#nullable enable
 
-using SkiaSharp;
 using System;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Uno.Extensions.Storage.Pickers;
 using System.Windows.Threading;
+using SkiaSharp;
+using Uno.Extensions.Storage.Pickers;
 using Uno.Foundation.Extensibility;
 using Uno.Helpers.Theming;
+using Uno.UI.Runtime.Skia.Wpf;
 using Uno.UI.Runtime.Skia.Wpf.WPF.Extensions.Helper.Theming;
+using Uno.UI.Runtime.Skia.WPF.Extensions.UI.Xaml.Controls;
+using Uno.UI.Xaml;
+using Uno.UI.Xaml.Controls.Extensions;
+using Uno.UI.Xaml.Core;
 using Windows.Graphics.Display;
 using Windows.System;
-using WinUI = Windows.UI.Xaml;
+using Windows.Networking.Connectivity;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
+using WinUI = Windows.UI.Xaml;
 using Uno.UI.Xaml.Controls.Extensions;
 using Uno.UI.Runtime.Skia.WPF.Extensions.UI.Xaml.Controls;
 using Uno.Extensions.System;
+using Uno.Extensions.Networking.Connectivity;
 using WpfApplication = System.Windows.Application;
 using WpfCanvas = System.Windows.Controls.Canvas;
 using WpfControl = System.Windows.Controls.Control;
 using WpfFrameworkPropertyMetadata = System.Windows.FrameworkPropertyMetadata;
+using Windows.UI.ViewManagement;
 using Uno.UI.Xaml;
 using Uno.UI.Runtime.Skia.Wpf;
+using Uno.ApplicationModel.DataTransfer;
+using Uno.Extensions.ApplicationModel.DataTransfer;
 
 namespace Uno.UI.Skia.Platform
 {
@@ -40,6 +51,7 @@ namespace Uno.UI.Skia.Platform
 		private WpfCanvas? _nativeOverlayLayer = null;
 		private WriteableBitmap bitmap;
 		private bool ignorePixelScaling;
+		private FocusManager? _focusManager;
 
 		static WpfHost()
 		{
@@ -53,8 +65,10 @@ namespace Uno.UI.Skia.Platform
 			ApiExtensibility.Register(typeof(Windows.ApplicationModel.DataTransfer.DragDrop.Core.IDragDropExtension), o => new WpfDragDropExtension(o));
 			ApiExtensibility.Register(typeof(IFileOpenPickerExtension), o => new FileOpenPickerExtension(o));
 			ApiExtensibility.Register(typeof(IFileSavePickerExtension), o => new FileSavePickerExtension(o));
+			ApiExtensibility.Register(typeof(IConnectionProfileExtension), o => new WindowsConnectionProfileExtension(o));
 			ApiExtensibility.Register<TextBoxView>(typeof(ITextBoxViewExtension), o => new TextBoxViewExtension(o));
 			ApiExtensibility.Register(typeof(ILauncherExtension), o => new LauncherExtension(o));
+			ApiExtensibility.Register(typeof(IClipboardExtension), o => new ClipboardExtensions(o));
 		}
 
 		public static WpfHost Current => _current;
@@ -111,11 +125,22 @@ namespace Uno.UI.Skia.Platform
 
 			WinUI.Application.Start(CreateApp, args);
 
-			WinUI.Window.InvalidateRender += () => InvalidateVisual();
+			WinUI.Window.InvalidateRender += () =>
+			{
+				InvalidateFocusVisual();
+				InvalidateVisual();
+			};
 
 			WpfApplication.Current.Activated += Current_Activated;
 			WpfApplication.Current.Deactivated += Current_Deactivated;
 			WpfApplication.Current.MainWindow.StateChanged += MainWindow_StateChanged;
+
+			Windows.Foundation.Size preferredWindowSize = ApplicationView.PreferredLaunchViewSize;
+			if (preferredWindowSize != Windows.Foundation.Size.Empty)
+			{
+				WpfApplication.Current.MainWindow.Width = (int)preferredWindowSize.Width;
+				WpfApplication.Current.MainWindow.Height = (int)preferredWindowSize.Height;
+			}
 
 			SizeChanged += WpfHost_SizeChanged;
 			Loaded += WpfHost_Loaded;
@@ -241,6 +266,15 @@ namespace Uno.UI.Skia.Platform
 			bitmap.AddDirtyRect(new Int32Rect(0, 0, width, height));
 			bitmap.Unlock();
 			drawingContext.DrawImage(bitmap, new Rect(0, 0, ActualWidth, ActualHeight));
+		}
+
+		private void InvalidateFocusVisual()
+		{
+			if (_focusManager == null)
+			{
+				_focusManager = VisualTree.GetFocusManagerForElement(Windows.UI.Xaml.Window.Current?.RootElement);
+			}
+			_focusManager?.FocusRectManager?.RedrawFocusVisual();
 		}
 	}
 }

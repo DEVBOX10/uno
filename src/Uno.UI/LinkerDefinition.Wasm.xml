@@ -13,6 +13,9 @@
 	<type fullname="Windows.UI.Xaml.Input.FocusManager">
 	  <method name="ReceiveFocusNative" />
 	</type>
+	<type fullname="Windows.ApplicationModel.DataTransfer.DragDrop.Core.DragDropExtension">
+	  <method name="OnNativeDropEvent" />
+	</type>
 	<type fullname="Windows.UI.Xaml.Application">
 	  <method name="DispatchSuspending" />
       <method name="DispatchSystemThemeChange" />
@@ -38,7 +41,10 @@
 	<type fullname="Windows.Devices.Sensors.Magnetometer">
 	  <method name="DispatchReading" />
 	</type>
-	<type fullname="Windows.Networking.Connectivity.NetworkInformation">
+    <type fullname="Windows.Devices.Sensors.LightSensor">
+      <method name="DispatchReading" />
+    </type>
+    <type fullname="Windows.Networking.Connectivity.NetworkInformation">
 	  <method name="DispatchStatusChanged" />
 	</type>
 	<type fullname="Windows.Graphics.Display.DisplayInformation">

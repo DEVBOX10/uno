@@ -175,7 +175,7 @@ namespace Windows.UI.Xaml
 			{
 				if (_trace.IsEnabled)
 				{
-					_trace.WriteEventActivity(TraceProvider.CreateTemplate, EventOpcode.Send, new[] { ((Func<View>)template).Method.DeclaringType.ToString() });
+					_trace.WriteEventActivity(TraceProvider.CreateTemplate, EventOpcode.Send, new[] { ((Func<View>)template).Method.DeclaringType?.ToString() });
 				}
 
 				if (this.Log().IsEnabled(Microsoft.Extensions.Logging.LogLevel.Debug))
@@ -218,7 +218,7 @@ namespace Windows.UI.Xaml
 
 		private List<TemplateEntry> GetTemplatePool(FrameworkTemplate template)
 		{
-			List<TemplateEntry> instances;
+			List<TemplateEntry>? instances;
 
 			if (!_pooledInstances.TryGetValue(template, out instances))
 			{
@@ -293,16 +293,21 @@ namespace Windows.UI.Xaml
 			//Try Panel.Children before ViewGroup.GetChildren - this results in fewer allocations
 			if (instance is Controls.Panel p)
 			{
-				foreach (object o in p.Children)
+				for (var i = 0; i < p.Children.Count; i++)
 				{
+					var o = (object)p.Children[i];
+
 					PropagateOnTemplateReused(o);
 				}
 			}
 			else if (instance is ViewGroup g)
 			{
-				foreach (object o in g.GetChildren())
+				// This block is a manual enumeration to avoid the foreach pattern
+				// See https://github.com/dotnet/runtime/issues/56309 for details
+				var childrenEnumerator = g.GetChildren().GetEnumerator();
+				while (childrenEnumerator.MoveNext())
 				{
-					PropagateOnTemplateReused(o);
+					PropagateOnTemplateReused(childrenEnumerator.Current);
 				}
 			}
 		}

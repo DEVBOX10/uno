@@ -36,6 +36,9 @@ namespace Windows.UI.Xaml.Controls
 
 		protected enum ViewType { Item, GroupHeader, Header, Footer }
 
+		/// <summary>
+		/// Stores the layout state of materialized items. All layout coordinates are relative to the viewport, in physical pixels.
+		/// </summary>
 		private readonly Deque<Group> _groups = new Deque<Group>();
 		private bool _isInitialGroupHeaderCreated;
 		private bool _areHeaderAndFooterCreated;
@@ -59,6 +62,12 @@ namespace Windows.UI.Xaml.Controls
 		/// or when no ItemAnimator is set) that need special attention.
 		/// </remarks>
 		private bool _needsUpdateAfterCollectionChange;
+		private bool _isRecycleLayoutRequested = false;
+		/// <summary>
+		/// If we're moving an item from before the topmost visible item to after it, then its position will immediately decrease
+		/// by one. We should decrement the seed to anticipate this and prevent it jumping out of view.
+		/// </summary>
+		private bool _shouldDecrementSeedForPendingReorder;
 
 		internal int Extent => ScrollOrientation == Orientation.Vertical ? Height : Width;
 		internal int Breadth => ScrollOrientation == Orientation.Vertical ? Width : Height;
@@ -82,6 +91,19 @@ namespace Windows.UI.Xaml.Controls
 		private ScrollToPositionRequest _pendingScrollToPositionRequest;
 
 		private readonly Queue<ListViewBase.GroupOperation> _pendingGroupOperations = new Queue<ListViewBase.GroupOperation>();
+
+		private IEnumerable<Line> MaterializedLines => _groups.SelectMany(g => g.Lines);
+
+		/// <summary>
+		/// State of a drag-to-reorder operation in flight.
+		/// </summary>
+		private (double offset, double extent, object item, Uno.UI.IndexPath? index)? _pendingReorder;
+		/// <summary>
+		/// The pending expected adjustment to the position as a result of requested scroll, used while reordering to correct the pointer position.
+		/// </summary>
+		private int _pendingReorderScrollAdjustment = 0;
+
+		private bool IsReordering => GetAndUpdateReorderingIndex() != null;
 
 		public VirtualizingPanelLayout()
 		{
@@ -244,7 +266,7 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		/// <summary>
-		/// Apply a requested ScrollToPosition during layouting by calling <see cref="ScrollByInner(int, RecyclerView.Recycler, RecyclerView.State)>"/>
+		/// Apply a requested ScrollToPosition during layouting by calling <see cref="ScrollByInner(int, RecyclerView.Recycler, RecyclerView.State)"/>
 		/// until the requested item is visible.
 		/// </summary>
 		private void ApplyScrollToPosition(int targetPosition, ScrollIntoViewAlignment alignment, RecyclerView.Recycler recycler, RecyclerView.State state)
@@ -491,11 +513,13 @@ namespace Windows.UI.Xaml.Controls
 			}
 		}
 
+		internal int HorizontalScrollRange { get; private set; }
+		internal int VerticalScrollRange { get; private set; }
 		public override int ComputeHorizontalScrollRange(RecyclerView.State state)
 		{
 			try
 			{
-				return ComputeScrollRange(state);
+				return HorizontalScrollRange = ComputeScrollRange(state, Orientation.Horizontal);
 			}
 			catch (Exception e)
 			{
@@ -534,9 +558,9 @@ namespace Windows.UI.Xaml.Controls
 		{
 			try
 			{
-				return ComputeScrollRange(state);
+				return VerticalScrollRange = ComputeScrollRange(state, Orientation.Vertical);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				Application.Current.RaiseRecoverableUnhandledExceptionOrLog(e, this);
 				return 1;
@@ -623,6 +647,16 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		/// <summary>
+		/// Rebuild the layout, recycling current elements. This is 'heavier' than simply scrapping the layout, but less destructive than
+		/// completely refreshing the layout (eg scroll position is preserved).
+		/// </summary>
+		private void RecycleLayout()
+		{
+			_isRecycleLayoutRequested = true;
+			RequestLayout();
+		}
+
+		/// <summary>
 		/// Informs the layout that a INotifyCollectionChanged operation has occurred.
 		/// </summary>
 		/// <param name="groupOperation">The details of a group operation, if it was a group operation, else null.</param>
@@ -655,10 +689,21 @@ namespace Windows.UI.Xaml.Controls
 		/// <summary>
 		/// The total range of all content (necessarily an estimate since we can't measure non-materialized items.)
 		/// </summary>
-		private int ComputeScrollRange(RecyclerView.State state)
+		private int ComputeScrollRange(RecyclerView.State state, Orientation orientation)
 		{
+			if (orientation != ScrollOrientation)
+			{
+				return Breadth;
+			}
+
 			//Assume as a dirt-simple heuristic that all items are uniform. Could refine this to only estimate for unmaterialized content.
-			var leadingLine = GetLeadingNonEmptyGroup(GeneratorDirection.Forward)?.GetLeadingLine(GeneratorDirection.Forward);
+			var leadingGroup = GetLeadingNonEmptyGroup(GeneratorDirection.Forward);
+			var leadingLine = leadingGroup?.GetLeadingLine(GeneratorDirection.Forward);
+			if (_pendingReorder?.index is { } reorderingIndex && reorderingIndex == leadingLine?.FirstItem)
+			{
+				// Skip reordering view, which is in general out of order, when calculating remaining views
+				leadingLine = leadingGroup?.GetLeadingLine(GeneratorDirection.Forward, i => i != reorderingIndex);
+			}
 			if (leadingLine == null)
 			{
 				return 0;
@@ -690,9 +735,14 @@ namespace Windows.UI.Xaml.Controls
 		/// <summary>
 		/// Update the internal state of the layout, as well as 'floating' views like group headers, when the scrolled offset changes.
 		/// </summary>
+		/// <remarks>
+		/// This is called in conjunction with <see cref="OffsetChildrenVertical(int)"/> (or Horizontal), which actually moves the views
+		/// themselves; this method applies the same adjustment to the Uno-side state to keep it in sync with the actual view positions.
+		/// </remarks>
 		private void ApplyOffset(int delta)
 		{
 			ContentOffset -= delta;
+			Debug.Assert(ContentOffset >= 0, "ContentOffset must be non-negative.");
 			foreach (var group in _groups)
 			{
 				group.Start += delta;
@@ -848,12 +898,8 @@ namespace Windows.UI.Xaml.Controls
 			{
 				slotSize = new Size(double.PositiveInfinity, logicalAvailableBreadth);
 			}
-			var size = _layouter.MeasureChild(child, slotSize);
 
-			if (ShouldApplyChildStretch)
-			{
-				size = ApplyChildStretch(size, slotSize, viewType);
-			}
+			var size = TryMeasureChild(child, slotSize, viewType);
 
 			if (!child.IsInLayout)
 			{
@@ -867,6 +913,31 @@ namespace Windows.UI.Xaml.Controls
 			}
 
 			return size;
+		}
+
+		/// <summary>
+		/// Measure item view if needed.
+		/// </summary>
+		/// <returns>Measured size, or cached size if no measure was necessary.</returns>
+		private Size TryMeasureChild(View child, Size slotSize, ViewType viewType)
+		{
+			var previousAvailableSize = LayoutInformation.GetAvailableSize(child);
+
+			if (child.IsLayoutRequested || slotSize != previousAvailableSize)
+			{
+				var size = _layouter.MeasureChild(child, slotSize);
+
+				if (ShouldApplyChildStretch)
+				{
+					size = ApplyChildStretch(size, slotSize, viewType);
+				}
+
+				return size;
+			}
+			else
+			{
+				return (child as FrameworkElement)?.AssignedActualSize ?? ViewHelper.PhysicalToLogicalPixels(new Size(child.Width, child.Height));
+			}
 		}
 
 		/// <summary>
@@ -982,6 +1053,10 @@ namespace Windows.UI.Xaml.Controls
 		private int ScrollBy(int offset, RecyclerView.Recycler recycler, RecyclerView.State state)
 		{
 			var fillDirection = offset >= 0 ? GeneratorDirection.Forward : GeneratorDirection.Backward;
+			if (IsReorderingAndNotReadyToScroll(fillDirection))
+			{
+				return 0;
+			}
 			int unconsumedOffset = offset;
 			int actualOffset = 0;
 			int appliedOffset = 0;
@@ -992,6 +1067,9 @@ namespace Windows.UI.Xaml.Controls
 				// Exit early to avoid trying to incrementally scroll infinitely
 				return actualOffset;
 			}
+
+			_pendingReorderScrollAdjustment = offset;
+
 			while (Math.Abs(unconsumedOffset) > Math.Abs(consumptionIncrement))
 			{
 				//Consume the scroll offset in bite-sized chunks to allow us to recycle views at the same rate as we create them. A big optimization, for 
@@ -1002,12 +1080,30 @@ namespace Windows.UI.Xaml.Controls
 				appliedOffset += consumptionIncrement;
 				actualOffset = ScrollByInner(appliedOffset, recycler, state);
 			}
+
+			// Apply the residual after consumption-increment-sized blocks have been applied
 			actualOffset = ScrollByInner(offset, recycler, state);
 
 			UpdateBuffers(recycler, state);
+			if (_pendingReorder != null
+				// This invariant is only enforced by SetConstantVelocities() when scrolling toward the start of the list.
+				&& actualOffset < 0)
+			{
+				Debug.Assert(actualOffset == _pendingReorderScrollAdjustment, $"Different scroll than expected while reordering, actual={actualOffset}, expected={_pendingReorderScrollAdjustment}");
+			}
+			_pendingReorderScrollAdjustment = 0;
 
 			return actualOffset;
 		}
+
+		/// <summary>
+		/// During a drag-to-reorder, if the item is dragged very rapidly then we may receive a scroll request before the item has been
+		/// redrawn at the position under the cursor. If the item is still at the beginning of the list (that is, the 'trailing' position
+		/// relative to scroll), this would violate the assumptions of the reordering logic (<see cref="TryTrimReorderingView(GeneratorDirection, RecyclerView.Recycler)"/>).
+		/// As a simple fix we simply skip this scroll request, and wait for one to occur after the item has been repositioned.
+		/// </summary>
+		private bool IsReorderingAndNotReadyToScroll(GeneratorDirection fillDirection)
+			=> _pendingReorder?.index is { } reorderingIndex && reorderingIndex == GetTrailingLine(fillDirection).FirstItem;
 
 		private int GetScrollConsumptionIncrement(GeneratorDirection fillDirection)
 		{
@@ -1025,10 +1121,15 @@ namespace Windows.UI.Xaml.Controls
 		/// <summary>
 		/// Materialize and dematerialize views corresponding to their visibility after the requested scroll offset.
 		/// </summary>
+		/// <remarks>
+		/// In essence: fill the window that <paramref name="offset"/> is attempting to make visible, and unfill views outside of that window.
+		/// </remarks>
 		/// <returns>The actual scroll offset (which may be less than requested if the end of the list is reached).</returns>
 		private int ScrollByInner(int offset, RecyclerView.Recycler recycler, RecyclerView.State state)
 		{
 			var fillDirection = offset >= 0 ? GeneratorDirection.Forward : GeneratorDirection.Backward;
+
+			TryTrimReorderingView(fillDirection, recycler);
 
 			//Add newly visible views
 			FillLayout(fillDirection, offset, Extent, ContentBreadth, recycler, state);
@@ -1054,6 +1155,8 @@ namespace Windows.UI.Xaml.Controls
 
 			XamlParent?.TryLoadMoreItems(LastVisibleIndex);
 
+			Debug.Assert(ContentOffset + actualOffset >= 0, "actualOffset must not push ContentOffset negative");
+
 			return actualOffset;
 		}
 
@@ -1067,6 +1170,11 @@ namespace Windows.UI.Xaml.Controls
 		/// <param name="state">Supplied state object.</param>
 		private void UpdateLayout(GeneratorDirection direction, int availableExtent, int availableBreadth, RecyclerView.Recycler recycler, RecyclerView.State state, bool isMeasure)
 		{
+			if (isMeasure)
+			{
+				ResetReorderingIndex();
+			}
+
 			if (_needsHeaderAndFooterUpdate)
 			{
 				ResetHeaderAndFooter(recycler);
@@ -1083,7 +1191,12 @@ namespace Windows.UI.Xaml.Controls
 
 			var needsScrapOnMeasure = isMeasure && availableExtent > 0 && availableBreadth > 0 && ChildCount > 0;
 			var updatedAfterCollectionChange = false;
-			if (needsScrapOnMeasure)
+			if (_isRecycleLayoutRequested)
+			{
+				_isRecycleLayoutRequested = false;
+				DoRecycleLayout(recycler, availableBreadth);
+			}
+			else if (needsScrapOnMeasure)
 			{
 				// Always rebuild the layout on measure, because child dimensions may have changed
 				ScrapLayout(recycler, availableBreadth);
@@ -1125,6 +1238,13 @@ namespace Windows.UI.Xaml.Controls
 				UpdateBuffers(recycler, state);
 				AssertValidState();
 			}
+
+			if (!isMeasure)
+			{
+				// Update HorizontalScrollRange and VerticalScrollRange because they're used by the ScrollViewer to get ExtentWidth and ExtentHeight.
+				ComputeHorizontalScrollRange(state);
+				ComputeVerticalScrollRange(state);
+			}
 		}
 
 		/// <summary>
@@ -1132,7 +1252,12 @@ namespace Windows.UI.Xaml.Controls
 		/// </summary>
 		private void UpdateScrollPositionForPaddingChanges(RecyclerView.Recycler recycler, RecyclerView.State state)
 		{
-			if (XamlParent?.NativePanel != null && XamlParent.NativePanel.ChildCount > 0)
+			if (
+				XamlParent?.NativePanel != null &&
+				XamlParent.NativePanel.ChildCount > 0 &&
+				// Skip this correction when reordering, since we rely on the assumption while reordering that only dragging will cause a scroll
+				!IsReordering
+			)
 			{
 				var gapToStart = GetContentStart();
 				if (gapToStart > 0)
@@ -1232,7 +1357,17 @@ namespace Windows.UI.Xaml.Controls
 
 			AssertValidState();
 
-			var nextItemPath = GetNextUnmaterializedItem(direction, _dynamicSeedIndex ?? GetLeadingMaterializedItem(direction));
+			Uno.UI.IndexPath? GetLeading()
+			{
+				var leading = GetLeadingMaterializedItem(direction);
+				if (_pendingReorder?.index is { } reorderingIndex && reorderingIndex == leading)
+				{
+					// Don't count the currently reordering item when getting the leading item, since the reordering item is generally out of order
+					leading = GetLeadingMaterializedItem(direction, i => i != reorderingIndex);
+				}
+				return leading;
+			}
+			var nextItemPath = GetNextUnmaterializedItem(direction, _dynamicSeedIndex ?? GetLeading());
 			while (nextItemPath != null)
 			{
 				//Handle the case there are no groups, this may happen during a lightweight rebuild of the layout.
@@ -1257,6 +1392,14 @@ namespace Windows.UI.Xaml.Controls
 					CreateGroupsAtLeadingEdge(endGroupIndex, direction, scrollOffset, availableExtent, availableBreadth, recycler, state);
 					AssertValidState();
 				}
+			}
+
+			AssertValidState();
+
+			// Make sure that the reorder item has been rendered
+			if (GetAndUpdateReorderingIndex() is { } reorderIndex && MaterializedLines.None(line => line.Contains(reorderIndex)))
+			{
+				AddLine(direction, availableBreadth, recycler, state, reorderIndex);
 			}
 
 			AssertValidState();
@@ -1326,6 +1469,15 @@ namespace Windows.UI.Xaml.Controls
 				group.Lines.Count == 0
 			);
 			group.AddLine(line, fillDirection);
+
+
+			// The layout might have decided to insert another item (pending reorder item), so make sure to add the requested item anyway.
+			// Note: We must ensure to add the requested item so the Get<First|Last>MaterializedLine()
+			//		 and Get<Content|Items><Start|End>() will still return a meaningful values.
+			if (!line.Contains(nextVisibleItem))
+			{
+				AddLine(fillDirection, availableBreadth, recycler, state, nextVisibleItem);
+			}
 		}
 
 		/// <summary>
@@ -1508,6 +1660,26 @@ namespace Windows.UI.Xaml.Controls
 			AssertValidState();
 		}
 
+		/// <summary>
+		/// Trim all but the trailing view while scrolling, with the intention of trimming the reordering view so that it can be inserted in
+		/// its recalculated correct position.
+		/// </summary>
+		/// <remarks>
+		/// Implicitly assumes that the trailing view will not be the reordering view, since the reordering view must be near enough to the
+		/// leading edge to trigger a scroll.
+		/// </remarks>
+		private void TryTrimReorderingView(GeneratorDirection fillDirection, RecyclerView.Recycler recycler)
+		{
+			if (IsReordering)
+			{
+				// Keep at least one item materialized as a seed
+				while (ItemViewCount > 1)
+				{
+					RemoveTrailingLine(fillDirection.Inverse(), recycler);
+				}
+			}
+		}
+
 		[Conditional("DEBUG")]
 		private void AssertValidState()
 		{
@@ -1519,15 +1691,43 @@ namespace Windows.UI.Xaml.Controls
 			Debug.Assert(FooterViewCount <= 1, "FooterViewCount <= 1");
 			Debug.Assert(ItemViewCount + GroupHeaderViewCount + HeaderViewCount + FooterViewCount == ChildCount,
 				"ItemViewCount + GroupHeaderViewCount + HeaderViewCount + FooterViewCount == ChildCount");
+
+			if (XamlParent?.CanReorderItems ?? false)
+			{
+				// Extra-thorough validation when reordering is enabled
+				var materializedNormalLines = _groups[0].Lines.Where(l => l.FirstItem != _pendingReorder?.index).ToArray();
+
+				for (int i = 1; i < materializedNormalLines.Length; i++)
+				{
+					var currentRow = materializedNormalLines[i].FirstItem.Row;
+					var previousRow = materializedNormalLines[i - 1].LastItem.Row;
+					if (_pendingReorder?.index is { } reorderIndex && currentRow == reorderIndex.Row + 1)
+					{
+						Debug.Assert(currentRow == previousRow + 2, $"Non-reordering items after and before reordering item: current={currentRow}, previous={previousRow}");
+					}
+					else
+					{
+						Debug.Assert(currentRow == previousRow + 1, $"Non-reordering items must be contiguous: current={currentRow}, previous={previousRow}");
+					}
+				}
+			}
 		}
+
+		private void DoRecycleLayout(RecyclerView.Recycler recycler, int availableBreadth) => TearDownLayout(recycler, availableBreadth, shouldScrap: false);
 
 		/// <summary>
 		/// Tears down the current layout and allows it to be recreated without losing the current scroll position.
 		/// </summary>
-		private void ScrapLayout(RecyclerView.Recycler recycler, int availableBreadth)
+		private void ScrapLayout(RecyclerView.Recycler recycler, int availableBreadth) => TearDownLayout(recycler, availableBreadth, shouldScrap: true);
+
+		private void TearDownLayout(RecyclerView.Recycler recycler, int availableBreadth, bool shouldScrap)
 		{
 			var direction = GeneratorDirection.Forward;
 			var firstVisibleItem = GetTrailingLine(direction)?.FirstItem;
+			if (GetAndUpdateReorderingIndex() is { } reorderIndex && reorderIndex == firstVisibleItem)
+			{
+				firstVisibleItem = MaterializedLines.SelectMany(line => line.Indices).Skip(1).FirstOrDefault();
+			}
 			//Get 'seed' information for recreating layout
 			var adjustedFirstItem = GetAdjustedFirstItem(firstVisibleItem);
 
@@ -1545,9 +1745,17 @@ namespace Windows.UI.Xaml.Controls
 			_dynamicSeedIndex = GetDynamicSeedIndex(adjustedFirstItem, availableBreadth);
 			_dynamicSeedStart = GetTrailingGroup(direction)?.Start;
 
-			// Scrapped views will be preferentially reused by RecyclerView, without rebinding if the item hasn't changed, which is 
-			// much cheaper than fully recycling an item view.
-			DetachAndScrapAttachedViews(recycler);
+			if (shouldScrap)
+			{
+				// Scrapped views will be preferentially reused by RecyclerView, without rebinding if the item hasn't changed, which is 
+				// much cheaper than fully recycling an item view.
+				DetachAndScrapAttachedViews(recycler);
+			}
+			else
+			{
+				RemoveAndRecycleAllViews(recycler);
+				ViewCache?.EmptyAndRemove();
+			}
 
 			while (ItemViewCount > 0)
 			{
@@ -1584,6 +1792,8 @@ namespace Windows.UI.Xaml.Controls
 		/// </summary>
 		protected virtual Uno.UI.IndexPath? GetDynamicSeedIndex(Uno.UI.IndexPath? firstVisibleItem, int availableBreadth)
 		{
+			var shouldDecrementSeedForPendingReorder = _shouldDecrementSeedForPendingReorder;
+			_shouldDecrementSeedForPendingReorder = false;
 			if (ContentOffset == 0)
 			{
 				// Ensure that the entire dataset is drawn if the list hasn't been scrolled. This is otherwise sometimes not done correctly 
@@ -1599,7 +1809,13 @@ namespace Windows.UI.Xaml.Controls
 				// None of the previously-visible indices are now present in the updated items source
 				return null;
 			}
-			return GetNextUnmaterializedItem(GeneratorDirection.Backward, firstVisibleItem);
+
+			var dynamicSeedIndex = GetNextUnmaterializedItem(GeneratorDirection.Backward, firstVisibleItem);
+			if (shouldDecrementSeedForPendingReorder)
+			{
+				dynamicSeedIndex = GetNextUnmaterializedItem(GeneratorDirection.Backward, dynamicSeedIndex);
+			}
+			return dynamicSeedIndex;
 		}
 
 		/// <summary>
@@ -1738,6 +1954,11 @@ namespace Windows.UI.Xaml.Controls
 
 		private void UpdateBuffers(RecyclerView.Recycler recycler, RecyclerView.State state)
 		{
+			if (XamlParent?.CanReorderItems ?? false)
+			{
+				// Disable buffers while reordering is enabled
+				return;
+			}
 			UpdateCacheHalfLength();
 			ViewCache.UpdateBuffers(recycler, state);
 		}
@@ -1905,6 +2126,103 @@ namespace Windows.UI.Xaml.Controls
 			var offsetStart = group.Start - offset;
 			var offsetEnd = group.End - offset;
 			return offsetStart <= availableExtent && offsetEnd >= 0;
+		}
+
+		internal void UpdateReorderingItem(Windows.Foundation.Point location, FrameworkElement element, object item)
+		{
+			// Note: unlike managed list, we do *not* include the total offset
+			_pendingReorder = ScrollOrientation == Orientation.Horizontal
+				? (location.X, element.ActualWidth, item, default(Uno.UI.IndexPath?))
+				: (location.Y, element.ActualHeight, item, default(Uno.UI.IndexPath?));
+
+			RequestLayout();
+		}
+
+		internal Uno.UI.IndexPath? CompleteReorderingItem(FrameworkElement element, object item)
+		{
+			// Ensure that _pendingReorder.index is set. This is necessary in case it was invalidated from UpdateReorderingItem() but the
+			// list was not yet remeasured, which can happen when dragging rapidly.
+			GetAndUpdateReorderingIndex();
+
+			var updatedIndex = default(Uno.UI.IndexPath?);
+			if (_pendingReorder?.index is { } index)
+			{
+				var nextItem = MaterializedLines
+					.SelectMany(line => line.Indices.Cast<Uno.UI.IndexPath?>())
+					.SkipWhile(i => i != index)
+					.Skip(1)
+					.FirstOrDefault();
+
+				updatedIndex = nextItem is null
+					? Uno.UI.IndexPath.FromRowSection(int.MaxValue, int.MaxValue) // There is no "nextItem", i.e. the item has been moved at the end.
+					: nextItem;
+				if (GetTrailingLine(GeneratorDirection.Forward)?.FirstItem is { } firstVisibleItem && index < firstVisibleItem && updatedIndex >= firstVisibleItem)
+				{
+					// If we're moving an item from before the topmost visible item to after it, then its position will immediately decrease
+					// by one. We should decrement the seed to anticipate this and prevent it jumping out of view.
+					_shouldDecrementSeedForPendingReorder = true;
+				}
+			}
+
+			CleanupReordering();
+
+			return updatedIndex;
+		}
+
+		/// <summary>
+		/// Clean up state after a drag-to-reorder operation.
+		/// </summary>
+		internal void CleanupReordering()
+		{
+			_pendingReorder = null;
+
+			ViewCache.RemoveReorderingItem();
+			// We need a full refresh to properly re-arrange all items at their right location,
+			// ignoring the temp location of the dragged / reordered item.
+			RecycleLayout();
+		}
+
+		protected bool ShouldInsertReorderingView(GeneratorDirection direction, double physicalExtentOffset)
+		{
+			if (!(_pendingReorder is { } reorder))
+			{
+				return false;
+			}
+
+			var logicalextentOffset = ViewHelper.PhysicalToLogicalPixels(physicalExtentOffset - _pendingReorderScrollAdjustment);
+			return direction switch
+			{
+				GeneratorDirection.Forward => reorder.offset > logicalextentOffset && reorder.offset <= logicalextentOffset + reorder.extent,
+				GeneratorDirection.Backward => reorder.offset > logicalextentOffset - reorder.extent && reorder.offset <= logicalextentOffset,
+				_ => throw new ArgumentOutOfRangeException()
+			};
+		}
+
+		protected Uno.UI.IndexPath? GetAndUpdateReorderingIndex()
+		{
+			if (_pendingReorder is { } reorder)
+			{
+				if (reorder.index is null)
+				{
+					var index = XamlParent!.GetIndexPathFromItem(reorder.item);
+					reorder.index = index;
+					_pendingReorder = reorder; // _pendingReorder is a struct!
+
+					ViewCache.SetReorderingItem(GetFlatItemIndex(index));
+				}
+
+				return reorder.index;
+			}
+
+			return null;
+		}
+
+		private void ResetReorderingIndex()
+		{
+			if (_pendingReorder is { } reorder)
+			{
+				_pendingReorder = (reorder.offset, reorder.extent, reorder.item, null);
+			}
 		}
 
 		private int GetChildStartWithMargin(int childIndex)
@@ -2123,11 +2441,16 @@ namespace Windows.UI.Xaml.Controls
 			return ChildCount - 1;
 		}
 
+		/// <summary>
+		/// Returns the index of the item on the far leading edge for direction <paramref name="fillDirection"/>. Ie, if scrolling/filling towards
+		/// the end of the list, this will return the bottom-most materialized item, and if scrolling/filling towards the beginning of the list, this will
+		/// return the top-most item.
+		/// </summary>
 		private Uno.UI.IndexPath? GetLeadingMaterializedItem(GeneratorDirection fillDirection)
-		{
-			var group = GetLeadingNonEmptyGroup(fillDirection);
-			return group?.GetLeadingMaterializedItem(fillDirection);
-		}
+			=> GetLeadingNonEmptyGroup(fillDirection)?.GetLeadingMaterializedItem(fillDirection);
+
+		private Uno.UI.IndexPath? GetLeadingMaterializedItem(GeneratorDirection fillDirection, Func<Uno.UI.IndexPath, bool> condition)
+			=> GetLeadingNonEmptyGroup(fillDirection)?.GetLeadingMaterializedItem(fillDirection, condition);
 
 		private View GetLeadingItemView(GeneratorDirection fillDirection)
 		{
@@ -2254,7 +2577,5 @@ namespace Windows.UI.Xaml.Controls
 		{
 			return message + $" - {name}, line {lineNumber}";
 		}
-
-		Uno.UI.IndexPath? GetReorderingIndex() => null;
 	}
 }

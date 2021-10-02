@@ -110,7 +110,7 @@ namespace SamplesApp.UITests
 			{
 				Platform.Android => rect,
 				Platform.iOS => rect.ApplyScale(app.GetDisplayScreenScaling()),
-				Platform.Browser => rect,
+				Platform.Browser => rect.ApplyScale(app.GetDisplayScreenScaling()),
 				_ => throw new InvalidOperationException("Unknown current platform.")
 			};
 		}
@@ -121,7 +121,7 @@ namespace SamplesApp.UITests
 			{
 				Platform.Android => rect.UnapplyScale(app.GetDisplayScreenScaling()),
 				Platform.iOS => rect,
-				Platform.Browser => rect,
+				Platform.Browser => rect.UnapplyScale(app.GetDisplayScreenScaling()),
 				_ => throw new InvalidOperationException("Unknown current platform.")
 			};
 		}
@@ -157,6 +157,22 @@ namespace SamplesApp.UITests
 			var element = app.Marked(elementName);
 			app.WaitForElement(element);
 			app.WaitForDependencyPropertyValue(element, "FocusState", "Pointer");
+		}
+
+		/// <summary>
+		/// Calls the <see cref="IApp.WaitForElement(string, string, TimeSpan?, TimeSpan?, TimeSpan?)"/> method with a timeout message that specifies
+		/// the element name, which is useful when multiple elements are waited upon in the same test.
+		/// </summary>
+		public static IAppResult[] WaitForElementWithMessage(this IApp app, string elementName, string additionalMessage = null)
+		{
+			var timeoutMessage = $"Timed out waiting for element '{elementName}'";
+
+			if (additionalMessage != null)
+			{
+				timeoutMessage = $"{timeoutMessage} - {additionalMessage}";
+			}
+
+			return app.WaitForElement(elementName, timeoutMessage: timeoutMessage);
 		}
 	}
 }

@@ -21,6 +21,7 @@
 		
 		<PackageId Condition="'$(UNO_UWP_BUILD)'!='true'">Uno.WinUI</PackageId>
 
+		<UnoXamlResourcesTrimming>true</UnoXamlResourcesTrimming>
 		<UnoRuntimeIdentifier>WebAssembly</UnoRuntimeIdentifier>
 		<PlatformItemsBasePath>.\</PlatformItemsBasePath>
 	</PropertyGroup>
@@ -47,7 +48,7 @@
 
 	<ItemGroup>
 	  <EmbeddedResource Include="LinkerDefinition.Wasm.xml">
-		<LogicalName>$(AssemblyName).xml</LogicalName>
+			<LogicalName>$(AssemblyName).xml</LogicalName>
 	  </EmbeddedResource>
 	  <EmbeddedResource Include="Microsoft\UI\Xaml\Controls\ProgressRing\ProgressRingDeterminate.json" />
 	</ItemGroup>
@@ -152,20 +153,6 @@
 	<ItemGroup>
 	  <None Remove="tsconfig.json" />
 	  <Content Include="tsconfig.json" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <None Include="Mixins\Wasm\VisualStatesMixins.g.cs">
-	    <DesignTime>True</DesignTime>
-	    <AutoGen>True</AutoGen>
-	    <DependentUpon>VisualStatesMixins.tt</DependentUpon>
-	  </None>
-	</ItemGroup>
-
-	<ItemGroup>
-	  <None Update="Mixins\Wasm\VisualStatesMixins.tt">
-	    <LastGenOutput>VisualStatesMixins.g.cs</LastGenOutput>
-	  </None>
 	</ItemGroup>
 
 	<Target Name="_UnoWasmOverrideNuget" AfterTargets="AfterBuild" DependsOnTargets="BuiltProjectOutputGroup" Condition="'$(UnoNugetOverrideVersion)'!=''">

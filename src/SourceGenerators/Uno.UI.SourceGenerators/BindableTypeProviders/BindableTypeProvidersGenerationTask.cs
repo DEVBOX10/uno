@@ -5,20 +5,12 @@ using Uno.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.IO;
-using System.Xml.Serialization;
-using System.Collections;
-using System.Diagnostics;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.FindSymbols;
-using Microsoft.CodeAnalysis.Text;
 using Uno.Roslyn;
 using Uno.UI.SourceGenerators.XamlGenerator;
-using Microsoft.CodeAnalysis.CSharp;
-using System.Reflection.Metadata.Ecma335;
 using Uno.UI.SourceGenerators.Helpers;
+using System.Xml;
 
 #if NETFRAMEWORK
 using Uno.SourceGeneration;
@@ -44,23 +36,27 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 
 		class Generator
 		{
-			private const string TypeMetadataConfigFile = "TypeMetadataConfig.xml";
-
 			private string? _defaultNamespace;
 
-			private Dictionary<INamedTypeSymbol, GeneratedTypeInfo> _typeMap = new Dictionary<INamedTypeSymbol, GeneratedTypeInfo>();
+			private readonly Dictionary<INamedTypeSymbol, GeneratedTypeInfo> _typeMap = new Dictionary<INamedTypeSymbol, GeneratedTypeInfo>();
+			private readonly Dictionary<string, (string type, List<string> members)> _substitutions = new Dictionary<string, (string type, List<string> members)>();
 			private INamedTypeSymbol[]? _bindableAttributeSymbol;
 			private ITypeSymbol? _dependencyPropertySymbol;
-			private INamedTypeSymbol? _objectSymbol;
+			private INamedTypeSymbol? _dependencyObjectSymbol;
 			private INamedTypeSymbol? _javaObjectSymbol;
 			private INamedTypeSymbol? _nsObjectSymbol;
 			private INamedTypeSymbol? _nonBindableSymbol;
 			private INamedTypeSymbol? _resourceDictionarySymbol;
 			private IModuleSymbol? _currentModule;
 			private IReadOnlyDictionary<string, INamedTypeSymbol[]>? _namedSymbolsLookup;
-			private INamedTypeSymbol? _stringSymbol;
+			private string? _projectFullPath;
+			private string? _projectDirectory;
+			private string? _baseIntermediateOutputPath;
+			private string? _intermediatePath;
+			private string? _assemblyName;
+			private bool _xamlResourcesTrimming;
 
-			public string[]? AnalyzerSuppressions { get; set; }
+			public string[] AnalyzerSuppressions { get; set; } = Array.Empty<string>();
 
 			internal void Generate(GeneratorExecutionContext context)
 			{
@@ -68,28 +64,39 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 				{
 					var validPlatform = PlatformHelper.IsValidPlatform(context);
 					var isDesignTime = DesignTimeHelper.IsDesignTime(context);
-					var isApplication = IsApplication(context);
+					var isApplication = Helpers.IsApplication(context);
 
 					if (validPlatform
 						&& !isDesignTime)
 					{
 						if (isApplication)
 						{
+							_projectFullPath = context.GetMSBuildPropertyValue("MSBuildProjectFullPath");
+							_projectDirectory = Path.GetDirectoryName(_projectFullPath)
+								?? throw new InvalidOperationException($"MSBuild property MSBuildProjectFullPath value {_projectFullPath} is not valid");
+
+							// Defaults to 'false'
+							_ = bool.TryParse(context.GetMSBuildPropertyValue("UnoXamlResourcesTrimming"), out _xamlResourcesTrimming);
+
+							_baseIntermediateOutputPath = context.GetMSBuildPropertyValue("BaseIntermediateOutputPath");
+							_intermediatePath = Path.Combine(
+								_projectDirectory,
+								_baseIntermediateOutputPath
+							);
+							_assemblyName = context.GetMSBuildPropertyValue("AssemblyName");
+
 							_defaultNamespace = context.GetMSBuildPropertyValue("RootNamespace");
 							_namedSymbolsLookup = context.Compilation.GetSymbolNameLookup();
 
-							_bindableAttributeSymbol = FindBindableAttributes(context);
+							_bindableAttributeSymbol = FindBindableAttributes();
 							_dependencyPropertySymbol = context.Compilation.GetTypeByMetadataName(XamlConstants.Types.DependencyProperty);
+							_dependencyObjectSymbol = context.Compilation.GetTypeByMetadataName(XamlConstants.Types.DependencyObject);
 
-							_objectSymbol = context.Compilation.GetTypeByMetadataName("System.Object");
 							_javaObjectSymbol = context.Compilation.GetTypeByMetadataName("Java.Lang.Object");
 							_nsObjectSymbol = context.Compilation.GetTypeByMetadataName("Foundation.NSObject");
-							_stringSymbol = context.Compilation.GetTypeByMetadataName("System.String");
 							_nonBindableSymbol = context.Compilation.GetTypeByMetadataName("Windows.UI.Xaml.Data.NonBindableAttribute");
 							_resourceDictionarySymbol = context.Compilation.GetTypeByMetadataName("Windows.UI.Xaml.ResourceDictionary");
 							_currentModule = context.Compilation.SourceModule;
-
-							AnalyzerSuppressions = new string[0];
 
 							var modules = from ext in context.Compilation.ExternalReferences
 										  let sym = context.Compilation.GetAssemblyOrModuleSymbol(ext) as IAssemblySymbol
@@ -100,6 +107,8 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 							modules = modules.Concat(context.Compilation.SourceModule);
 
 							context.AddSource("BindableMetadata", GenerateTypeProviders(modules));
+
+							GenerateLinkerSubstitutionDefinition();
 						}
 						else
 						{
@@ -119,22 +128,9 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 					this.Log().Error("Failed to generate type providers.", new Exception("Failed to generate type providers." + message, e));
 				}
 			}
-			private INamedTypeSymbol[] FindBindableAttributes(GeneratorExecutionContext context) =>
-				_namedSymbolsLookup!.TryGetValue("BindableAttribute", out var types) ? types : new INamedTypeSymbol[0];
 
-			private bool IsApplication(GeneratorExecutionContext context)
-			{
-				var isAndroidApp = context.GetMSBuildPropertyValue("AndroidApplication")?.Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
-				var isiOSApp = context.GetMSBuildPropertyValue("ProjectTypeGuidsProperty")?.Equals("{FEACFBD2-3405-455C-9665-78FE426C6842},{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}", StringComparison.OrdinalIgnoreCase) ?? false;
-				var ismacOSApp = context.GetMSBuildPropertyValue("ProjectTypeGuidsProperty")?.Equals("{A3F8F2AB-B479-4A4A-A458-A89E7DC349F1},{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}", StringComparison.OrdinalIgnoreCase) ?? false;
-				var isExe = context.GetMSBuildPropertyValue("OutputType")?.Equals("Exe", StringComparison.OrdinalIgnoreCase) ?? false;
-				var isUnoHead = context.GetMSBuildPropertyValue("IsUnoHead")?.Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
-
-				return isAndroidApp
-					|| (isiOSApp && isExe)
-					|| (ismacOSApp && isExe)
-					|| isUnoHead;
-			}
+			private INamedTypeSymbol[] FindBindableAttributes() =>
+				_namedSymbolsLookup!.TryGetValue("BindableAttribute", out var types) ? types : Array.Empty<INamedTypeSymbol>();
 
 			private string GenerateTypeProviders(IEnumerable<IModuleSymbol> modules)
 			{
@@ -185,7 +181,6 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 				writer.AppendLineInvariant("[System.Runtime.CompilerServices.CompilerGeneratedAttribute]");
 				writer.AppendLineInvariant("[System.Diagnostics.CodeAnalysis.SuppressMessage(\"Microsoft.Maintainability\", \"CA1502:AvoidExcessiveComplexity\", Justification=\"Must be ignored even if generated code is checked.\")]");
 				writer.AppendLineInvariant("[System.Diagnostics.CodeAnalysis.SuppressMessage(\"Microsoft.Maintainability\", \"CA1506:AvoidExcessiveClassCoupling\", Justification = \"Must be ignored even if generated code is checked.\")]");
-
 				AnalyzerSuppressionsGenerator.Generate(writer, AnalyzerSuppressions);
 				using (writer.BlockInvariant("public class BindableMetadataProvider : global::Uno.UI.DataBinding.IBindableMetadataProvider"))
 				{
@@ -211,10 +206,7 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 						);
 					}
 
-					using (writer.BlockInvariant("static BindableMetadataProvider()"))
-					{
-						GenerateTypeTable(writer, q);
-					}
+					GenerateTypeTable(writer);
 
 					writer.AppendLineInvariant(@"#if DEBUG");
 					writer.AppendLineInvariant(@"private global::System.Collections.Generic.List<global::System.Type> _knownMissingTypes = new global::System.Collections.Generic.List<global::System.Type>();");
@@ -222,50 +214,10 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 
 					using (writer.BlockInvariant("public void ForceInitialize()"))
 					{
-						using (writer.BlockInvariant(@"foreach(TypeBuilderDelegate item in _bindableTypeCacheByFullName.Values)"))
+						using (writer.BlockInvariant(@"foreach (TypeBuilderDelegate item in _bindableTypeCacheByFullName.Values)"))
 						{
 							writer.AppendLineInvariant(@"item();");
 						}
-					}
-
-					using (writer.BlockInvariant("public global::Uno.UI.DataBinding.IBindableType GetBindableTypeByFullName(string fullName)"))
-					{
-						writer.AppendLineInvariant(@"var selector = _bindableTypeCacheByFullName[fullName] as TypeBuilderDelegate;");
-
-						using (writer.BlockInvariant(@"if(selector != null)"))
-						{
-							writer.AppendLineInvariant(@"return selector();");
-						}
-						using (writer.BlockInvariant(@"else"))
-						{
-							writer.AppendLineInvariant(@"return null;");
-						}
-					}
-
-					using (writer.BlockInvariant("public global::Uno.UI.DataBinding.IBindableType GetBindableTypeByType(Type type)"))
-					{
-						writer.AppendLineInvariant(@"var selector = _bindableTypeCacheByFullName[type.FullName] as TypeBuilderDelegate;");
-
-						using (writer.BlockInvariant(@"if(selector != null)"))
-						{
-							writer.AppendLineInvariant(@"return selector();");
-						}
-
-						writer.AppendLineInvariant(@"#if DEBUG");
-						using (writer.BlockInvariant(@"else"))
-						{
-							using (writer.BlockInvariant(@"lock(_knownMissingTypes)"))
-							{
-								using (writer.BlockInvariant(@"if(!_knownMissingTypes.Contains(type) && !type.IsGenericType)"))
-								{
-									writer.AppendLineInvariant(@"_knownMissingTypes.Add(type);");
-									writer.AppendLineInvariant(@"Debug.WriteLine($""The Bindable attribute is missing and the type [{{type.FullName}}] is not known by the MetadataProvider. Reflection was used instead of the binding engine and generated static metadata. Add the Bindable attribute to prevent this message and performance issues."");");
-								}
-							}
-						}
-						writer.AppendLineInvariant(@"#endif");
-
-						writer.AppendLineInvariant(@"return null;");
 					}
 				}
 			}
@@ -299,9 +251,9 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 					HasProperties = hasProperties;
 				}
 
-				public int Index { get; private set; }
+				public int Index { get; }
 
-				public bool HasProperties { get; private set; }
+				public bool HasProperties { get;  }
 			}
 
 			private void GenerateType(IndentedStringBuilder writer, INamedTypeSymbol ownerType)
@@ -373,7 +325,6 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 				writer.AppendLineInvariant("[System.Runtime.CompilerServices.CompilerGeneratedAttribute]");
 				writer.AppendLineInvariant("[System.Diagnostics.CodeAnalysis.SuppressMessage(\"Microsoft.Maintainability\", \"CA1502:AvoidExcessiveComplexity\", Justification=\"Must be ignored even if generated code is checked.\")]");
 				writer.AppendLineInvariant("[System.Diagnostics.CodeAnalysis.SuppressMessage(\"Microsoft.Maintainability\", \"CA1506:AvoidExcessiveClassCoupling\", Justification = \"Must be ignored even if generated code is checked.\")]");
-
 				AnalyzerSuppressionsGenerator.Generate(writer, AnalyzerSuppressions);
 				using (writer.BlockInvariant("static class MetadataBuilder_{0:000}", typeInfo.Index))
 				{
@@ -394,6 +345,8 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 					writer.AppendLineInvariant("[System.Diagnostics.CodeAnalysis.SuppressMessage(\"Microsoft.Maintainability\", \"CA1505:AvoidUnmaintainableCode\", Justification = \"Must be ignored even if generated code is checked.\")]");
 					using (writer.BlockInvariant("internal static global::Uno.UI.DataBinding.IBindableType Build(global::Uno.UI.DataBinding.BindableType parent)"))
 					{
+						RegisterHintMethod($"MetadataBuilder_{typeInfo.Index:000}", ownerType, "Uno.UI.DataBinding.IBindableType Build(Uno.UI.DataBinding.BindableType)");
+
 						writer.AppendLineInvariant(
 							@"var bindableType = parent ?? new global::Uno.UI.DataBinding.BindableType({0}, typeof({1}));",
 							flattenedProperties
@@ -418,6 +371,8 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 							{
 								writer.AppendLineInvariant(@"bindableType.AddActivator(CreateInstance);");
 								postWriter.AppendLineInvariant($@"private static object CreateInstance() => new {ownerTypeName}();");
+
+								RegisterHintMethod($"MetadataBuilder_{typeInfo.Index:000}", ownerType, "System.Object CreateInstance()");
 							}
 						}
 
@@ -431,10 +386,12 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 								writer.AppendLineInvariant("bindableType.AddIndexer(GetIndexer, SetIndexer);");
 
 								postWriter.AppendLineInvariant($@"private static object GetIndexer(object instance, string name) => (({ownerTypeName})instance)[name];");
+								RegisterHintMethod($"MetadataBuilder_{typeInfo.Index:000}", ownerType, "System.Object GetIndexer(System.Object, System.String)");
 
 								if (property.SetMethod != null)
 								{
 									postWriter.AppendLineInvariant($@"private static void SetIndexer(object instance, string name, object value) => (({ownerTypeName})instance)[name] = ({propertyTypeName})value;");
+									RegisterHintMethod($"MetadataBuilder_{typeInfo.Index:000}", ownerType, "System.Void SetIndexer(System.Object,System.String,System.Object)");
 								}
 								else
 								{
@@ -477,12 +434,18 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 									postWriter.AppendLineInvariant($@"private static object Get{propertyName}(object instance,  Windows.UI.Xaml.DependencyPropertyValuePrecedences? precedence) => (({ownerTypeName})instance).{propertyName};");
 									postWriter.AppendLineInvariant($@"private static void Set{propertyName}(object instance, object value, Windows.UI.Xaml.DependencyPropertyValuePrecedences? precedence) => (({ownerTypeName})instance).{propertyName} = ({propertyTypeName})value;");
 								}
+
+								RegisterHintMethod($"MetadataBuilder_{typeInfo.Index:000}", ownerType, $"System.Object Get{propertyName}(System.Object,System.Nullable`1<Windows.UI.Xaml.DependencyPropertyValuePrecedences>)");
+								RegisterHintMethod($"MetadataBuilder_{typeInfo.Index:000}", ownerType, $"System.Void Set{propertyName}(System.Object,System.Object,System.Nullable`1<Windows.UI.Xaml.DependencyPropertyValuePrecedences>)");
+
 							}
 							else if (HasPublicGetter(property))
 							{
 								writer.AppendLineInvariant($@"bindableType.AddProperty(""{propertyName}"", typeof({propertyTypeName}), Get{propertyName});");
 
 								postWriter.AppendLineInvariant($@"private static object Get{propertyName}(object instance, Windows.UI.Xaml.DependencyPropertyValuePrecedences? precedence) => (({ownerTypeName})instance).{propertyName};");
+
+								RegisterHintMethod($"MetadataBuilder_{typeInfo.Index:000}", ownerType, $"System.Object Get{propertyName}(System.Object,System.Nullable`1<Windows.UI.Xaml.DependencyPropertyValuePrecedences>)");
 							}
 						}
 
@@ -515,6 +478,17 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 				writer.AppendLine();
 			}
 
+			private void RegisterHintMethod(string type, INamedTypeSymbol targetType, string signature)
+			{
+				type = _defaultNamespace + "." + type;
+
+				if (!_substitutions.TryGetValue(type, out var hint))
+				{
+					_substitutions[type] = hint = (LinkerHintsHelpers.GetPropertyAvailableName(targetType.ToDisplayString()), new List<string>());
+				}
+
+				hint.members.Add(signature);
+			}
 
 			private static string ExpandType(INamedTypeSymbol ownerType)
 			{
@@ -530,14 +504,12 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 
 			private static string GetGlobalQualifier(ITypeSymbol ownerType)
 			{
-				var arrayType = ownerType as IArrayTypeSymbol;
-				if (arrayType != null)
+				if (ownerType is IArrayTypeSymbol arrayType)
 				{
 					return GetGlobalQualifier(arrayType.ElementType);
 				}
 
-				ITypeSymbol? nullType;
-				if (ownerType.IsNullable(out nullType))
+				if (ownerType.IsNullable(out var nullType))
 				{
 					return GetGlobalQualifier(nullType!);
 				}
@@ -566,7 +538,7 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 					var ignoredByConfig = IsIgnoredType(type.BaseType);
 
 					// These types are know to not be bindable, so ignore them by default.
-					var isKnownBaseType = SymbolEqualityComparer.Default.Equals(type.BaseType, _objectSymbol)
+					var isKnownBaseType = type.BaseType.SpecialType == SpecialType.System_Object
 						|| SymbolEqualityComparer.Default.Equals(type.BaseType, _javaObjectSymbol)
 						|| SymbolEqualityComparer.Default.Equals(type.BaseType, _nsObjectSymbol);
 
@@ -595,7 +567,7 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 				return property.IsIndexer
 					&& property.GetMethod!.IsLocallyPublic(_currentModule!)
 					&& property.Parameters.Length == 1
-					&& property.Parameters.Any(p => SymbolEqualityComparer.Default.Equals(p.Type, _stringSymbol));
+					&& property.Parameters.Any(p => p.Type.SpecialType == SpecialType.System_String);
 			}
 
 			private bool IsNonBindable(IPropertySymbol property) => property.FindAttributeFlattened(_nonBindableSymbol!) != null;
@@ -607,28 +579,117 @@ namespace Uno.UI.SourceGenerators.BindableTypeProviders
 					&& !methodDefinition.IsVirtual;
 			}
 
-			private string SanitizeTypeName(string name)
-			{
-				for (int i = 0; i < 10; i++)
-				{
-					name = name.Replace("`" + i, "");
-				}
-
-				name = name.Replace("/", ".");
-
-				return name;
-			}
-
-			private void GenerateTypeTable(IndentedStringBuilder writer, IEnumerable<INamedTypeSymbol> types)
+			private void GenerateTypeTable(IndentedStringBuilder writer)
 			{
 				foreach (var type in _typeMap.Where(k => !k.Key.IsGenericType))
 				{
-					writer.AppendLineInvariant(
-						"_bindableTypeCacheByFullName[\"{0}\"] = CreateMemoized(MetadataBuilder_{1:000}.Build);",
-						type.Key,
-						type.Value.Index
-					);
+					writer.AppendLineInvariant($"private global::Uno.UI.DataBinding.IBindableType _bindableType{type.Value.Index:000};");
 				}
+
+				using (writer.BlockInvariant("public global::Uno.UI.DataBinding.IBindableType GetBindableTypeByFullName(string fullName)"))
+				{
+					using (writer.BlockInvariant(@"switch(fullName)"))
+					{
+						foreach (var type in _typeMap.Where(k => !k.Key.IsGenericType))
+						{
+							var typeIndexString = $"{type.Value.Index:000}";
+
+							writer.AppendLineInvariant($"case \"{type.Key}\":");
+							using (writer.BlockInvariant($"if(_bindableType{typeIndexString} == null)"))
+							{
+								if (_xamlResourcesTrimming && type.Key.GetAllInterfaces().Any(i => SymbolEqualityComparer.Default.Equals(i, _dependencyObjectSymbol)))
+								{
+									var linkerHintsClassName = LinkerHintsHelpers.GetLinkerHintsClassName(_defaultNamespace);
+									var safeTypeName = LinkerHintsHelpers.GetPropertyAvailableName(type.Key.GetFullMetadataName());
+
+									writer.AppendLineInvariant($"if(global::{linkerHintsClassName}.{safeTypeName})");
+								}
+
+								writer.AppendLineInvariant($"_bindableType{typeIndexString} = MetadataBuilder_{typeIndexString}.Build();");
+							}
+
+							writer.AppendLineInvariant($"return _bindableType{typeIndexString};");
+						}
+
+						writer.AppendLineInvariant("default:");
+						writer.AppendLineInvariant(@"return null;");
+					}
+				}
+
+				using (writer.BlockInvariant("public global::Uno.UI.DataBinding.IBindableType GetBindableTypeByType(Type type)"))
+				{
+					writer.AppendLineInvariant(@"var bindableType = GetBindableTypeByFullName(type.FullName);");
+
+					writer.AppendLineInvariant(@"#if DEBUG");
+					using (writer.BlockInvariant(@"lock(_knownMissingTypes)"))
+					{
+						using (writer.BlockInvariant(@"if(!_knownMissingTypes.Contains(type) && !type.IsGenericType)"))
+						{
+							writer.AppendLineInvariant(@"_knownMissingTypes.Add(type);");
+							writer.AppendLineInvariant(@"Debug.WriteLine($""The Bindable attribute is missing and the type [{{type.FullName}}] is not known by the MetadataProvider. Reflection was used instead of the binding engine and generated static metadata. Add the Bindable attribute to prevent this message and performance issues."");");
+						}
+					}
+					writer.AppendLineInvariant(@"#endif");
+
+					writer.AppendLineInvariant(@"return bindableType;");
+				}
+
+				using (writer.BlockInvariant("public BindableMetadataProvider()"))
+				{
+				}
+			}
+
+			private void GenerateLinkerSubstitutionDefinition()
+			{
+				if (!_xamlResourcesTrimming)
+				{
+					return;
+				}
+
+				// <linker>
+				//   <assembly fullname="Uno.UI">
+				// 	<type fullname="Uno.UI.GlobalStaticResources">
+				// 	  <method signature="System.Void Initialize()" body="remove" />
+				// 	  <method signature="System.Void RegisterDefaultStyles()" body="remove" />
+				// 	</type>
+				//   </assembly>
+				// </linker>
+				var doc = new XmlDocument();
+
+				var xmlDeclaration = doc.CreateXmlDeclaration("1.0", "UTF-8", null);
+
+				var root = doc.DocumentElement;
+				doc.InsertBefore(xmlDeclaration, root);
+
+				var linkerNode = doc.CreateElement(string.Empty, "linker", string.Empty);
+				doc.AppendChild(linkerNode);
+
+				var assemblyNode = doc.CreateElement(string.Empty, "assembly", string.Empty);
+				assemblyNode.SetAttribute("fullname", _assemblyName);
+				linkerNode.AppendChild(assemblyNode);
+
+
+				foreach(var substitution in _substitutions)
+				{
+					var typeNode = doc.CreateElement(string.Empty, "type", string.Empty);
+					typeNode.SetAttribute("fullname", substitution.Key);
+					typeNode.SetAttribute("feature", substitution.Value.type);
+					typeNode.SetAttribute("featurevalue", "false");
+					assemblyNode.AppendChild(typeNode);
+
+					foreach(var method in substitution.Value.members)
+					{
+						var methodNode = doc.CreateElement(string.Empty, "method", string.Empty);
+						methodNode.SetAttribute("signature", method);
+						methodNode.SetAttribute("body", "remove");
+						typeNode.AppendChild(methodNode);
+					}
+				}
+
+				var fileName = Path.Combine(_intermediatePath, "Substitutions", "BindableMetadata.Substitutions.xml");
+				Directory.CreateDirectory(Path.GetDirectoryName(fileName));
+
+				doc.Save(fileName);
 			}
 
 		}

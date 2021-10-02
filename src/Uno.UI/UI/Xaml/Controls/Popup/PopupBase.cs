@@ -1,13 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using Uno.UI;
+using Uno.UI.DataBinding;
+using Uno.UI.Xaml.Core;
 using Windows.Foundation;
 using Windows.UI.Xaml.Input;
-using Uno.Extensions;
-using Uno.UI.DataBinding;
 using Windows.UI.Xaml.Media;
-using Uno.UI;
 #if XAMARIN_IOS
 using CoreGraphics;
 using UIKit;
@@ -20,6 +17,9 @@ namespace Windows.UI.Xaml.Controls
 {
 	public partial class PopupBase : FrameworkElement, IPopup
 	{
+		private ManagedWeakReference _lastFocusedElement = null;
+		private FocusState _lastFocusState = FocusState.Unfocused;
+
 		private IDisposable _openPopupRegistration;
 		private bool _childHasOwnDataContext;
 
@@ -30,6 +30,17 @@ namespace Windows.UI.Xaml.Controls
 		/// Defines a custom layouter which overrides the default placement logic of the <see cref="PopupPanel"/>
 		/// </summary>
 		internal IDynamicPopupLayouter CustomLayouter { get; set; }
+
+		internal override void OnPropertyChanged2(DependencyPropertyChangedEventArgs args)
+		{
+			if (args.Property == AllowFocusOnInteractionProperty ||
+				args.Property == AllowFocusWhenDisabledProperty)
+			{
+				PropagateFocusProperties();
+			}
+
+			base.OnPropertyChanged2(args);
+		}
 
 		private protected override void OnUnloaded()
 		{
@@ -56,11 +67,41 @@ namespace Windows.UI.Xaml.Controls
 			if (newIsOpen)
 			{
 				_openPopupRegistration = VisualTreeHelper.RegisterOpenPopup(this);
+
+				if (IsLightDismissEnabled)
+				{
+					// Store last focused element
+					var focusManager = VisualTree.GetFocusManagerForElement(this);
+					var focusedElement = focusManager?.FocusedElement as UIElement;
+					var focusState = focusManager?.GetRealFocusStateForFocusedElement() ?? FocusState.Unfocused;
+					if (focusedElement != null && focusState != FocusState.Unfocused)
+					{
+						_lastFocusedElement = WeakReferencePool.RentWeakReference(this, focusedElement);
+						_lastFocusState = focusState;
+					}
+
+					// Give the child focus if allowed
+					if (Child is FrameworkElement fw && fw.AllowFocusOnInteraction)
+					{
+						Focus(FocusState.Programmatic);
+					}
+				}
+
 				Opened?.Invoke(this, newIsOpen);
 			}
 			else
 			{
 				_openPopupRegistration?.Dispose();
+
+				if (IsLightDismissEnabled)
+				{
+					if (_lastFocusedElement != null && _lastFocusedElement.Target is UIElement target)
+					{
+						target.Focus(_lastFocusState);
+						_lastFocusedElement = null;
+					}
+				}
+
 				Closed?.Invoke(this, newIsOpen);
 			}
 		}
@@ -71,10 +112,13 @@ namespace Windows.UI.Xaml.Controls
 			{
 				provider.Store.ClearValue(provider.Store.DataContextProperty, DependencyPropertyValuePrecedences.Local);
 				provider.Store.ClearValue(provider.Store.TemplatedParentProperty, DependencyPropertyValuePrecedences.Local);
+				provider.Store.ClearValue(AllowFocusOnInteractionProperty, DependencyPropertyValuePrecedences.Local);
+				provider.Store.ClearValue(AllowFocusWhenDisabledProperty, DependencyPropertyValuePrecedences.Local);
 			}
 
 			UpdateDataContext(null);
 			UpdateTemplatedParent();
+			PropagateFocusProperties();
 
 			if (oldChild is FrameworkElement ocfe)
 			{
@@ -139,6 +183,15 @@ namespace Windows.UI.Xaml.Controls
 			if (Child is IDependencyObjectStoreProvider provider)
 			{
 				provider.Store.SetValue(provider.Store.TemplatedParentProperty, this.TemplatedParent, DependencyPropertyValuePrecedences.Local);
+			}
+		}
+
+		private void PropagateFocusProperties()
+		{
+			if (Child is IDependencyObjectStoreProvider provider)
+			{
+				provider.Store.SetValue(AllowFocusOnInteractionProperty, AllowFocusOnInteraction, DependencyPropertyValuePrecedences.Local);
+				provider.Store.SetValue(AllowFocusWhenDisabledProperty, AllowFocusWhenDisabled, DependencyPropertyValuePrecedences.Local);
 			}
 		}
 

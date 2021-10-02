@@ -1,4 +1,6 @@
-﻿using Android.App;
+﻿#nullable enable
+
+using Android.App;
 using Android.Graphics;
 using System;
 using System.Collections.Generic;
@@ -15,32 +17,32 @@ using Microsoft.Extensions.Logging;
 
 namespace Windows.UI.Xaml
 {
-	internal class FontHelper
-	{
-		internal static readonly Func<FontFamily, FontWeight, TypefaceStyle, Typeface> _fontFamilyToTypeFace;
+	internal partial class FontHelper
+	{ 
 		private static bool _assetsListed;
 		private static readonly string DefaultFontFamilyName = "sans-serif";
 
-		static FontHelper()
-		{
-			_fontFamilyToTypeFace = Funcs
-				.Create<FontFamily, FontWeight, TypefaceStyle, Typeface>(InternalFontFamilyToTypeFace)
-				.AsLockedMemoized();
+		internal static Typeface? FontFamilyToTypeFace(FontFamily? fontFamily, FontWeight fontWeight, TypefaceStyle style = TypefaceStyle.Normal)
+		{  
+			var entry = new FontFamilyToTypeFaceDictionary.Entry(fontFamily?.Source, fontWeight, style);
+			 
+			if (!_fontFamilyToTypeFaceDictionary.TryGetValue(entry , out var typeFace))
+			{
+				typeFace = InternalFontFamilyToTypeFace(fontFamily, fontWeight, style);
+				_fontFamilyToTypeFaceDictionary.Add(entry, typeFace);
+			}
+
+			return typeFace;
 		}
 
-		internal static Typeface FontFamilyToTypeFace(FontFamily fontFamily, FontWeight fontWeight, TypefaceStyle style = TypefaceStyle.Normal)
-		{
-			return _fontFamilyToTypeFace(fontFamily, fontWeight, style);
-		}
-
-		internal static Typeface InternalFontFamilyToTypeFace(FontFamily fontFamily, FontWeight fontWeight, TypefaceStyle style)
+		internal static Typeface? InternalFontFamilyToTypeFace(FontFamily? fontFamily, FontWeight fontWeight, TypefaceStyle style)
 		{
 			if (fontFamily?.Source == null || fontFamily.Equals(FontFamily.Default))
 			{
 				fontFamily = GetDefaultFontFamily(fontWeight);
 			}
 
-			Typeface typeface;
+			Typeface? typeface;
 
 			try
 			{
@@ -72,7 +74,7 @@ namespace Windows.UI.Xaml
 					{
 						typeface = Android.Graphics.Typeface.CreateFromAsset(Android.App.Application.Context.Assets, actualAsset);
 
-						if (style != typeface.Style)
+						if (style != typeface?.Style)
 						{
 							typeface = Typeface.Create(typeface, style);
 						}

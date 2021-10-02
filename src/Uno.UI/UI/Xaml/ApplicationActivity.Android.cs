@@ -1,22 +1,22 @@
-﻿#if XAMARIN_ANDROID
 using System;
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
-using Android.Views;
-using Windows.Graphics.Display;
 using Android.Content.Res;
 using Android.Graphics;
 using Android.OS;
+using Android.Views;
 using Android.Views.InputMethods;
+using Microsoft.Extensions.Logging;
+using Uno.AuthenticationBroker;
+using Uno.Extensions;
 using Uno.UI;
+using Windows.Devices.Sensors;
+using Windows.Graphics.Display;
+using Windows.Storage.Pickers;
+using Windows.System;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml.Media;
-using Windows.Devices.Sensors;
-using Uno.Extensions;
-using Microsoft.Extensions.Logging;
-using Windows.Storage.Pickers;
-using Uno.AuthenticationBroker;
 
 namespace Windows.UI.Xaml
 {
@@ -24,6 +24,7 @@ namespace Windows.UI.Xaml
 	public class ApplicationActivity : Controls.NativePage, Uno.UI.Composition.ICompositionRoot
 	{
 
+		/// <summary>
 		/// The windows model implies only one managed activity.
 		/// </summary>
 		internal static ApplicationActivity Instance { get; private set; }
@@ -100,6 +101,54 @@ namespace Windows.UI.Xaml
 				var inputManager = (InputMethodManager)GetSystemService(InputMethodService);
 				inputManager.HideSoftInputFromWindow(windowToken, HideSoftInputFlags.None);
 			}
+		}
+
+		public override bool DispatchKeyEvent(KeyEvent e)
+		{
+			var handled = false;
+			if (Uno.WinRTFeatureConfiguration.Focus.EnableExperimentalKeyboardFocus)
+			{
+				var focusHandler = Uno.UI.Xaml.Core.CoreServices.Instance.MainRootVisual.AssociatedVisualTree.UnoFocusInputHandler;
+				if (focusHandler != null && e.Action == KeyEventActions.Down)
+				{
+					if (e.KeyCode == Keycode.Tab)
+					{
+						var shift = e.Modifiers.HasFlag(MetaKeyStates.ShiftLeftOn) || e.Modifiers.HasFlag(MetaKeyStates.ShiftRightOn) || e.Modifiers.HasFlag(MetaKeyStates.ShiftOn);
+						handled = focusHandler.TryHandleTabFocus(shift);
+					}
+					else if (
+						e.KeyCode == Keycode.DpadUp ||
+						e.KeyCode == Keycode.SystemNavigationUp)
+					{
+						handled = focusHandler.TryHandleDirectionalFocus(VirtualKey.Up);
+					}
+					else if (
+						e.KeyCode == Keycode.DpadDown ||
+						e.KeyCode == Keycode.SystemNavigationDown)
+					{
+						handled = focusHandler.TryHandleDirectionalFocus(VirtualKey.Down);
+					}
+					else if (
+						e.KeyCode == Keycode.DpadRight ||
+						e.KeyCode == Keycode.SystemNavigationRight)
+					{
+						handled = focusHandler.TryHandleDirectionalFocus(VirtualKey.Right);
+					}
+					else if (
+						e.KeyCode == Keycode.DpadLeft ||
+						e.KeyCode == Keycode.SystemNavigationLeft)
+					{
+						handled = focusHandler.TryHandleDirectionalFocus(VirtualKey.Left);
+					}
+				}
+			}
+
+			if (!handled)
+			{
+				return base.DispatchKeyEvent(e);
+			}
+
+			return true;
 		}
 
 		public void SetOrientation(ScreenOrientation orientation)
@@ -278,10 +327,11 @@ namespace Windows.UI.Xaml
 		/// </summary>
 		/// <param name="type">A type full name</param>
 		/// <returns>The assembly that contains the specified type</returns>
+#if !NET6_0_OR_GREATER
 		[Android.Runtime.Preserve]
+#endif
 		[Java.Interop.Export]
 		[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
 		public static string GetTypeAssemblyFullName(string type) => Type.GetType(type)?.Assembly.FullName;
 	}
 }
-#endif

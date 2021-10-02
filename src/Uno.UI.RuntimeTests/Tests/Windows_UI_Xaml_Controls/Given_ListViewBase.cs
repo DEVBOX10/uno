@@ -28,6 +28,8 @@ using FluentAssertions.Execution;
 using Uno.Extensions;
 using Uno.UI.RuntimeTests.Helpers;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using Windows.UI.Xaml.Data;
 
 namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Controls
 {
@@ -654,20 +656,24 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Controls
 			await WindowHelper.WaitFor(() => (lastItem = list.ContainerFromItem(19) as ListViewItem) != null);
 			var secondLastItem = list.ContainerFromItem(18) as ListViewItem;
 
-			await WindowHelper.WaitFor(() => GetTop(lastItem), 181, comparer: ApproxEquals);
-			await WindowHelper.WaitFor(() => GetTop(secondLastItem), 152, comparer: ApproxEquals);
+			await WindowHelper.WaitFor(() => GetTop(lastItem, container), 181, comparer: ApproxEquals);
+			await WindowHelper.WaitFor(() => GetTop(secondLastItem, container), 152, comparer: ApproxEquals);
 
 			source.Remove(19);
 
 			await WindowHelper.WaitFor(() => list.Items.Count == 19);
 
-			await WindowHelper.WaitForEqual(181, () => GetTop(list.ContainerFromItem(18) as ListViewItem), tolerance: 2);
+			await WindowHelper.WaitForEqual(181, () => GetTop(list.ContainerFromItem(18) as ListViewItem, container), tolerance: 2);
+		}
 
-			double GetTop(FrameworkElement element)
+		private static double GetTop(FrameworkElement element, FrameworkElement container)
+		{
+			if (element == null)
 			{
-				var transform = element.TransformToVisual(container);
-				return transform.TransformPoint(new Point()).Y;
+				return double.NaN;
 			}
+			var transform = element.TransformToVisual(container);
+			return transform.TransformPoint(new Point()).Y;
 		}
 
 		[TestMethod]
@@ -1230,7 +1236,7 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Controls
 		[TestMethod]
 		public async Task When_ItemTemplateSelector_Set_And_Fluent()
 		{
-			using(StyleHelper.UseFluentStyles())
+			using (StyleHelper.UseFluentStyles())
 			{
 				await When_ItemTemplateSelector_Set();
 			}
@@ -1260,11 +1266,124 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Controls
 			Assert.AreEqual("Rice", dc.MySelection);
 		}
 
+		[TestMethod]
+		public async Task When_ItemsSource_Move()
+		{
+			var list = new ListView
+			{
+				ItemContainerStyle = NoSpaceContainerStyle,
+				ItemTemplate = FixedSizeItemTemplate
+			};
+
+			var source = new ObservableCollection<string>
+			{
+				"Item0",
+				"Item1",
+				"Item2",
+			};
+			list.ItemsSource = source;
+			list.SelectedIndex = 0;
+
+			var outer = new Grid { Children = { list } };
+			WindowHelper.WindowContent = outer;
+
+			await WindowHelper.WaitForLoaded(list);
+			var container1 = await WindowHelper.WaitForNonNull(() => list.ContainerFromItem("Item1") as ListViewItem);
+			Assert.AreEqual(29, GetTop(container1, outer));
+			Assert.AreEqual(0, list.SelectedIndex);
+			Assert.AreEqual("Item0", list.SelectedItem);
+
+			source.Move(1, 2);
+			await WindowHelper.WaitForEqual(58, () =>
+			{
+				var container = list.ContainerFromItem("Item1") as ListViewItem;
+				return GetTop(container, outer);
+			});
+
+			Assert.AreEqual(0, list.SelectedIndex);
+			Assert.AreEqual("Item0", list.SelectedItem);
+
+			source.Move(2, 0);
+			await WindowHelper.WaitForEqual(0, () =>
+			{
+				var container = list.ContainerFromItem("Item1") as ListViewItem;
+				return GetTop(container, outer);
+			});
+
+			Assert.AreEqual(-1, list.SelectedIndex);
+			Assert.AreEqual(null, list.SelectedItem);
+		}
+
+		[TestMethod]
+		public async Task When_Selection_Events()
+		{
+			var list = new ListView
+			{
+				ItemContainerStyle = NoSpaceContainerStyle,
+				ItemTemplate = FixedSizeItemTemplate
+			};
+
+			var items = Enumerable.Range(0, 4).Select(x => "Item_" + x).ToArray();
+			list.ItemsSource = items;
+			list.SelectedIndex = 0;
+
+			var model = new When_Selection_Events_DataContext();
+			list.DataContext = model;
+			list.SetBinding(Selector.SelectedIndexProperty, new Binding { Path = new PropertyPath(nameof(model.SelectedIndex)), Mode = BindingMode.TwoWay });
+			list.SetBinding(Selector.SelectedItemProperty, new Binding { Path = new PropertyPath(nameof(model.SelectedItem)), Mode = BindingMode.TwoWay });
+			list.SetBinding(Selector.SelectedValueProperty, new Binding { Path = new PropertyPath(nameof(model.SelectedValue)), Mode = BindingMode.TwoWay });
+
+			WindowHelper.WindowContent = list;
+			await WindowHelper.WaitForLoaded(list);
+			await WindowHelper.WaitFor(() => GetPanelChildren(list).Length == 4);
+
+			list.SelectionChanged += (s, e) =>
+			{
+				Assert.AreEqual(list.SelectedItem, "Item_1");
+				Assert.AreEqual(list.SelectedValue, "Item_1");
+				Assert.AreEqual(model.SelectedIndex, 1);
+				Assert.AreEqual(model.SelectedItem, "Item_1");
+				Assert.AreEqual(model.SelectedValue, "Item_1");
+			};
+
+			// update selection
+			list.SelectedIndex = 1;
+		}
+
+		[TestMethod]
+		public async Task When_DisplayMemberPath_Property_Changed()
+		{
+			var itemsSource = (new[] { "aaa", "bbb", "ccc", "ddd" }).Select(s => new When_DisplayMemberPath_Property_Changed_DataContext { Display = s }).ToArray();
+
+			var SUT = new ListView()
+			{
+				ItemContainerStyle = BasicContainerStyle,
+				DisplayMemberPath = "Display",
+				ItemsSource = itemsSource
+			};
+
+			WindowHelper.WindowContent = SUT;
+			await WindowHelper.WaitForLoaded(SUT);
+
+			var secondContainer = await WindowHelper.WaitForNonNull(() => SUT.ContainerFromIndex(1) as ListViewItem);
+			await WindowHelper.WaitForLoaded(secondContainer);
+
+			var tb = secondContainer.FindFirstChild<TextBlock>();
+			Assert.AreEqual("bbb", tb.Text);
+
+			foreach (var item in itemsSource)
+			{
+				item.Display = item.Display.ToUpperInvariant();
+			}
+
+			await WindowHelper.WaitForResultEqual("BBB", () => tb.Text);
+		}
+
 		private bool ApproxEquals(double value1, double value2) => Math.Abs(value1 - value2) <= 2;
 
-		private class When_Removed_From_Tree_And_Selection_TwoWay_Bound_DataContext : INotifyPropertyChanged
+		private class When_Removed_From_Tree_And_Selection_TwoWay_Bound_DataContext : System.ComponentModel.INotifyPropertyChanged
 		{
-			public event PropertyChangedEventHandler PropertyChanged;
+			public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
 
 			public string[] MyItems { get; } = new[] { "Red beans", "Rice" };
 
@@ -1278,7 +1397,67 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Controls
 					_mySelection = value;
 					if (changing)
 					{
-						PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MySelection)));
+						PropertyChanged?.Invoke(this, new global::System.ComponentModel.PropertyChangedEventArgs(nameof(MySelection)));
+					}
+				}
+			}
+		}
+
+		private class When_Selection_Events_DataContext : global::System.ComponentModel.INotifyPropertyChanged
+		{
+			public event global::System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+
+			#region SelectedItem
+			private object _selectedItem;
+			public object SelectedItem
+			{
+				get => _selectedItem;
+				set => RaiseAndSetIfChanged(ref _selectedItem, value);
+			}
+			#endregion
+			#region SelectedValue
+			private object _selectedValue;
+			public object SelectedValue
+			{
+				get => _selectedValue;
+				set => RaiseAndSetIfChanged(ref _selectedValue, value);
+			}
+			#endregion
+			#region SelectedIndex
+			private int _selectedIndex;
+
+			public int SelectedIndex
+			{
+				get => _selectedIndex;
+				set => RaiseAndSetIfChanged(ref _selectedIndex, value);
+			}
+			#endregion
+
+			protected void RaiseAndSetIfChanged<T>(ref T backingField, T value, [CallerMemberName] string propertyName = null)
+			{
+				if (!EqualityComparer<T>.Default.Equals(backingField, value))
+				{
+					backingField = value;
+					PropertyChanged?.Invoke(this, new global::System.ComponentModel.PropertyChangedEventArgs(propertyName));
+				}
+			}
+		}
+
+		private class When_DisplayMemberPath_Property_Changed_DataContext : System.ComponentModel.INotifyPropertyChanged
+		{
+			private string _display;
+
+			public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+
+			public string Display
+			{
+				get => _display;
+				set
+				{
+					if (value != _display)
+					{
+						_display = value;
+						PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Display)));
 					}
 				}
 			}

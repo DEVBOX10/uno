@@ -19,6 +19,8 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 		public const string BaseXamlNamespace = "Windows.UI.Xaml";
 		public const string UnoXamlNamespace = "Windows.UI.Xaml";
 
+		public const int MaxFluentResourcesVersion = 2;
+
 		public static class Namespaces
 		{
 			public const string Controls = BaseXamlNamespace + ".Controls";
@@ -80,6 +82,7 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 			// Attributes
 			public const string ContentPropertyAttribute = Markup + ".ContentPropertyAttribute";
 			public const string CreateFromStringAttribute = Metadata + ".CreateFromStringAttribute";
+			public const string NotImplementedAttribute = "Uno.NotImplementedAttribute";
 
 			// Text
 			public const string FontWeight = Namespaces.Text + ".FontWeight";
@@ -125,7 +128,6 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 			// MarkupExtension
 			public const string MarkupExtension = Markup + ".MarkupExtension";
 			public const string IMarkupExtensionOverrides = Markup + ".IMarkupExtensionOverrides";
-			public const string MarkupExtensionReturnTypeAttribute = Markup + ".MarkupExtensionReturnTypeAttribute";
 		}
 	}
 }

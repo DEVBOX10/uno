@@ -53,6 +53,9 @@ namespace Windows.UI.Xaml.Controls.Primitives
 		/// </summary>
 		internal bool ShouldHandlePressed { get; set; } = true;
 
+		// Workaround for the fact that ListViewBaseItem exists internally on WinUI, but isn't included in the public API
+		private bool IsListViewBaseItem => this is ListViewItem || this is GridViewItem;
+
 		/// <remarks>
 		/// Ensure that the ContentControl will create its children even
 		/// if it has no parent view. This is critical for the recycling panels,
@@ -94,7 +97,7 @@ namespace Windows.UI.Xaml.Controls.Primitives
 		}
 
 		/// <summary>
-		/// Set appropriate visual state from MultiSelectStates group. (https://msdn.microsoft.com/en-us/library/windows/apps/mt299136.aspx?f=255&MSPPError=-2147217396)
+		/// Set appropriate visual state from MultiSelectStates group. (https://msdn.microsoft.com/en-us/library/windows/apps/mt299136.aspx)
 		/// </summary>
 		internal void ApplyMultiSelectState(bool isSelectionMultiple)
 		{
@@ -201,7 +204,7 @@ namespace Windows.UI.Xaml.Controls.Primitives
 		}
 
 		private string GetState(bool isEnabled, bool isSelected, bool isOver, bool isPressed)
-		{			
+		{
 			var state = CommonStates.Normal;
 
 			if (isEnabled)
@@ -250,6 +253,10 @@ namespace Windows.UI.Xaml.Controls.Primitives
 #endif
 
 			UpdateCommonStates();
+
+			// TODO: This may need to be adjusted later when we remove the Visual State mixins.
+			var state = IsEnabled ? DisabledStates.Enabled : DisabledStates.Disabled;
+			VisualStateManager.GoToState(this, state, true);
 		}
 
 #if __IOS__
@@ -346,6 +353,80 @@ namespace Windows.UI.Xaml.Controls.Primitives
 #else
 			return null;
 #endif
+		}
+
+		private protected override void ChangeVisualState(bool useTransitions)
+		{
+			base.ChangeVisualState(useTransitions);
+
+			if (IsListViewBaseItem)
+			{
+				var criteria = new ListViewBaseItemVisualStatesCriteria();
+
+				criteria.isEnabled = IsEnabled;
+				criteria.isSelected = IsSelected;
+				criteria.focusState = FocusState;
+
+				// Pressed state should be handled whether it's mouse or touch
+				// m_inCheckboxPressedForTouch is not used because it is part of the 8.1 template
+				criteria.isPressed = IsPointerPressed;
+				criteria.isPointerOver = IsPointerOver;
+				//criteria.isDragVisualCaptured = m_dragVisualCaptured; // Uno TODO
+
+				if (Selector is ListViewBase spListView)
+				{
+					criteria.isDragging = spListView.IsInDragDrop();
+					criteria.isDraggedOver = spListView.IsDragOverItem(this);
+					criteria.dragItemsCount = spListView.DragItemsCount();
+					criteria.isItemDragPrimary = spListView.IsContainerDragDropOwner(this);
+
+					// Holding gesture will show drag visual
+					criteria.canDrag = spListView.CanDragItems;
+					criteria.canReorder = spListView.CanReorderItems;
+					if (spListView.GetIsHolding())
+					{
+						criteria.isHolding = true;
+						// Uno TODO
+						//if (m_isHolding)
+						//{
+						//	criteria.isItemDragPrimary = true;
+						//}
+					}
+
+					criteria.isMultiSelect = spListView.IsMultiSelectCheckBoxEnabled;
+
+					var selectionMode = spListView.SelectionMode;
+
+					// if the ListView selection mode is None, we should appear as not Selected
+					criteria.isSelected &= (selectionMode != ListViewSelectionMode.None);
+
+					// Read-only mode
+					{
+						bool isItemClickEnabled = false;
+
+						isItemClickEnabled = spListView.IsItemClickEnabled;
+
+						if (selectionMode == ListViewSelectionMode.None && !isItemClickEnabled)
+						{
+							criteria.isPressed = false;
+							criteria.isPointerOver = false;
+						}
+					}
+
+					if (criteria.isMultiSelect)
+					{
+
+						criteria.isMultiSelect &= spListView.SelectionMode == ListViewSelectionMode.Multiple;
+					}
+
+					criteria.isInsideListView = true;
+
+					foreach (var state in VisualStatesHelper.GetValidVisualStatesListViewBaseItem(criteria))
+					{
+						GoToState(useTransitions, state);
+					}
+				}
+			}
 		}
 	}
 }

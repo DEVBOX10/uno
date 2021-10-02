@@ -497,8 +497,9 @@ declare namespace Uno.UI {
             *
             * @param maxWidth string containing width in pixels. Empty string means infinite.
             * @param maxHeight string containing height in pixels. Empty string means infinite.
+            * @param measureContent if we're interested by the content of the control (<img>'s image, <input>'s text...)
             */
-        measureView(viewId: string, maxWidth: string, maxHeight: string): string;
+        measureView(viewId: string, maxWidth: string, maxHeight: string, measureContent?: boolean): string;
         /**
             * Use the Html engine to measure the element using specified constraints.
             *
@@ -583,6 +584,7 @@ declare namespace Uno.UI {
         private numberToCssColor;
         setCursor(cssCursor: string): string;
         getNaturalImageSize(imageUrl: string): Promise<string>;
+        selectInputRange(elementId: number, start: number, length: number): void;
     }
 }
 interface PointerEvent {
@@ -700,6 +702,25 @@ declare namespace Windows.ApplicationModel.DataTransfer {
         static showShareUI(title: string, text: string, url: string): Promise<string>;
     }
 }
+declare namespace Windows.ApplicationModel.DataTransfer.DragDrop.Core {
+    class DragDropExtension {
+        private static _dispatchDropEventMethod;
+        private static _dispatchDragDropArgs;
+        private static _current;
+        private static _nextDropId;
+        private _dropHandler;
+        private _pendingDropId;
+        private _pendingDropData;
+        static enable(pArgs: number): void;
+        static disable(pArgs: number): void;
+        constructor();
+        dispose(): void;
+        private dispatchDropEvent;
+        static retrieveText(itemId: number): Promise<string>;
+        static retrieveFiles(itemIds: number | number[]): Promise<string>;
+        private static getAsFile;
+    }
+}
 declare namespace Uno.Devices.Enumeration.Internal.Providers.Midi {
     class MidiDeviceClassProvider {
         static findDevices(findInputDevices: boolean): string;
@@ -778,6 +799,27 @@ declare namespace Windows.Devices.Sensors {
     class Gyrometer {
         private static dispatchReading;
         private static gyroscope;
+        static initialize(): boolean;
+        static startReading(): void;
+        static stopReading(): void;
+        private static readingChangedHandler;
+    }
+}
+declare class AmbientLightSensor {
+    constructor(config: any);
+    addEventListener(type: "reading", listener: (this: this, ev: Event) => any): void;
+    removeEventListener(type: "reading", listener: (this: this, ev: Event) => any): void;
+    start(): void;
+    stop(): void;
+    illuminance: number;
+}
+interface Window {
+    AmbientLightSensor: AmbientLightSensor;
+}
+declare namespace Windows.Devices.Sensors {
+    class LightSensor {
+        private static dispatchReading;
+        private static ambientLightSensor;
         static initialize(): boolean;
         static startReading(): void;
         static stopReading(): void;
@@ -958,14 +1000,15 @@ declare namespace Uno.Storage {
 declare namespace Uno.Storage {
     class NativeStorageItem {
         private static generateGuidBinding;
-        private static _guidToHandleMap;
-        private static _handleToGuidMap;
-        static addHandle(guid: string, handle: FileSystemHandle): void;
-        static removeHandle(guid: string): void;
-        static getHandle(guid: string): FileSystemHandle;
-        static getGuid(handle: FileSystemHandle): string;
-        static getInfos(...handles: FileSystemHandle[]): NativeStorageItemInfo[];
-        private static storeHandles;
+        private static _guidToItemMap;
+        private static _itemToGuidMap;
+        static addItem(guid: string, item: FileSystemHandle | File): void;
+        static removeItem(guid: string): void;
+        static getItem(guid: string): FileSystemHandle | File;
+        static getFile(guid: string): Promise<File>;
+        static getGuid(item: FileSystemHandle | File): string;
+        static getInfos(...items: Array<FileSystemHandle | File>): NativeStorageItemInfo[];
+        private static storeItems;
         private static generateGuids;
     }
 }
@@ -1003,21 +1046,21 @@ declare namespace Windows.Storage {
 declare namespace Windows.Storage.Pickers {
     class FileOpenPicker {
         static isNativeSupported(): boolean;
-        static nativePickFilesAsync(multiple: boolean, showAllEntry: boolean, fileTypesJson: string): Promise<string>;
+        static nativePickFilesAsync(multiple: boolean, showAllEntry: boolean, fileTypesJson: string, id: string, startIn: StartInDirectory): Promise<string>;
         static uploadPickFilesAsync(multiple: boolean, targetPath: string, accept: string): Promise<string>;
     }
 }
 declare namespace Windows.Storage.Pickers {
     class FileSavePicker {
         static isNativeSupported(): boolean;
-        static nativePickSaveFileAsync(showAllEntry: boolean, fileTypesJson: string): Promise<string>;
+        static nativePickSaveFileAsync(showAllEntry: boolean, fileTypesJson: string, suggestedFileName: string, id: string, startIn: StartInDirectory): Promise<string>;
         static SaveAs(fileName: string, dataPtr: any, size: number): void;
     }
 }
 declare namespace Windows.Storage.Pickers {
     class FolderPicker {
         static isNativeSupported(): boolean;
-        static pickSingleFolderAsync(): Promise<string>;
+        static pickSingleFolderAsync(id: string, startIn: StartInDirectory): Promise<string>;
     }
 }
 declare namespace Uno.Storage.Pickers {
@@ -1109,6 +1152,16 @@ declare namespace Windows.UI.Core {
         enable(): void;
         disable(): void;
         private clearStack;
+    }
+}
+interface Navigator {
+    setAppBadge(value: number): void;
+    clearAppBadge(): void;
+}
+declare namespace Windows.UI.Notifications {
+    class BadgeUpdater {
+        static setNumber(value: number): void;
+        static clear(): void;
     }
 }
 declare namespace Windows.UI.ViewManagement {
@@ -1222,6 +1275,22 @@ declare class ApplicationDataContainer_TryGetValueReturn {
     HasValue: boolean;
     marshal(pData: number): void;
 }
+declare class DragDropExtensionEventArgs {
+    eventName: string;
+    allowedOperations: string;
+    acceptedOperation: string;
+    dataItems: string;
+    timestamp: number;
+    x: number;
+    y: number;
+    id: number;
+    buttons: number;
+    shift: boolean;
+    ctrl: boolean;
+    alt: boolean;
+    static unmarshal(pData: number): DragDropExtensionEventArgs;
+    marshal(pData: number): void;
+}
 declare class StorageFolderMakePersistentParams {
     Paths_Length: number;
     Paths: Array<string>;
@@ -1290,6 +1359,7 @@ declare class WindowManagerMeasureViewParams {
     HtmlId: number;
     AvailableWidth: number;
     AvailableHeight: number;
+    MeasureContent: boolean;
     static unmarshal(pData: number): WindowManagerMeasureViewParams;
 }
 declare class WindowManagerMeasureViewReturn {

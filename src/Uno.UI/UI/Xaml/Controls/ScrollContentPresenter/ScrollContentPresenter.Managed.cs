@@ -88,6 +88,8 @@ namespace Windows.UI.Xaml.Controls
 
 		internal Size ScrollBarSize => new Size(0, 0);
 
+		internal Size? CustomContentExtent => null;
+
 		public ScrollContentPresenter()
 		{
 #if __SKIA__
@@ -104,7 +106,6 @@ namespace Windows.UI.Xaml.Controls
 			// Touch scroll support
 			ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY; // Updated in PrepareTouchScroll!
 			ManipulationStarting += PrepareTouchScroll;
-			ManipulationStarted += BeginTouchScroll;
 			ManipulationDelta += UpdateTouchScroll;
 			ManipulationCompleted += CompleteTouchScroll;
 
@@ -236,6 +237,12 @@ namespace Windows.UI.Xaml.Controls
 
 		private void PrepareTouchScroll(object sender, ManipulationStartingRoutedEventArgs e)
 		{
+			if (e.Pointer.Type != PointerDeviceType.Touch)
+			{
+				e.Mode = ManipulationModes.None;
+				return;
+			}
+
 			if (!CanVerticallyScroll || ExtentHeight <= 0)
 			{
 				e.Mode &= ~ManipulationModes.TranslateY;
@@ -244,15 +251,6 @@ namespace Windows.UI.Xaml.Controls
 			if (!CanHorizontallyScroll || ExtentWidth <= 0)
 			{
 				e.Mode &= ~ManipulationModes.TranslateX;
-			}
-		}
-
-		private void BeginTouchScroll(object sender, ManipulationStartedRoutedEventArgs e)
-		{
-			if (e.PointerDeviceType != PointerDeviceType.Touch)
-			{
-				e.Complete();
-				return;
 			}
 		}
 

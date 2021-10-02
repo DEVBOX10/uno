@@ -953,8 +953,13 @@ namespace Windows.UI.Xaml.Controls
 
 				var results = ItemsPanelRoot.Children.UpdateWithResults(containers.OfType<UIElement>(), comparer: new ViewComparer());
 
-				foreach (var removed in results.Removed)
+				// This block is a manual enumeration to avoid the foreach pattern
+				// See https://github.com/dotnet/runtime/issues/56309 for details
+				var removedEnumerator = results.Removed.GetEnumerator();
+				while(removedEnumerator.MoveNext())
 				{
+					var removed = removedEnumerator.Current;
+
 					if (removed is DependencyObject removedObject)
 					{
 						CleanUpContainer(removedObject);
@@ -1046,18 +1051,20 @@ namespace Windows.UI.Xaml.Controls
 
 			var styleFromItemsControl = ItemContainerStyle ?? ItemContainerStyleSelector?.SelectStyle(item, element);
 
-			object GetContent()
+			void SetContent(UIElement container, DependencyProperty contentProperty)
 			{
 				var displayMemberPath = DisplayMemberPath;
 				if (string.IsNullOrEmpty(displayMemberPath))
 				{
-					return item;
+					container.SetValue(contentProperty, item);
 				}
 				else
 				{
-					// TODO: Cache the BindingPath
-					var b = new BindingPath(displayMemberPath, item) { DataContext = item };
-					return b.Value;
+					container.SetBinding(contentProperty, new Binding
+					{
+						Path = displayMemberPath,
+						Source = item
+					});
 				}
 			}
 
@@ -1078,7 +1085,7 @@ namespace Windows.UI.Xaml.Controls
 
 				if (!isOwnContainer)
 				{
-					containerAsContentPresenter.Content = GetContent();
+					SetContent(containerAsContentPresenter, ContentPresenter.ContentProperty);
 				}
 			}
 			else if (element is ContentControl containerAsContentControl)
@@ -1101,7 +1108,7 @@ namespace Windows.UI.Xaml.Controls
 					// Set the datacontext first, then the binding.
 					// This avoids the inner content to go through a partial content being
 					// the result of the fallback value of the binding set below.
-					containerAsContentControl.DataContext = GetContent();
+					SetContent(containerAsContentControl, ContentControl.DataContextProperty);
 
 					if (!containerAsContentControl.IsContainerFromTemplateRoot && containerAsContentControl.GetBindingExpression(ContentControl.ContentProperty) == null)
 					{
@@ -1490,5 +1497,16 @@ namespace Windows.UI.Xaml.Controls
 		/// Resets internal cached state of the collection.
 		/// </summary>
 		private protected virtual void Refresh() { }
+
+		private protected void ChangeSelectorItemsVisualState(bool useTransitions)
+		{
+			foreach (var child in GetItemsPanelChildren())
+			{
+				if (child is SelectorItem selectorItem)
+				{
+					selectorItem.UpdateVisualState(useTransitions);
+				}
+			}
+		}
 	}
 }

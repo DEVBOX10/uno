@@ -26,6 +26,12 @@ namespace Windows.UI.Xaml.Controls
 		internal bool IsSubMenu { get; set; }
 
 		/// <summary>
+		/// In WinUI, Popup has IsTabStop set to true by default.
+		/// UWP does not include IsTabStop, but Popup is still focusable.
+		/// </summary>
+		private protected override bool IsTabStopDefaultValue => true;
+
+		/// <summary>
 		/// Returns true if the popup should show the light-dismiss overlay with its current configuration, false if not
 		/// </summary>
 		private bool ShouldShowLightDismissOverlay
@@ -112,7 +118,7 @@ namespace Windows.UI.Xaml.Controls
 			ApplyLightDismissOverlayMode();
 		}
 
-		partial void OnPopupPanelChangedPartial(PopupPanel oldHost, PopupPanel newHost);
+		partial void OnPopupPanelChangedPartial(PopupPanel previousPanel, PopupPanel newPanel);
 
 		protected override void OnVerticalOffsetChanged(double oldVerticalOffset, double newVerticalOffset)
 		{

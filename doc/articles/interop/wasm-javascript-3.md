@@ -144,7 +144,8 @@ An easy way to achieve this is to add JavaScript code to load the CSS file direc
        xmlns:local="using:FlatpickrDemo"
        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-       mc:Ignorable="d">
+       mc:Ignorable="d"
+       Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
    
        <StackPanel Spacing="10" Padding="20">
          <TextBlock FontSize="15">
@@ -240,6 +241,14 @@ In the constructor of your wrapper control, add the following:
 // Uno reproduces this behavior, so we must set it here even if we're not using the background.
 // Not doing this will lead to a `pointer-events: none` CSS style on the control.
 Background = new SolidColorBrush(Colors.Transparent);
+```
+
+### `TextBlock` content is not visible in browsers with the dark theme
+`TextBlock` defaults the text color as White correctly but `Page` background needs to be set correctly.
+```
+<Page 
+    ...
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 ```
 
 ## 🔬 Going further

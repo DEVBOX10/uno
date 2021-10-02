@@ -55,6 +55,9 @@ namespace Windows.UI.Xaml
 			ApiInformation.RegisterAssembly(typeof(Application).Assembly);
 			ApiInformation.RegisterAssembly(typeof(Windows.Storage.ApplicationData).Assembly);
 
+			Uno.Helpers.DispatcherTimerProxy.SetDispatcherTimerGetter(() => new DispatcherTimer());
+			Uno.Helpers.VisualTreeHelperProxy.SetCloseAllPopupsAction(() => Media.VisualTreeHelper.CloseAllPopups());
+
 			InitializePartialStatic();
 		}
 
@@ -79,9 +82,9 @@ namespace Windows.UI.Xaml
 		public ApplicationRequiresPointerMode RequiresPointerMode { get; set; } = ApplicationRequiresPointerMode.Auto;
 
 		/// <summary>
-		/// Does not have any effect in Uno yet.
+		/// Specifies the visual feedback used to indicate the UI element
+		/// with focus when navigating with a keyboard or gamepad.
 		/// </summary>
-		[NotImplemented]
 		public FocusVisualKind FocusVisualKind { get; set; } = FocusVisualKind.HighVisibility;
 
 		public ApplicationTheme RequestedTheme
@@ -149,11 +152,11 @@ namespace Windows.UI.Xaml
 			}
 		}
 
-		internal ElementTheme ActualElementTheme => (_themeSetExplicitly, RequestedTheme) switch
+		internal ElementTheme ActualElementTheme => RequestedTheme switch
 		{
-			(true, ApplicationTheme.Light) => ElementTheme.Light,
-			(true, ApplicationTheme.Dark) => ElementTheme.Dark,
-			_ => ElementTheme.Default
+			ApplicationTheme.Light => ElementTheme.Light,
+			ApplicationTheme.Dark => ElementTheme.Dark,
+			_ => throw new InvalidOperationException("Application's RequestedTheme is invalid."),
 		};
 
 		internal void SetExplicitRequestedTheme(ApplicationTheme? explicitTheme)

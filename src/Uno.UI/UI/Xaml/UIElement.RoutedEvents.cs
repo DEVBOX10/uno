@@ -1,20 +1,22 @@
 ﻿// #define TRACE_ROUTED_EVENT_BUBBLING
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using Windows.Foundation;
-using Windows.UI.Xaml.Input;
 using Microsoft.Extensions.Logging;
 using Uno;
 using Uno.Extensions;
 using Uno.Logging;
 using Uno.UI;
+using Uno.UI.Core;
 using Uno.UI.Extensions;
 using Uno.UI.Xaml;
 using Uno.UI.Xaml.Input;
+using Windows.Foundation;
+using Windows.UI.Xaml.Input;
 
 #if __IOS__
 using UIKit;
@@ -119,7 +121,8 @@ namespace Windows.UI.Xaml
 
 		public static RoutedEvent HoldingEvent { get; } = new RoutedEvent(RoutedEventFlag.Holding);
 
-		/* ** */ internal /* ** */ static RoutedEvent DragStartingEvent { get; } = new RoutedEvent(RoutedEventFlag.DragStarting);
+		/* ** */
+		internal /* ** */ static RoutedEvent DragStartingEvent { get; } = new RoutedEvent(RoutedEventFlag.DragStarting);
 
 		public static RoutedEvent DragEnterEvent { get; } = new RoutedEvent(RoutedEventFlag.DragEnter);
 
@@ -129,7 +132,8 @@ namespace Windows.UI.Xaml
 
 		public static RoutedEvent DropEvent { get; } = new RoutedEvent(RoutedEventFlag.Drop);
 
-		/* ** */ internal /* ** */  static RoutedEvent DropCompletedEvent { get; } = new RoutedEvent(RoutedEventFlag.DropCompleted);
+		/* ** */
+		internal /* ** */  static RoutedEvent DropCompletedEvent { get; } = new RoutedEvent(RoutedEventFlag.DropCompleted);
 
 		public static RoutedEvent KeyDownEvent { get; } = new RoutedEvent(RoutedEventFlag.KeyDown);
 
@@ -138,6 +142,12 @@ namespace Windows.UI.Xaml
 		internal static RoutedEvent GotFocusEvent { get; } = new RoutedEvent(RoutedEventFlag.GotFocus);
 
 		internal static RoutedEvent LostFocusEvent { get; } = new RoutedEvent(RoutedEventFlag.LostFocus);
+
+		public static RoutedEvent GettingFocusEvent { get; } = new RoutedEvent(RoutedEventFlag.GettingFocus);
+
+		public static RoutedEvent LosingFocusEvent { get; } = new RoutedEvent(RoutedEventFlag.LosingFocus);
+
+		public static RoutedEvent NoFocusCandidateFoundEvent { get; } = new RoutedEvent(RoutedEventFlag.NoFocusCandidateFound);
 
 		private struct RoutedEventHandlerInfo
 		{
@@ -154,7 +164,7 @@ namespace Windows.UI.Xaml
 
 		#region EventsBubblingInManagedCode DependencyProperty
 
-		public static DependencyProperty EventsBubblingInManagedCodeProperty { get ; } = DependencyProperty.Register(
+		public static DependencyProperty EventsBubblingInManagedCodeProperty { get; } = DependencyProperty.Register(
 			"EventsBubblingInManagedCode",
 			typeof(RoutedEventFlag),
 			typeof(UIElement),
@@ -176,7 +186,7 @@ namespace Windows.UI.Xaml
 
 		#region SubscribedToHandledEventsToo DependencyProperty
 
-		private static DependencyProperty SubscribedToHandledEventsTooProperty { get ; } =
+		private static DependencyProperty SubscribedToHandledEventsTooProperty { get; } =
 			DependencyProperty.Register(
 				"SubscribedToHandledEventsToo",
 				typeof(RoutedEventFlag),
@@ -191,7 +201,7 @@ namespace Windows.UI.Xaml
 
 		private RoutedEventFlag SubscribedToHandledEventsToo
 		{
-			get => (RoutedEventFlag) GetValue(SubscribedToHandledEventsTooProperty);
+			get => (RoutedEventFlag)GetValue(SubscribedToHandledEventsTooProperty);
 			set => SetValue(SubscribedToHandledEventsTooProperty, value);
 		}
 
@@ -237,6 +247,24 @@ namespace Windows.UI.Xaml
 		{
 			add => AddHandler(GotFocusEvent, value, false);
 			remove => RemoveHandler(GotFocusEvent, value);
+		}
+
+		public event TypedEventHandler<UIElement, LosingFocusEventArgs> LosingFocus
+		{
+			add => AddHandler(LosingFocusEvent, value, false);
+			remove => RemoveHandler(LosingFocusEvent, value);
+		}
+
+		public event TypedEventHandler<UIElement, GettingFocusEventArgs> GettingFocus
+		{
+			add => AddHandler(GettingFocusEvent, value, false);
+			remove => RemoveHandler(GettingFocusEvent, value);
+		}
+
+		public event TypedEventHandler<UIElement, NoFocusCandidateFoundEventArgs> NoFocusCandidateFound
+		{
+			add => AddHandler(NoFocusCandidateFoundEvent, value, false);
+			remove => RemoveHandler(NoFocusCandidateFoundEvent, value);
 		}
 
 		public event PointerEventHandler PointerCanceled
@@ -592,12 +620,20 @@ namespace Windows.UI.Xaml
 		internal bool RaiseEvent(RoutedEvent routedEvent, RoutedEventArgs args, BubblingContext ctx = default)
 		{
 #if TRACE_ROUTED_EVENT_BUBBLING
-			Debug.Write(new string('\t', Depth) + $"[{routedEvent.Name.Trim().ToUpperInvariant()}] {this.GetDebugName()}\r\n");
+			Debug.Write($"{this.GetDebugIdentifier()} - [{routedEvent.Name.TrimEnd("Event")}] (ctx: {ctx})\r\n");
 #endif
 
 			if (routedEvent.Flag == RoutedEventFlag.None)
 			{
 				throw new InvalidOperationException($"Flag not defined for routed event {routedEvent.Name}.");
+			}
+
+			// TODO: This is just temporary workaround before proper
+			// keyboard event infrastructure is implemented everywhere
+			// (issue #6074)
+			if (routedEvent.IsKeyEvent)
+			{
+				TrackKeyState(routedEvent, args);
 			}
 
 			// [3] Any local handlers?
@@ -672,6 +708,21 @@ namespace Windows.UI.Xaml
 			return RaiseOnParent(routedEvent, args, parent, ctx);
 		}
 
+		private static void TrackKeyState(RoutedEvent routedEvent, RoutedEventArgs args)
+		{
+			if (args is KeyRoutedEventArgs keyArgs)
+			{
+				if (routedEvent == KeyDownEvent)
+				{
+					KeyboardStateTracker.OnKeyDown(keyArgs.OriginalKey);
+				}
+				else if (routedEvent == KeyUpEvent)
+				{
+					KeyboardStateTracker.OnKeyUp(keyArgs.OriginalKey);
+				}
+			}
+		}
+
 		// This method is a workaround for https://github.com/mono/mono/issues/12981
 		// It can be inlined in RaiseEvent when fixed.
 		private static bool RaiseOnParent(RoutedEvent routedEvent, RoutedEventArgs args, UIElement parent, BubblingContext ctx)
@@ -684,7 +735,7 @@ namespace Windows.UI.Xaml
 			{
 				mode |= BubblingMode.IgnoreParents;
 			}
-			
+
 			var handledByAnyParent = parent.RaiseEvent(routedEvent, args, ctx.WithMode(mode));
 
 			return handledByAnyParent;
@@ -742,10 +793,10 @@ namespace Windows.UI.Xaml
 			/// This value is used to flag events that are sent to element to maintain their internal state,
 			/// but which are not meant to initiate a new event bubbling (a.k.a. invoke the "RaiseEvent" again)
 			/// </summary>
-			public static readonly BubblingContext OnManagedBubbling = new BubblingContext{Mode = BubblingMode.NoBubbling, IsInternal = true};
+			public static readonly BubblingContext OnManagedBubbling = new BubblingContext { Mode = BubblingMode.NoBubbling, IsInternal = true };
 
 			public static BubblingContext BubbleUpTo(UIElement root)
-				=> new BubblingContext {Root = root};
+				=> new BubblingContext { Root = root };
 
 			/// <summary>
 			/// The mode to use for bubbling
@@ -764,14 +815,9 @@ namespace Windows.UI.Xaml
 			/// <remarks>
 			/// The "internal" here refers only to the private state of the code which has initiated this event, not subclasses.
 			/// This means that an event flagged as "internal" can bubble to update the private state of parents,
-			/// but the UIElement.RoutedEvent won't be raised in any way (public and internal handlers) and it won't be sent to Control.On<RoutedEvent>() neither.
+			/// but the UIElement.RoutedEvent won't be raised in any way (public and internal handlers) and it won't be sent to Control.On`RoutedEvent`() neither.
 			/// </remarks>
 			public bool IsInternal { get; set; }
-
-			/// <summary>
-			/// Indicates that the associated event is an internal event that will not be propagated to parent (cf. <see cref="OnManagedBubbling"/>).
-			/// </summary>
-			public bool IsLocalOnly => IsInternal && Mode == BubblingMode.NoBubbling;
 
 			public BubblingContext WithMode(BubblingMode mode) => new BubblingContext
 			{
@@ -779,6 +825,9 @@ namespace Windows.UI.Xaml
 				Root = Root,
 				IsInternal = IsInternal
 			};
+
+			public override string ToString()
+				=> $"{Mode}{(IsInternal ? " *internal*" : "")}{(Root is { } r ? $" up to {Root.GetDebugName()}" : "")}";
 		}
 
 		/// <summary>
@@ -815,7 +864,7 @@ namespace Windows.UI.Xaml
 
 		private static bool IsHandled(RoutedEventArgs args)
 		{
-			return args is ICancellableRoutedEventArgs cancellable && cancellable.Handled;
+			return args is IHandleableRoutedEventArgs cancellable && cancellable.Handled;
 		}
 
 		private bool IsBubblingInManagedCode(RoutedEvent routedEvent, RoutedEventArgs args)
@@ -892,7 +941,7 @@ namespace Windows.UI.Xaml
 				case ManipulationStartedEventHandler manipStarted:
 					manipStarted(this, (ManipulationStartedRoutedEventArgs)args);
 					break;
-				case ManipulationDeltaEventHandler manipDelta:	
+				case ManipulationDeltaEventHandler manipDelta:
 					manipDelta(this, (ManipulationDeltaRoutedEventArgs)args);
 					break;
 				case ManipulationInertiaStartingEventHandler manipInertia:
@@ -900,6 +949,12 @@ namespace Windows.UI.Xaml
 					break;
 				case ManipulationCompletedEventHandler manipCompleted:
 					manipCompleted(this, (ManipulationCompletedRoutedEventArgs)args);
+					break;
+				case TypedEventHandler<UIElement, GettingFocusEventArgs> gettingFocusHandler:
+					gettingFocusHandler(this, (GettingFocusEventArgs)args);
+					break;
+				case TypedEventHandler<UIElement, LosingFocusEventArgs> losingFocusHandler:
+					losingFocusHandler(this, (LosingFocusEventArgs)args);
 					break;
 				default:
 					this.Log().Error($"The handler type {handler.GetType()} has not been registered for RoutedEvent");

@@ -36,13 +36,17 @@ Uno Platform provides support for a large number of WinUI controls, panels, and 
 
 ## WinRT features (non-visual APIs)
 
-Uno Platform supports a number of non-visual APIs from Windows Runtime namespaces on non-Windows platforms, like [clipboard management](features/windows-applicationmodel-datatransfer.md) and [sensor access](features/windows-devices-sensors.md). Browse the complete list under 'WinRT features' on the left, and check individual entries for platform-specific information.
+Uno Platform supports a number of non-visual APIs from Windows Runtime namespaces on non-Windows platforms, like [clipboard management](features/windows-applicationmodel-datatransfer.md) and [sensor access](features/windows-devices-sensors.md). 
+
+[!include[Inline table of contents](inlineTOCs/winrt-features-inline-toc.include)]
+
 
 ## Features unique to Uno
 
  * [VisibleBoundsPadding - manage 'safe' area on notched devices](features/VisibleBoundsPadding.md)
  * [ElevatedView - apply a shadow effect on all platforms](features/ElevatedView.md)
  * [Uno.Material - Material Design on all platforms](features/uno-material.md)
+ * [Uno.Cupertino](features/uno-cupertino.md)
 
 ## Core functionality
 

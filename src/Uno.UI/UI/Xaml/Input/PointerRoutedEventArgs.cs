@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using Windows.ApplicationModel.DataTransfer.DragDrop;
 using Windows.ApplicationModel.DataTransfer.DragDrop.Core;
+using Windows.Devices.Input;
 using Uno;
 using Uno.UI.Xaml.Input;
 using Windows.System;
@@ -13,7 +14,7 @@ using Windows.UI.Input;
 
 namespace Windows.UI.Xaml.Input
 {
-	public sealed partial class PointerRoutedEventArgs : RoutedEventArgs, ICancellableRoutedEventArgs, CoreWindow.IPointerEventArgs, IDragEventSource
+	public sealed partial class PointerRoutedEventArgs : RoutedEventArgs, IHandleableRoutedEventArgs, CoreWindow.IPointerEventArgs, IDragEventSource
 	{
 #if UNO_HAS_MANAGED_POINTERS
 		internal const bool PlatformSupportsNativeBubbling = false;
@@ -52,6 +53,7 @@ namespace Windows.UI.Xaml.Input
 		public override string ToString()
 			=> $"PointerRoutedEventArgs({Pointer}@{GetCurrentPoint(null).Position})";
 
+		PointerIdentifier CoreWindow.IPointerEventArgs.Pointer => Pointer.UniqueId;
 		long IDragEventSource.Id => Pointer.UniqueId;
 		uint IDragEventSource.FrameId => FrameId;
 

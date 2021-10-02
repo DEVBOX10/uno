@@ -12,6 +12,7 @@ namespace Windows.Foundation
 	public partial struct Rect
 	{
 		private const string _negativeErrorMessage = "Non-negative number required.";
+		private const float Epsilon = 0.00001f;
 
 		public static Rect Empty { get; } = new Rect
 		{
@@ -98,6 +99,10 @@ namespace Windows.Foundation
 		public double Bottom => Y + Height;
 
 		public bool IsEmpty => Empty.Equals(this);
+
+		internal bool IsInfinite => Infinite.Equals(this);
+
+		internal bool IsUniform => Math.Abs(Left - Top) < Epsilon && Math.Abs(Left - Right) < Epsilon && Math.Abs(Left - Bottom) < Epsilon;
 
 		public static implicit operator Rect(string text)
 		{
@@ -239,9 +244,9 @@ namespace Windows.Foundation
 		public void Union(Rect rect)
 		{
 			var left = Math.Min(Left, rect.Left);
-			var right = Math.Max(left + Width, rect.Right);
+			var right = Math.Max(Left + Width, rect.Right);
 			var top = Math.Min(Top, rect.Top);
-			var bottom = Math.Max(top + Height, rect.Bottom);
+			var bottom = Math.Max(Top + Height, rect.Bottom);
 			this = new Rect(left, top, right - left, bottom - top);
 		}
 

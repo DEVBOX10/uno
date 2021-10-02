@@ -22,25 +22,20 @@ namespace Windows.UI.Xaml.Controls.Primitives
 			Clickable = true;
 		}
 
-		private protected override void OnLoaded()
+		partial void OnLoadedPartial()
 		{
-			base.OnLoaded();
-
 			Focusable = true;
 			FocusableInTouchMode = true;
-
-			RegisterEvents();
 
 			OnCanExecuteChanged();
 		}
 
-		private protected override void OnUnloaded()
-		{
-			base.OnUnloaded();
+		partial void OnUnloadedPartial()
+		{			
 			_isEnabledSubscription.Disposable = null;
 		}
 
-		private protected override void OnIsEnabledChanged(IsEnabledChangedEventArgs e)
+		partial void OnIsEnabledChangedPartial(IsEnabledChangedEventArgs e)
 		{
 			Clickable = e.NewValue;
 		}

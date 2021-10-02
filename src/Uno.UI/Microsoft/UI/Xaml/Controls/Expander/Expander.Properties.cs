@@ -17,7 +17,7 @@ namespace Microsoft.UI.Xaml.Controls
 				nameof(ExpandDirection),
 				typeof(ExpandDirection),
 				typeof(Expander),
-				new PropertyMetadata(
+				new FrameworkPropertyMetadata(
 					ExpandDirection.Down,
 					(s, e) => (s as Expander)?.OnExpandDirectionPropertyChanged(e)));
 
@@ -32,7 +32,7 @@ namespace Microsoft.UI.Xaml.Controls
 				nameof(Header),
 				typeof(object),
 				typeof(Expander),
-				new PropertyMetadata(null));
+				new FrameworkPropertyMetadata(null));
 
 		public DataTemplate HeaderTemplate
 		{
@@ -45,7 +45,7 @@ namespace Microsoft.UI.Xaml.Controls
 				nameof(HeaderTemplate),
 				typeof(DataTemplate),
 				typeof(Expander),
-				new PropertyMetadata(null));
+				new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.ValueDoesNotInheritDataContext));
 
 		public DataTemplateSelector HeaderTemplateSelector
 		{
@@ -58,7 +58,7 @@ namespace Microsoft.UI.Xaml.Controls
 				nameof(HeaderTemplateSelector),
 				typeof(DataTemplateSelector),
 				typeof(Expander),
-				new PropertyMetadata(null));
+				new FrameworkPropertyMetadata(null));
 
 		public bool IsExpanded
 		{
@@ -71,9 +71,22 @@ namespace Microsoft.UI.Xaml.Controls
 				nameof(IsExpanded),
 				typeof(bool),
 				typeof(Expander),
-				new PropertyMetadata(
+				new FrameworkPropertyMetadata(
 					true,
 					(s, e) => (s as Expander)?.OnIsExpandedPropertyChanged(e)));
+
+		public ExpanderTemplateSettings TemplateSettings
+		{
+			get => (ExpanderTemplateSettings)GetValue(TemplateSettingsProperty);
+			set => SetValue(TemplateSettingsProperty, value);
+		}
+
+		public static DependencyProperty TemplateSettingsProperty { get; } =
+			DependencyProperty.Register(
+				nameof(TemplateSettings),
+				typeof(ExpanderTemplateSettings),
+				typeof(Expander),
+				new FrameworkPropertyMetadata(null));
 
 		public event TypedEventHandler<Expander, ExpanderExpandingEventArgs> Expanding;
 		public event TypedEventHandler<Expander, ExpanderCollapsedEventArgs> Collapsed;

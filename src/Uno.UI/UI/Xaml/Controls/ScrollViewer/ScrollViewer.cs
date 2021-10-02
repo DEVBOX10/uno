@@ -47,6 +47,8 @@ namespace Windows.UI.Xaml.Controls
 {
 	public partial class ScrollViewer : ContentControl, IFrameworkTemplatePoolAware
 	{
+		private bool m_isInConstantVelocityPan = false;
+
 		private static class Parts
 		{
 			public static class Uwp
@@ -491,7 +493,7 @@ namespace Windows.UI.Xaml.Controls
 				"ComputedHorizontalScrollBarVisibility",
 				typeof(Visibility),
 				typeof(ScrollViewer),
-				new PropertyMetadata(Visibility.Collapsed)); // This has to be collapsed by default to allow deferred loading of the template
+				new FrameworkPropertyMetadata(Visibility.Collapsed)); // This has to be collapsed by default to allow deferred loading of the template
 
 		public Visibility ComputedHorizontalScrollBarVisibility
 		{
@@ -506,7 +508,7 @@ namespace Windows.UI.Xaml.Controls
 				"ComputedVerticalScrollBarVisibility",
 				typeof(Visibility),
 				typeof(ScrollViewer),
-				new PropertyMetadata(Visibility.Collapsed)); // This has to be collapsed by default to allow deferred loading of the template
+				new FrameworkPropertyMetadata(Visibility.Collapsed)); // This has to be collapsed by default to allow deferred loading of the template
 
 		public Visibility ComputedVerticalScrollBarVisibility
 		{
@@ -632,6 +634,11 @@ namespace Windows.UI.Xaml.Controls
 		/// </summary>
 		internal bool ComputedIsVerticalScrollEnabled { get; private set; } = false;
 
+
+		internal double MinHorizontalOffset => 0;
+
+		internal double MinVerticalOffset => 0;
+
 		protected override Size MeasureOverride(Size availableSize)
 		{
 			ViewportMeasureSize = availableSize;
@@ -688,7 +695,12 @@ namespace Windows.UI.Xaml.Controls
 			ViewportHeight = (_presenter as IFrameworkElement)?.ActualHeight ?? ActualHeight;
 			ViewportWidth = (_presenter as IFrameworkElement)?.ActualWidth ?? ActualWidth;
 
-			if(Content is FrameworkElement fe)
+			if (_presenter?.CustomContentExtent is { } customExtent)
+			{
+				ExtentHeight = customExtent.Height;
+				ExtentWidth = customExtent.Width;
+			}
+			else if (Content is FrameworkElement fe)
 			{
 				var explicitHeight = fe.Height;
 				if (explicitHeight.IsFinite())
@@ -720,7 +732,6 @@ namespace Windows.UI.Xaml.Controls
 			}
 			else
 			{
-				// TODO: fallback on native values (.ContentSize on iOS, for example)
 				ExtentHeight = 0;
 				ExtentWidth = 0;
 			}
@@ -871,6 +882,12 @@ namespace Windows.UI.Xaml.Controls
 
 			_isTemplateApplied = _presenter != null;
 
+#if __WASM__
+			if (_presenter != null && ForceChangeToCurrentView)
+			{
+				_presenter.ForceChangeToCurrentView = ForceChangeToCurrentView;
+			}
+#endif
 			// Load new template
 			_verticalScrollbar = null;
 			_isVerticalScrollBarMaterialized = false;
@@ -925,7 +942,7 @@ namespace Windows.UI.Xaml.Controls
 			}
 		}
 
-#region Content and TemplatedParent forwarding to the ScrollContentPresenter
+		#region Content and TemplatedParent forwarding to the ScrollContentPresenter
 		protected override void OnContentChanged(object oldValue, object newValue)
 		{
 			base.OnContentChanged(oldValue, newValue);
@@ -1012,9 +1029,9 @@ namespace Windows.UI.Xaml.Controls
 				provider.Store.ClearValue(provider.Store.TemplatedParentProperty, DependencyPropertyValuePrecedences.Local);
 			}
 		}
-#endregion
+		#endregion
 
-#region Managed scroll bars support
+		#region Managed scroll bars support
 		private bool _isTemplateApplied;
 		private ScrollBar? _verticalScrollbar;
 		private ScrollBar? _horizontalScrollbar;
@@ -1179,7 +1196,7 @@ namespace Windows.UI.Xaml.Controls
 				disableAnimation: immediate,
 				shouldSnap: true);
 		}
-#endregion
+		#endregion
 
 		// Presenter to Control, i.e. OnPresenterScrolled
 		internal void OnScrollInternal(double horizontalOffset, double verticalOffset, bool isIntermediate)
@@ -1198,12 +1215,12 @@ namespace Windows.UI.Xaml.Controls
 			{
 				Update(isIntermediate);
 
-				if(!isIntermediate)
+				if (!isIntermediate)
 				{
 					if (HorizontalSnapPointsType != SnapPointsType.None
 						|| VerticalSnapPointsType != SnapPointsType.None)
 					{
-						if(_snapPointsTimer == null)
+						if (_snapPointsTimer == null)
 						{
 							_snapPointsTimer = Windows.System.DispatcherQueue.GetForCurrentThread().CreateTimer();
 							_snapPointsTimer.IsRepeating = false;
@@ -1324,7 +1341,7 @@ namespace Windows.UI.Xaml.Controls
 				this.Log().LogDebug($"ChangeView(horizontalOffset={horizontalOffset}, verticalOffset={verticalOffset}, zoomFactor={zoomFactor}, disableAnimation={disableAnimation})");
 			}
 
-			if(horizontalOffset == null && verticalOffset == null && zoomFactor == null)
+			if (horizontalOffset == null && verticalOffset == null && zoomFactor == null)
 			{
 				return true; // nothing to do
 			}
@@ -1369,10 +1386,14 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		#region Scroll indicators visual states (Managed scroll bars only)
+
 		private static readonly TimeSpan _indicatorResetDelay = FeatureConfiguration.ScrollViewer.DefaultAutoHideDelay ?? TimeSpan.FromSeconds(4);
 		private static readonly bool _indicatorResetDisabled = _indicatorResetDelay == TimeSpan.MaxValue;
 		private DispatcherQueueTimer? _indicatorResetTimer;
 		private string? _indicatorState;
+		//private bool m_isInIntermediateViewChangedMode;
+		//private bool m_isViewChangedRaisedInIntermediateMode;
+		//private bool m_isDraggingThumb;
 
 		private void PrepareScrollIndicator() // OnApplyTemplate
 		{
@@ -1472,5 +1493,38 @@ namespace Windows.UI.Xaml.Controls
 			}
 		}
 		#endregion
+
+		public void ScrollToHorizontalOffset(double offset)
+		{
+			_ = ChangeView(offset, null, null, false);
+		}
+
+		public void ScrollToVerticalOffset(double offset)
+		{
+			_ = ChangeView(null, offset, null, false);
+		}
+
+		// Indicates whether ScrollViewer should ignore mouse wheel scroll events (not zoom).
+		public bool ArePointerWheelEventsIgnored { get; set; } = false;
+
+		internal bool BringIntoViewport(Rect bounds,
+			bool skipDuringTouchContact,
+			bool skipAnimationWhileRunning,
+			bool animate)
+		{
+#if __WASM__
+			return ChangeView(bounds.X, bounds.Y, null, true);
+#else
+			return ChangeView(bounds.X, bounds.Y, null, !animate);
+#endif
+		}
+
+		internal bool IsInManipulation => IsInDirectManipulation || m_isInConstantVelocityPan;
+
+		/// <summary>
+		/// Gets or set whether the <see cref="ScrollViewer"/> will allow scrolling outside of the ScrollViewer's Child bound.
+		/// </summary>		
+		internal bool ForceChangeToCurrentView { get; set; } = false;
+
 	}
 }

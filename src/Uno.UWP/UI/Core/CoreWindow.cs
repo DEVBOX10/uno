@@ -1,8 +1,10 @@
 #nullable enable
 
 using System;
+using Windows.Devices.Input;
 using Microsoft.Extensions.Logging;
 using Uno.Extensions;
+using Uno.UI.Core;
 using Windows.Foundation;
 using Windows.UI.Input;
 
@@ -86,13 +88,11 @@ namespace Windows.UI.Core
 		public static CoreWindow? GetForCurrentThread()
 			=> _current; // UWP returns 'null' if on a BG thread
 
-		[Uno.NotImplemented]
 		public CoreVirtualKeyStates GetAsyncKeyState(System.VirtualKey virtualKey)
-			=> CoreVirtualKeyStates.None;
+			=> KeyboardStateTracker.GetKeyState(virtualKey);
 
-		[Uno.NotImplemented]
 		public CoreVirtualKeyStates GetKeyState(System.VirtualKey virtualKey)
-			=> CoreVirtualKeyStates.None;
+			=> KeyboardStateTracker.GetKeyState(virtualKey);
 
 		internal static void SetInvalidateRender(Action invalidateRender)
 			=> _invalidateRender = invalidateRender;
@@ -121,6 +121,8 @@ namespace Windows.UI.Core
 
 		internal interface IPointerEventArgs
 		{
+			PointerIdentifier Pointer { get; }
+
 			PointerPoint GetLocation(object? relativeTo);
 		}
 

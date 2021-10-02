@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
 using Uno.Disposables;
 using Uno.Extensions;
@@ -18,6 +19,7 @@ namespace Windows.UI.Xaml.Shapes
 		public void UpdateLayer(
 			UIElement element,
 			Brush background,
+			BackgroundSizing backgroundSizing,
 			Thickness borderThickness,
 			Brush borderBrush,
 			CornerRadius cornerRadius,
@@ -88,7 +90,8 @@ namespace Windows.UI.Xaml.Shapes
 							("border-style", "solid"),
 							("border-color", ""),
 							("border-image", border),
-							("border-width", borderWidth));
+							("border-width", borderWidth),
+							("border-image-slice", "1"));
 						break;
 					case AcrylicBrush acrylicBrush:
 						var acrylicFallbackColor = acrylicBrush.FallbackColorWithOpacity;

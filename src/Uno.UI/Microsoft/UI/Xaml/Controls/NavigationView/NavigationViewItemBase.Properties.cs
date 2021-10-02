@@ -1,4 +1,6 @@
-﻿// MUX reference NavigationViewItemBase.properties.cpp, commit de78834
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root for license information.
+// MUX reference NavigationViewItemBase.properties.cpp, commit de78834
 
 using Windows.UI.Xaml;
 
@@ -20,7 +22,7 @@ namespace Microsoft.UI.Xaml.Controls
 		/// Identifies the IsSelected dependency property.
 		/// </summary>
 		public static DependencyProperty IsSelectedProperty { get; } =
-			DependencyProperty.Register(nameof(IsSelected), typeof(bool), typeof(NavigationViewItemBase), new PropertyMetadata(false, OnIsSelectedPropertyChanged));
+			DependencyProperty.Register(nameof(IsSelected), typeof(bool), typeof(NavigationViewItemBase), new FrameworkPropertyMetadata(false, OnIsSelectedPropertyChanged));
 
 		private static void OnIsSelectedPropertyChanged(
 			DependencyObject sender,

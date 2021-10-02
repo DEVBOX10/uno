@@ -112,6 +112,12 @@ namespace Windows.UI.Xaml.Controls
 		private TextPaint _paint;
 		private TextUtils.TruncateAt _ellipsize;
 		private Android.Text.Layout.Alignment _layoutAlignment;
+		private JustificationMode _justificationMode;
+
+		/// <summary>
+		/// Used by unit tests to verify that the displayed color matches the nominal managed color.
+		/// </summary>
+		internal Android.Graphics.Color? NativeArrangedColor => _arrangeLayout?.Layout.Paint?.Color;
 
 		private void InitializePartial()
 		{
@@ -170,15 +176,21 @@ namespace Windows.UI.Xaml.Controls
 			{
 				case TextAlignment.Center:
 					_layoutAlignment = Android.Text.Layout.Alignment.AlignCenter;
+					_justificationMode = JustificationMode.None;
 					break;
 
 				case TextAlignment.Right:
 					_layoutAlignment = Android.Text.Layout.Alignment.AlignOpposite;
+					_justificationMode = JustificationMode.None;
 					break;
-
+				case TextAlignment.Justify:
+					_layoutAlignment = Android.Text.Layout.Alignment.AlignNormal;
+					_justificationMode = JustificationMode.InterWord;
+					break;
 				default:
 				case TextAlignment.Left:
 					_layoutAlignment = Android.Text.Layout.Alignment.AlignNormal;
+					_justificationMode = JustificationMode.None;
 					break;
 			}
 		}
@@ -399,6 +411,7 @@ namespace Windows.UI.Xaml.Controls
 				_paint,
 				IsLayoutConstrainedByMaxLines ? TruncateEnd : _ellipsize, // .SetMaxLines() won't work on Android unless the ellipsize "END" is used.
 				_layoutAlignment,
+				_justificationMode,
 				TextWrapping,
 				MaxLines,
 				availableSize,
@@ -440,6 +453,7 @@ namespace Windows.UI.Xaml.Controls
 			private readonly Java.Lang.ICharSequence _textFormatted;
 			private readonly TextUtils.TruncateAt _ellipsize;
 			private readonly Android.Text.Layout.Alignment _layoutAlignment;
+			private readonly JustificationMode _justificationMode;
 			private readonly TextWrapping _textWrapping;
 			private readonly int _maxLines;
 			private readonly bool _exactWidth;
@@ -470,6 +484,7 @@ namespace Windows.UI.Xaml.Controls
 				TextPaint paint,
 				TextUtils.TruncateAt ellipsize,
 				Android.Text.Layout.Alignment layoutAlignment,
+				JustificationMode isJustifiedText,
 				TextWrapping textWrapping,
 				int maxLines,
 				Size availableSize,
@@ -483,6 +498,7 @@ namespace Windows.UI.Xaml.Controls
 				_paint = paint;
 				_ellipsize = ellipsize;
 				_layoutAlignment = layoutAlignment;
+				_justificationMode = isJustifiedText;
 				_textWrapping = textWrapping;
 				_maxLines = maxLines;
 				AvailableSize = availableSize;
@@ -515,9 +531,10 @@ namespace Windows.UI.Xaml.Controls
 			/// <summary>
 			/// Updates the current TextBlock layout to use the provided width and height.
 			/// </summary>
+			/// <remarks>
 			/// Specifies if the provided width must be used for the new layout, and 
 			/// not "at most" of the widh.
-			/// </param>
+			/// </remarks>
 			/// <returns>The size of the new layout</returns>
 			private Size UpdateLayout(Size availableSize, bool exactWidth = false)
 			{
@@ -707,14 +724,21 @@ namespace Windows.UI.Xaml.Controls
 				}
 				else
 				{
-					Layout = StaticLayout.Builder.Obtain(_textFormatted, 0, _textFormatted.Length(), _paint, width)
-					.SetLineSpacing(_addedSpacing = GetSpacingAdd(_paint), 1)
-					.SetMaxLines(maxLines)
-					.SetEllipsize(_ellipsize)
-					.SetEllipsizedWidth(width)
-					.SetAlignment(_layoutAlignment)
-					.SetIncludePad(true)
-					.Build();
+					var builder = StaticLayout.Builder.Obtain(_textFormatted, 0, _textFormatted.Length(), _paint, width)
+						.SetLineSpacing(_addedSpacing = GetSpacingAdd(_paint), 1)
+						.SetMaxLines(maxLines)
+						.SetEllipsize(_ellipsize)
+						.SetEllipsizedWidth(width)
+						.SetAlignment(_layoutAlignment)
+						.SetIncludePad(true);
+
+					// JustificationMode was introduced in Android 8.
+					if (Android.OS.Build.VERSION.SdkInt >= Android.OS.BuildVersionCodes.O)
+					{
+						builder.SetJustificationMode(_justificationMode);
+					}
+
+					Layout = builder.Build();
 				}
 
 

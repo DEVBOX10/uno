@@ -1,4 +1,6 @@
-﻿using System;
+﻿#nullable enable
+
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.ComponentModel;
@@ -58,19 +60,30 @@ namespace Uno.Foundation
 		{
 			if (_trace.IsEnabled)
 			{
-				using (WritePropertyEventTrace(TraceProvider.UnmarshalledInvokedStart, TraceProvider.UnmarshalledInvokedEnd, functionIdentifier))
-				{
-					var ret = InnerInvokeJSUnmarshalled(functionIdentifier, arg0, out var exception);
-
-					if(exception != null)
-					{
-						throw exception;
-					}
-
-					return ret;
-				}
+				return InvokeJSUnmarshalledWithTrace(functionIdentifier, arg0);
 			}
 			else
+			{
+				var ret = InnerInvokeJSUnmarshalled(functionIdentifier, arg0, out var exception);
+
+				if (exception != null)
+				{
+					throw exception;
+				}
+
+				return ret;
+			}
+		}
+
+		/// <remarks>
+		/// This method contains or is called by a try/catch containing method and
+		/// can be significantly slower than other methods as a result on WebAssembly.
+		/// See https://github.com/dotnet/runtime/issues/56309
+		/// </remarks>
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private static bool InvokeJSUnmarshalledWithTrace(string functionIdentifier, IntPtr arg0)
+		{
+			using (WritePropertyEventTrace(TraceProvider.UnmarshalledInvokedStart, TraceProvider.UnmarshalledInvokedEnd, functionIdentifier))
 			{
 				var ret = InnerInvokeJSUnmarshalled(functionIdentifier, arg0, out var exception);
 
@@ -87,14 +100,11 @@ namespace Uno.Foundation
 		/// Invoke a Javascript method using unmarshaled conversion.
 		/// </summary>
 		/// <param name="functionIdentifier">A function identifier name</param>
-		internal static bool InvokeJSUnmarshalled(string functionIdentifier, IntPtr arg0, out Exception exception)
+		internal static bool InvokeJSUnmarshalled(string functionIdentifier, IntPtr arg0, out Exception? exception)
 		{
 			if (_trace.IsEnabled)
 			{
-				using (WritePropertyEventTrace(TraceProvider.UnmarshalledInvokedStart, TraceProvider.UnmarshalledInvokedEnd, functionIdentifier))
-				{
-					return InnerInvokeJSUnmarshalled(functionIdentifier, arg0, out exception);
-				}
+				return InvokeJSUnmarshalledWithTrace(functionIdentifier, arg0, out exception);
 			}
 			else
 			{
@@ -102,7 +112,21 @@ namespace Uno.Foundation
 			}
 		}
 
-		private static bool InnerInvokeJSUnmarshalled(string functionIdentifier, IntPtr arg0, out Exception exception)
+		/// <remarks>
+		/// This method contains or is called by a try/catch containing method and
+		/// can be significantly slower than other methods as a result on WebAssembly.
+		/// See https://github.com/dotnet/runtime/issues/56309
+		/// </remarks>
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private static bool InvokeJSUnmarshalledWithTrace(string functionIdentifier, IntPtr arg0, out Exception? exception)
+		{
+			using (WritePropertyEventTrace(TraceProvider.UnmarshalledInvokedStart, TraceProvider.UnmarshalledInvokedEnd, functionIdentifier))
+			{
+				return InnerInvokeJSUnmarshalled(functionIdentifier, arg0, out exception);
+			}
+		}
+
+		private static bool InnerInvokeJSUnmarshalled(string functionIdentifier, IntPtr arg0, out Exception? exception)
 		{
 			exception = null;
 			var methodId = GetMethodId(functionIdentifier);
@@ -115,7 +139,7 @@ namespace Uno.Foundation
 				{
 					_trace.WriteEvent(
 						TraceProvider.InvokeException,
-						new object[] { functionIdentifier, exception.ToString() }
+						new object[] { functionIdentifier, exceptionMessage }
 					);
 				}
 
@@ -133,12 +157,23 @@ namespace Uno.Foundation
 		{
 			if (_trace.IsEnabled)
 			{
-				using (WritePropertyEventTrace(TraceProvider.UnmarshalledInvokedStart, TraceProvider.UnmarshalledInvokedEnd, functionIdentifier))
-				{
-					return InnerInvokeJSUnmarshalled(functionIdentifier, arg0, arg1);
-				}
+				return InvokeJSUnmarshalledWithTrace(functionIdentifier, arg0, arg1);
 			}
 			else
+			{
+				return InnerInvokeJSUnmarshalled(functionIdentifier, arg0, arg1);
+			}
+		}
+
+		/// <remarks>
+		/// This method contains or is called by a try/catch containing method and
+		/// can be significantly slower than other methods as a result on WebAssembly.
+		/// See https://github.com/dotnet/runtime/issues/56309
+		/// </remarks>
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private static bool InvokeJSUnmarshalledWithTrace(string functionIdentifier, IntPtr arg0, IntPtr arg1)
+		{
+			using (WritePropertyEventTrace(TraceProvider.UnmarshalledInvokedStart, TraceProvider.UnmarshalledInvokedEnd, functionIdentifier))
 			{
 				return InnerInvokeJSUnmarshalled(functionIdentifier, arg0, arg1);
 			}
@@ -169,7 +204,7 @@ namespace Uno.Foundation
 		/// <summary>
 		/// Provides an override for javascript invokes.
 		/// </summary>
-		public static Func<string, string> InvokeJSOverride;
+		public static Func<string, string>? InvokeJSOverride;
 
 		public static string InvokeJS(string str)
 		{
@@ -177,10 +212,7 @@ namespace Uno.Foundation
 			{
 				if (_trace.IsEnabled)
 				{
-					using (WritePropertyEventTrace(TraceProvider.InvokeStart, TraceProvider.InvokeEnd, str))
-					{
-						return InnerInvokeJS(str);
-					}
+					return InvokeJSWithTrace(str);
 				}
 				else
 				{
@@ -198,6 +230,20 @@ namespace Uno.Foundation
 				}
 
 				throw;
+			}
+		}
+
+		/// <remarks>
+		/// This method contains or is called by a try/catch containing method and
+		/// can be significantly slower than other methods as a result on WebAssembly.
+		/// See https://github.com/dotnet/runtime/issues/56309
+		/// </remarks>
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private static string InvokeJSWithTrace(string str)
+		{
+			using (WritePropertyEventTrace(TraceProvider.InvokeStart, TraceProvider.InvokeEnd, str))
+			{
+				return InnerInvokeJS(str);
 			}
 		}
 
@@ -222,7 +268,7 @@ namespace Uno.Foundation
 			return result;
 		}
 
-		public static object GetObjectFromGcHandle(string intPtr)
+		public static object? GetObjectFromGcHandle(string intPtr)
 		{
 			var ptr = Marshal.StringToHGlobalAuto(intPtr);
 			var handle = GCHandle.FromIntPtr(ptr);
@@ -268,9 +314,17 @@ namespace Uno.Foundation
 			return InvokeJS(command);
 		}
 
-		private static readonly Dictionary<long, TaskCompletionSource<string>> _asyncWaitingList = new Dictionary<long, TaskCompletionSource<string>>();
+		private static readonly Dictionary<long, (TaskCompletionSource<string> task, CancellationTokenRegistration ctReg)> _asyncWaitingList
+			= new Dictionary<long, (TaskCompletionSource<string> task, CancellationTokenRegistration ctReg)>();
 
 		private static long _nextAsync;
+
+
+		/// <summary>
+		/// DO NOT USE, use overload with CancellationToken instead
+		/// </remarks>
+		public static Task<string> InvokeAsync(string promiseCode)
+			=> InvokeAsync(promiseCode, CancellationToken.None);
 
 		/// <summary>
 		/// Invoke async javascript code.
@@ -278,15 +332,15 @@ namespace Uno.Foundation
 		/// <remarks>
 		/// The javascript code is expected to return a Promise&lt;string&gt;
 		/// </remarks>
-		public static Task<string> InvokeAsync(string promiseCode)
+		public static Task<string> InvokeAsync(string promiseCode, CancellationToken ct)
 		{
-			var id = Interlocked.Increment(ref _nextAsync);
-
+			var handle = Interlocked.Increment(ref _nextAsync);
 			var tcs = new TaskCompletionSource<string>();
+			var ctReg = ct.CanBeCanceled ? ct.Register(() => RemoveAsyncTask(handle)?.TrySetCanceled()) : default;
 
 			lock (_asyncWaitingList)
 			{
-				_asyncWaitingList[id] = tcs;
+				_asyncWaitingList[handle] = (tcs, ctReg);
 			}
 
 			var js = new[]
@@ -294,48 +348,47 @@ namespace Uno.Foundation
 				"const __f = ()=>",
 				promiseCode,
 				";\nUno.UI.Interop.AsyncInteropHelper.Invoke(",
-				id.ToStringInvariant(),
+				handle.ToStringInvariant(),
 				", __f);"
 			};
 
 			try
 			{
-
 				WebAssemblyRuntime.InvokeJS(string.Concat(js));
+
+				return tcs.Task;
 			}
 			catch (Exception ex)
 			{
+				RemoveAsyncTask(handle);
+
 				return Task.FromException<string>(ex);
 			}
-
-			return tcs.Task;
 		}
 
 		[EditorBrowsable(EditorBrowsableState.Never)]
 		public static void DispatchAsyncResult(long handle, string result)
-		{
-			lock (_asyncWaitingList)
-			{
-				if (_asyncWaitingList.TryGetValue(handle, out var tcs))
-				{
-					tcs.TrySetResult(result);
-					_asyncWaitingList.Remove(handle);
-				}
-			}
-		}
+			=> RemoveAsyncTask(handle)?.TrySetResult(result);
 
 		[EditorBrowsable(EditorBrowsableState.Never)]
 		public static void DispatchAsyncError(long handle, string error)
+			=> RemoveAsyncTask(handle)?.TrySetException(new ApplicationException(error));
+
+		private static TaskCompletionSource<string>? RemoveAsyncTask(long handle)
 		{
+			(TaskCompletionSource<string> task, CancellationTokenRegistration ctReg) listener;
 			lock (_asyncWaitingList)
 			{
-				if (_asyncWaitingList.TryGetValue(handle, out var tcs))
+				if (!_asyncWaitingList.TryGetValue(handle, out listener))
 				{
-					var exception = new ApplicationException(error);
-					tcs.TrySetException(exception);
-					_asyncWaitingList.Remove(handle);
+					return default;
 				}
+				_asyncWaitingList.Remove(handle);
 			}
+
+			listener.ctReg.Dispose();
+
+			return listener.task;
 		}
 
 		[Pure]
@@ -417,7 +470,7 @@ namespace Uno.Foundation
 			}
 		}
 
-		private static IDisposable WritePropertyEventTrace(int startEventId, int stopEventId, string script)
+		private static IDisposable? WritePropertyEventTrace(int startEventId, int stopEventId, string script)
 		{
 			if (_trace.IsEnabled)
 			{

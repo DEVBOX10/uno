@@ -25,7 +25,7 @@ User inputs are usually propagated using `RoutedEvents`. See Uno's [routed event
 | `ManipulationStarting`        | Yes     | Yes     | Yes     | Yes   | Yes      | Yes      | Yes   | [Documentation](https://docs.microsoft.com/uwp/api/windows.ui.xaml.uielement.manipulationstarting) |
 | `ManipulationStarted`         | Yes     | Yes     | Yes     | Yes   | Yes      | Yes      | Yes   | [Documentation](https://docs.microsoft.com/uwp/api/windows.ui.xaml.uielement.manipulationstarted) |
 | `ManipulationDelta`           | Yes     | Yes     | Yes     | Yes   | Yes      | Yes      | Yes   | [Documentation](https://docs.microsoft.com/uwp/api/windows.ui.xaml.uielement.manipulationedelta) |
-| `ManipulationInertiaStarting` | No      | No      | No      | No    | No       | No       | No    | [Documentation](https://docs.microsoft.com/uwp/api/windows.ui.xaml.uielement.manipulationinertiastarting) |
+| `ManipulationInertiaStarting` | Yes     | Yes     | Yes     | Yes   | Yes      | Yes      | Yes   | [Documentation](https://docs.microsoft.com/uwp/api/windows.ui.xaml.uielement.manipulationinertiastarting) |
 | `ManipulationCompleted`       | Yes     | Yes     | Yes     | Yes   | Yes      | Yes      | Yes   | [Documentation](https://docs.microsoft.com/uwp/api/windows.ui.xaml.uielement.manipulationcompleted) |
 | **_gesture events_**
 | `Tapped`                      | Yes     | Yes     | Yes     | Yes   | Yes      | Yes      | Yes   | [Documentation](https://docs.microsoft.com/uwp/api/windows.ui.xaml.uielement.tapped) |
@@ -141,9 +141,6 @@ Without this key the current version of iPadOS reports mouse interaction as norm
 
 They are generated from the PointerXXX events (using the `Windows.UI.Input.GestureRecognizer`) and are bubbling in managed only.
 
-Currently there is no inertia support, so the `IsInertial` will always be `false` and the `UIElement.ManipulationInertiaStarting` event 
-will never be fired. The `Velocities` properties of event args are not implemented either.
-
 ## Gesture Events
 
 They are generated from the PointerXXX events (using the `Windows.UI.Input.GestureRecognizer`) and are bubbling in managed only.
@@ -166,14 +163,20 @@ The table and sections below describe supported functionality and limitations fo
 
 |          | From uno app to external                         | From external app to uno                        |
 | -------- | ------------------------------------------------ | ------------------------                        |
-| Android  | No _in progress_                                 | No _in progress_                                |
+| Android  | No                                               | No                                              |
 | iOS      | No                                               | No                                              |
-| Wasm     | No                                               | No                                              |
+| Wasm     | No                                               | Yes (Text, Link, Image, File, Html, Rtf)        |
 | macOS    | Yes (Text, Link, Image, Html, Rtf)               | Yes (Text, Link, Image, File, Html, Rtf)        |
 | Skia WPF | Yes (Text, Link, Image, File, Html, Rtf)         | Yes (Text, Link, Image, File, Html, Rtf)        |
 | Skia GTK | No                                               | No                                              |
 
 * "Link" may refer to WebLink, ApplicationLink or Uri formats
+
+#### Wasm Limitations
+1. When dragging content from external app to uno, you cannot retreive the content from the `DataPackage` before the `Drop` event.
+   This a limitations of web browsers.
+   Any attempt to read it before the `Drop` will result into a timeout exception after a hard coded delay of 10 seconds.
+2. When dragging some uris from external app to uno, only the first uri will be accessible throught the **WebLink** standard format ID.
 
 #### macOS Limitations
 

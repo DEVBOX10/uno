@@ -23,6 +23,7 @@ $(function () {
 
   breakText();
   renderTabs();
+  updateLogo();
 
   window.refresh = function (article) {
     // Update markup result
@@ -35,6 +36,41 @@ $(function () {
     renderAlerts();
     renderAffix();
     renderTabs();
+  }
+
+  $(window).resize(function() {
+    updateLogo();
+  });
+
+  $(document).on('wordpressMenuHasLoaded', function() {
+    const path = window.location.pathname;
+    const docsUrl = '/docs/articles/';
+    const wpNavBar = document.getElementById('menu-menu-principal');
+    const items = wpNavBar.getElementsByTagName('a');
+    for(let i = 0; i < items.length; i++) {
+
+      if(items[i].href.includes(docsUrl) && path.includes(docsUrl) && !items[i].href.includes('#')){
+        $(items[i]).addClass('activepath');
+      }
+    }
+
+    const queryString = window.location.search;
+    if(queryString){
+      const queryStringComponents = queryString.split('=');
+      const searchParam = queryStringComponents.slice(-1)[0];
+      $('#search-query').val(decodeURI(searchParam));
+    }
+
+  });
+
+  function updateLogo(){
+    var curWidth = window.innerWidth;
+    if(curWidth < 980) {
+      $('#logo').attr('src', '../images/UnoLogoSmall.png');
+    }
+    else {
+      $('#logo').attr('src', '../images/uno-logo.svg');
+    }
   }
 
   // Add this event listener when needed
@@ -242,11 +278,14 @@ $(function () {
 
     function addSearchEvent() {
       $('body').on("searchEvent", function () {
+        $('#search-results>.sr-items').html('<p>No results found</p>');
+
         $('#search-query').keypress(function (e) {
           return e.which !== 13;
         });
 
         $('#search-query').on("keyup", function () {
+          $('#search-results').show();
           query = $(this).val();
           $("body").trigger("query-ready");
           $('#search-results>.search-list').text('Search Results for "' + query + '"');
@@ -286,7 +325,7 @@ $(function () {
         $('#search-results>.sr-items').html('<p>No results found</p>');
       } else {
         $('#search-results>.sr-items').empty().append(
-          hits.slice(0, 5).map(function (hit) {
+          hits.slice(0, 20).map(function (hit) {
             var currentUrl = window.location.href;
             var itemRawHref = relativeUrlToAbsoluteUrl(currentUrl, relHref + hit.href);
             var itemHref = relHref + hit.href + "?q=" + query;
@@ -301,7 +340,6 @@ $(function () {
             return itemNode;
           })
         );
-        $('#search-results').show();
         query.split(/\s+/).forEach(function (word) {
           if (word !== '') {
             word = word.replace(/\*/g, '');
@@ -1103,20 +1141,8 @@ $(function () {
       scrollIfAnchor(window.location.hash);
     }
 
-    /**
-     * If the click event's target was an anchor, fix the scroll position.
-     */
-    function delegateAnchors(e) {
-      var elem = e.target;
-
-      if (scrollIfAnchor(elem.getAttribute('href'), true)) {
-        e.preventDefault();
-      }
-    }
-
     $(window).on('hashchange', scrollToCurrent);
     // Exclude tabbed content case
-    $('a:not([data-tab])').click(delegateAnchors);
     scrollToCurrent();
 
     $(document).ready(function(){

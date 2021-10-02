@@ -17,6 +17,7 @@ using System.Threading.Tasks;
 using Uno.UI;
 using AndroidX.AppCompat.View;
 using System.Diagnostics;
+using Rect = Windows.Foundation.Rect;
 
 namespace Windows.UI.Xaml.Controls
 {
@@ -33,6 +34,7 @@ namespace Windows.UI.Xaml.Controls
 		/// </summary>
 		/// <param name="view">The view to which we should add the layers</param>
 		/// <param name="background">The background brush of the border</param>
+		/// <param name="backgroundSizing">The background sizing (if drawn under border or not)</param>
 		/// <param name="borderThickness">The border thickness</param>
 		/// <param name="borderBrush">The border brush</param>
 		/// <param name="cornerRadius">The corner radius</param>
@@ -40,6 +42,7 @@ namespace Windows.UI.Xaml.Controls
 		public void UpdateLayer(
 			FrameworkElement view,
 			Brush background,
+			BackgroundSizing backgroundSizing,
 			Thickness borderThickness,
 			Brush borderBrush,
 			CornerRadius cornerRadius,
@@ -71,7 +74,7 @@ namespace Windows.UI.Xaml.Controls
 				}
 
 				Action onImageSet = null;
-				var disposable = InnerCreateLayers(view, drawArea, background, borderThickness, borderBrush, cornerRadius, () => onImageSet?.Invoke());
+				var disposable = InnerCreateLayers(view, drawArea, background, backgroundSizing, borderThickness, borderBrush, cornerRadius, () => onImageSet?.Invoke());
 
 				// Most of the time we immediately dispose the previous layer. In the case where we're using an ImageBrush,
 				// and the backing image hasn't changed, we dispose the previous layer at the moment the new background is applied,
@@ -108,22 +111,32 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		private static IDisposable InnerCreateLayers(BindableView view,
-			Windows.Foundation.Rect drawArea,
+			Rect drawArea,
 			Brush background,
+			BackgroundSizing backgroundSizing,
 			Thickness borderThickness,
 			Brush borderBrush,
 			CornerRadius cornerRadius,
-			Action onImageSet
-		)
+			Action onImageSet)
 		{
 			var disposables = new CompositeDisposable();
 
 			var physicalBorderThickness = borderThickness.LogicalToPhysicalPixels();
+			var isInnerBorderSizing = backgroundSizing == BackgroundSizing.InnerBorderEdge;
+			var adjustedArea =
+				isInnerBorderSizing
+					? drawArea.DeflateBy(physicalBorderThickness)
+					: drawArea;
+
 			if (cornerRadius != 0)
 			{
-				var adjustedArea = drawArea.DeflateBy(physicalBorderThickness);
+				if (view is UIElement uiElement && uiElement.FrameRoundingAdjustment is { } fra)
+				{
+					drawArea.Height += fra.Height;
+					drawArea.Width += fra.Width;
+				}
 
-				using (var backgroundPath = cornerRadius.GetOutlinePath(adjustedArea.ToRectF()))
+				using (var backgroundPath = cornerRadius.GetInnerOutlinePath(adjustedArea.ToRectF(), borderThickness))
 				{
 					//We only need to set a background if the drawArea is non-zero
 					if (!drawArea.HasZeroArea())
@@ -150,11 +163,13 @@ namespace Windows.UI.Xaml.Controls
 
 					if (borderThickness != Thickness.Empty && borderBrush != null && !(borderBrush is ImageBrush))
 					{
+						//TODO: Handle case when BorderBrush is an ImageBrush
+						// Related Issue: https://github.com/unoplatform/uno/issues/6893
 						using (var strokePaint = new Paint(borderBrush.GetStrokePaint(drawArea)))
 						{
 							//Create the path for the outer and inner rectangles that will become our border shape
 							var borderPath = cornerRadius.GetOutlinePath(drawArea.ToRectF());
-							borderPath.AddRoundRect(adjustedArea.ToRectF(), cornerRadius.GetRadii(), Path.Direction.Ccw);
+							borderPath.AddRoundRect(adjustedArea.ToRectF(), cornerRadius.GetInnerRadii(borderThickness), Path.Direction.Cw);
 
 							var overlay = GetOverlayDrawable(
 								strokePaint,
@@ -173,9 +188,14 @@ namespace Windows.UI.Xaml.Controls
 			}
 			else // No corner radius
 			{
-				//We only need to set a background if the drawArea is non-zero
+				//We only need to set a background if the drawArea is non-zero and Thickness is empty
+				//We need to set a background and adjust the draw area if the drawArea is non-zero and Thickness isn't empty
 				if (!drawArea.HasZeroArea())
 				{
+					var finalDrawArea = borderThickness != Thickness.Empty ? adjustedArea : drawArea;
+
+					var backgroundPath = finalDrawArea.ToPath();
+
 					if (background is ImageBrush imageBrushBackground)
 					{
 						var setBackground = DispatchSetImageBrushAsBackground(view, imageBrushBackground, drawArea, onImageSet);
@@ -183,29 +203,30 @@ namespace Windows.UI.Xaml.Controls
 					}
 					else if (background is AcrylicBrush acrylicBrush)
 					{
-						var apply = acrylicBrush.Subscribe(view, drawArea, maskingPath: null);
+						var apply = acrylicBrush.Subscribe(view, drawArea, backgroundPath);
 						disposables.Add(apply);
 					}
 					else
 					{
 						var fillPaint = background?.GetFillPaint(drawArea) ?? new Paint() { Color = Android.Graphics.Color.Transparent };
-						ExecuteWithNoRelayout(view, v => v.SetBackgroundDrawable(Brush.GetBackgroundDrawable(background, drawArea, fillPaint)));
+						ExecuteWithNoRelayout(view, v => v.SetBackgroundDrawable(Brush.GetBackgroundDrawable(background, drawArea, fillPaint, backgroundPath)));
 					}
 					disposables.Add(() => ExecuteWithNoRelayout(view, v => v.SetBackgroundDrawable(null)));
 				}
-			}
 
-			if (borderBrush != null && !(borderBrush is ImageBrush))
-			{
-				//TODO: Handle case that BorderBrush is an ImageBrush
-				using (var strokePaint = borderBrush.GetStrokePaint(drawArea))
+				if (borderThickness != Thickness.Empty && !(borderBrush is ImageBrush))
 				{
-					var overlay = GetOverlayDrawable(strokePaint, physicalBorderThickness, new global::System.Drawing.Size(view.Width, view.Height));
-
-					if (overlay != null)
+					//TODO: Handle case when BorderBrush is an ImageBrush
+					// Related Issue: https://github.com/unoplatform/uno/issues/6893
+					using (var strokePaint = borderBrush?.GetStrokePaint(drawArea) ?? new Paint() { Color = Android.Graphics.Color.Transparent })
 					{
-						overlay.SetBounds(0, 0, view.Width, view.Height);
-						SetOverlay(view, disposables, overlay);
+						var overlay = GetOverlayDrawable(strokePaint, physicalBorderThickness, new global::System.Drawing.Size(view.Width, view.Height));
+
+						if (overlay != null)
+						{
+							overlay.SetBounds(0, 0, view.Width, view.Height);
+							SetOverlay(view, disposables, overlay);
+						}
 					}
 				}
 			}
@@ -331,7 +352,7 @@ namespace Windows.UI.Xaml.Controls
 					paint.Alpha = strokePaint.Alpha;
 					return drawable;
 				}
-				else if (viewSize != null && !viewSize.IsEmpty)
+				else if (!viewSize.IsEmpty)
 				{
 					// Alias the stroke to reduce interop
 					var paintStyleStroke = Paint.Style.Stroke;

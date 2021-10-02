@@ -52,9 +52,9 @@ namespace Windows.UI.Xaml
 			}
 		}
 
-		public Size MeasureView(Size availableSize)
+		public Size MeasureView(Size availableSize, bool measureContent = true)
 		{
-			return Uno.UI.Xaml.WindowManagerInterop.MeasureView(HtmlId, availableSize);
+			return Uno.UI.Xaml.WindowManagerInterop.MeasureView(HtmlId, availableSize, measureContent);
 		}
 
 		internal Rect GetBBox()
@@ -410,7 +410,7 @@ namespace Windows.UI.Xaml
 
 		public Func<Size, Size> DesiredSizeSelector { get; set; }
 
-		protected virtual void OnVisibilityChanged(Visibility oldValue, Visibility newVisibility)
+		partial void OnVisibilityChangedPartial(Visibility oldValue, Visibility newVisibility)
 		{
 			InvalidateMeasure();
 			UpdateHitTest();

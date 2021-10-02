@@ -14,7 +14,12 @@ namespace Windows.UI.Xaml.Controls
 	/// This is a base popup panel to calculate the placement near an anchor control.
 	/// </summary>
 	/// <remarks>
-	/// This class exists mostly to reuse the same logic between a Flyout and a ToolTip
+	/// This class exists mostly to reuse the same logic between a Flyout and a ToolTip.
+	///
+	/// This class should eventually be removed, and Uno should match WinUI's approach, where Flyout sets Popup.HorizontalOffset and VerticalOffset
+	/// as well as Width and Height on FlyoutPresenter when it opens, and then allows the popup layouting to do its job.
+	///
+	/// See also remarks on <see cref="FlyoutBasePopupPanel"/>.
 	/// </remarks>
 	internal abstract partial class PlacementPopupPanel : PopupPanel
 	{
@@ -76,6 +81,8 @@ namespace Windows.UI.Xaml.Controls
 
 		protected abstract Point? PositionInAnchorControl { get; }
 
+		internal virtual FlyoutBase Flyout => null;
+
 		protected override Size ArrangeOverride(Size finalSize)
 		{
 			foreach (var child in Children)
@@ -88,35 +95,47 @@ namespace Windows.UI.Xaml.Controls
 				var desiredSize = elem.DesiredSize;
 				var maxSize = (elem as FrameworkElement).GetMaxSize(); // UWP takes FlyoutPresenter's MaxHeight and MaxWidth into consideration, but ignores Height and Width
 				var rect = CalculateFlyoutPlacement(desiredSize, maxSize);
+
+				if (Flyout?.IsTargetPositionSet ?? false)
+				{
+					rect = Flyout.UpdateTargetPosition(ApplicationView.GetForCurrentView().VisibleBounds, desiredSize, rect);
+				}
+
 				elem.Arrange(rect);
 			}
 
 			return finalSize;
 		}
 
-		protected virtual Rect CalculateFlyoutPlacement(Size desiredSize, Size maxSize)
+		private Rect? GetAnchorRect()
 		{
+#if __ANDROID__ || __IOS__
+			if (NativeAnchor != null)
+			{
+				return NativeAnchor.GetBoundsRectRelativeTo(this);
+			}
+#endif
 			var anchor = AnchorControl;
 			if (anchor == null)
 			{
 				return default;
 			}
 
+			return anchor.GetBoundsRectRelativeTo(this);
+		}
+
+		protected virtual Rect CalculateFlyoutPlacement(Size desiredSize, Size maxSize)
+		{
+			if (!(GetAnchorRect() is { } anchorRect))
+			{
+				return default;
+			}
+
 			var visibleBounds = ApplicationView.GetForCurrentView().VisibleBounds;
-			var anchorRect = anchor.GetBoundsRectRelativeTo(this);
 
 			// Make sure the desiredSize fits in the panel
 			desiredSize.Width = Math.Min(desiredSize.Width, visibleBounds.Width);
 			desiredSize.Height = Math.Min(desiredSize.Height, visibleBounds.Height);
-
-			if (PositionInAnchorControl is Point point)
-			{
-				return new Rect(
-					x: anchorRect.X + point.X,
-					y: anchorRect.Y + point.Y,
-					width: desiredSize.Width,
-					height: desiredSize.Height);
-			}
 
 			// Try all placements...
 			var preferredPlacement = FlyoutBase.GetMajorPlacementFromPlacement(PopupPlacement);

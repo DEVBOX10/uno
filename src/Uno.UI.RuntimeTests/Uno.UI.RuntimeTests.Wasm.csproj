@@ -4,8 +4,8 @@
 		<TargetFrameworks>netstandard2.0</TargetFrameworks>
 	</PropertyGroup>
 
-	<Import Project="../netcore-build.props"/>
-	<Import Project="../targetframework-override.props"/>
+	<Import Project="../netcore-build.props" />
+	<Import Project="../targetframework-override.props" />
 
 	<PropertyGroup>
 		<AssemblyName>Uno.UI.RuntimeTests</AssemblyName>
@@ -44,6 +44,15 @@
 		</Compile>
 		<Compile Include="$(MSBuildThisFileDirectory)..\Uno.UI.Tests\Windows_UI_XAML_Controls\BorderTests\*.cs">
 			<Link>UnitTests\Windows_UI_Xaml_Controls\BorderTests\%(RecursiveDir)%(FileName)%(Extension)</Link>
+		</Compile>
+		<Compile Include="$(MSBuildThisFileDirectory)..\Uno.UI.Tests\Windows_Globalization\Given_Rounder.cs">
+			<Link>UnitTests\Windows_Globalization\%(RecursiveDir)%(FileName)%(Extension)</Link>
+		</Compile>
+		<Compile Include="$(MSBuildThisFileDirectory)..\Uno.UI.Tests\Windows_Globalization\Given_SignificantDigitsNumberRounder.cs">
+			<Link>UnitTests\Windows_Globalization\%(RecursiveDir)%(FileName)%(Extension)</Link>
+		</Compile>
+		<Compile Include="$(MSBuildThisFileDirectory)..\Uno.UI.Tests\Windows_Globalization\Given_IncrementNumberRounder.cs">
+			<Link>UnitTests\Windows_Globalization\%(RecursiveDir)%(FileName)%(Extension)</Link>
 		</Compile>
 	</ItemGroup>
 

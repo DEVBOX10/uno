@@ -419,16 +419,25 @@ namespace Windows.UI.Xaml
 		{
 			if (_trace.IsEnabled)
 			{
-				using (WritePropertyEventTrace(TraceProvider.SetValueStart, TraceProvider.SetValueStop, property, precedence))
+				/// <remarks>
+				/// This method contains or is called by a try/catch containing method and
+				/// can be significantly slower than other methods as a result on WebAssembly.
+				/// See https://github.com/dotnet/runtime/issues/56309
+				/// </remarks>
+				void SetValueWithTrace(DependencyProperty property, object? value, DependencyPropertyValuePrecedences precedence, DependencyPropertyDetails? propertyDetails, bool isThemeBinding)
 				{
-					InnerSetValue(property, value, precedence, propertyDetails, isThemeBinding);
+					using (WritePropertyEventTrace(TraceProvider.SetValueStart, TraceProvider.SetValueStop, property, precedence))
+					{
+						InnerSetValue(property, value, precedence, propertyDetails, isThemeBinding);
+					}
 				}
+
+				SetValueWithTrace(property, value, precedence, propertyDetails, isThemeBinding);
 			}
 			else
 			{
 				InnerSetValue(property, value, precedence, propertyDetails, isThemeBinding);
 			}
-
 		}
 
 		private void InnerSetValue(DependencyProperty property, object? value, DependencyPropertyValuePrecedences precedence, DependencyPropertyDetails? propertyDetails, bool isThemeBinding)
@@ -461,6 +470,8 @@ namespace Windows.UI.Xaml
 					var previousValue = GetValue(propertyDetails);
 					var previousPrecedence = GetCurrentHighestValuePrecedence(propertyDetails);
 
+					ApplyCoercion(actualInstanceAlias, propertyDetails, previousValue, value);
+
 					// Set even if they are different to make sure the value is now set on the right precedence
 					SetValueInternal(value, precedence, propertyDetails);
 
@@ -469,8 +480,6 @@ namespace Windows.UI.Xaml
 						// If a non-theme value is being set, clear any theme binding so it's not overwritten if the theme changes.
 						_resourceBindings?.ClearBinding(property, precedence);
 					}
-
-					ApplyCoercion(actualInstanceAlias, propertyDetails, previousValue, value);
 
 					// Value may or may not have changed based on the precedence
 					var newValue = GetValue(propertyDetails);
@@ -1004,8 +1013,12 @@ namespace Windows.UI.Xaml
 
 				if (ActualInstance != null)
 				{
-					foreach (var dp in _updatedProperties)
+					// This block is a manual enumeration to avoid the foreach pattern
+					// See https://github.com/dotnet/runtime/issues/56309 for details
+					var propertiesEnumerator = _updatedProperties.GetEnumerator();
+					while(propertiesEnumerator.MoveNext())
 					{
+						var dp = propertiesEnumerator.Current;
 						SetValue(dp, DependencyProperty.UnsetValue, DependencyPropertyValuePrecedences.Inheritance);
 					}
 
@@ -1081,37 +1094,59 @@ namespace Windows.UI.Xaml
 
 			foreach (var (property, binding) in bindings)
 			{
-				try
-				{
-					var wasSet = false;
-					foreach (var dict in dictionariesInScope)
-					{
-						if (dict.TryGetValue(binding.ResourceKey, out var value, shouldCheckSystem: false))
-						{
-							wasSet = true;
-							SetResourceBindingValue(property, binding, value);
-							break;
-						}
-					}
-
-					if (!wasSet && isThemeChangedUpdate && binding.IsThemeResourceExtension)
-					{
-						if (ResourceResolver.TryTopLevelRetrieval(binding.ResourceKey, binding.ParseContext, out var value))
-						{
-							SetResourceBindingValue(property, binding, value);
-						}
-					}
-				}
-				catch (Exception e)
-				{
-					if (this.Log().IsEnabled(Microsoft.Extensions.Logging.LogLevel.Warning))
-					{
-						this.Log().Warn($"Failed to update binding, target may have been disposed", e);
-					}
-				}
+				InnerUpdateResourceBindings(isThemeChangedUpdate, dictionariesInScope, property, binding);
 			}
 
 			UpdateChildResourceBindings(isThemeChangedUpdate);
+		}
+
+		/// <remarks>
+		/// This method contains or is called by a try/catch containing method and
+		/// can be significantly slower than other methods as a result on WebAssembly.
+		/// See https://github.com/dotnet/runtime/issues/56309
+		/// </remarks>
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private void InnerUpdateResourceBindings(bool isThemeChangedUpdate, ResourceDictionary[] dictionariesInScope, DependencyProperty property, ResourceBinding binding)
+		{
+			try
+			{
+				InnerUpdateResourceBindingsUnsafe(isThemeChangedUpdate, dictionariesInScope, property, binding);
+			}
+			catch (Exception e)
+			{
+				if (this.Log().IsEnabled(Microsoft.Extensions.Logging.LogLevel.Warning))
+				{
+					this.Log().Warn($"Failed to update binding, target may have been disposed", e);
+				}
+			}
+		}
+
+		/// <remarks>
+		/// This method contains or is called by a try/catch containing method and
+		/// can be significantly slower than other methods as a result on WebAssembly.
+		/// See https://github.com/dotnet/runtime/issues/56309
+		/// </remarks>
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private void InnerUpdateResourceBindingsUnsafe(bool isThemeChangedUpdate, ResourceDictionary[] dictionariesInScope, DependencyProperty property, ResourceBinding binding)
+		{
+			var wasSet = false;
+			foreach (var dict in dictionariesInScope)
+			{
+				if (dict.TryGetValue(binding.ResourceKey, out var value, shouldCheckSystem: false))
+				{
+					wasSet = true;
+					SetResourceBindingValue(property, binding, value);
+					break;
+				}
+			}
+
+			if (!wasSet && isThemeChangedUpdate && binding.IsThemeResourceExtension)
+			{
+				if (ResourceResolver.TryTopLevelRetrieval(binding.ResourceKey, binding.ParseContext, out var value))
+				{
+					SetResourceBindingValue(property, binding, value);
+				}
+			}
 		}
 
 		private void SetResourceBindingValue(DependencyProperty property, ResourceBinding binding, object? value)
@@ -1152,14 +1187,7 @@ namespace Windows.UI.Xaml
 			{
 				try
 				{
-					_isUpdatingChildResourceBindings = true;
-					foreach (var child in GetChildrenDependencyObjects())
-					{
-						if (!(child is IFrameworkElement) && child is IDependencyObjectStoreProvider storeProvider)
-						{
-							storeProvider.Store.UpdateResourceBindings(isThemeChangedUpdate);
-						}
-					}
+					InnerUpdateChildResourceBindings(isThemeChangedUpdate);
 				}
 				finally
 				{
@@ -1174,6 +1202,24 @@ namespace Windows.UI.Xaml
 			}
 		}
 
+		/// <remarks>
+		/// This method contains or is called by a try/catch containing method and
+		/// can be significantly slower than other methods as a result on WebAssembly.
+		/// See https://github.com/dotnet/runtime/issues/56309
+		/// </remarks>
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private void InnerUpdateChildResourceBindings(bool isThemeChangedUpdate)
+		{
+			_isUpdatingChildResourceBindings = true;
+			foreach (var child in GetChildrenDependencyObjects())
+			{
+				if (!(child is IFrameworkElement) && child is IDependencyObjectStoreProvider storeProvider)
+				{
+					storeProvider.Store.UpdateResourceBindings(isThemeChangedUpdate);
+				}
+			}
+		}
+
 		/// <summary>
 		/// Returns all discoverable child dependency objects.
 		/// </summary>
@@ -1183,11 +1229,17 @@ namespace Windows.UI.Xaml
 		/// </remarks>
 		private IEnumerable<DependencyObject> GetChildrenDependencyObjects()
 		{
-			var propertyValues = _properties.GetAllDetails()
-				.Except(_properties.DataContextPropertyDetails, _properties.TemplatedParentPropertyDetails)
-				.Select(d => GetValue(d));
-			foreach (var propertyValue in propertyValues)
+			foreach (var propertyDetail in _properties.GetAllDetails())
 			{
+				if(propertyDetail == null
+					|| propertyDetail == _properties.DataContextPropertyDetails
+					|| propertyDetail == _properties.TemplatedParentPropertyDetails)
+				{
+					continue;
+				}
+
+				var propertyValue = GetValue(propertyDetail);
+
 				if (propertyValue is IEnumerable<DependencyObject> dependencyObjectCollection &&
 					// Try to avoid enumerating collections that shouldn't be enumerated, since we may be encountering user-defined values. This may need to be refined to somehow only consider values coming from the framework itself.
 					(propertyValue is ICollection || propertyValue is DependencyObjectCollectionBase)
@@ -1326,14 +1378,19 @@ namespace Windows.UI.Xaml
 			// properties.
 
 			// Ancestors is a local cache to avoid walking up the tree multiple times.
-			var ancestors = new Dictionary<object, bool>();
+			var ancestors = new AncestorsDictionary();
 
 			// This alias is used to avoid the resolution of the underlying WeakReference during the
 			// call to IsAncestor.
 			var actualInstanceAlias = ActualInstance;
 
-			foreach (var sourceInstanceProperties in _inheritedForwardedProperties)
+			// This block is a manual enumeration to avoid the foreach pattern
+			// See https://github.com/dotnet/runtime/issues/56309 for details
+			var forwardedEnumerator = _inheritedForwardedProperties.GetEnumerator();
+			while(forwardedEnumerator.MoveNext())
 			{
+				var sourceInstanceProperties = forwardedEnumerator.Current;
+
 				if (
 					IsAncestor(actualInstanceAlias, ancestors, sourceInstanceProperties.Value.Target)
 					|| (
@@ -1365,16 +1422,16 @@ namespace Windows.UI.Xaml
 					}
 					else
 					{
-						foreach (var child in _childrenStores)
+						for (var i = 0; i < _childrenStores.Count; i++)
 						{
-							Propagate(child);
+							Propagate(_childrenStores[i]);
 						}
 					}
 				}
 			}
 		}
 
-		private static bool IsAncestor(DependencyObject? instance, Dictionary<object, bool> map, object ancestor)
+		private static bool IsAncestor(DependencyObject? instance, AncestorsDictionary map, object ancestor)
 		{
 #if DEBUG
 			var hashSet = new HashSet<DependencyObject>(Uno.ReferenceEqualityComparer<DependencyObject>.Default);
@@ -1417,7 +1474,7 @@ namespace Windows.UI.Xaml
 
 				}
 
-				map[ancestor] = isAncestor;
+				map.Set(ancestor, isAncestor);
 			}
 
 			return isAncestor;
@@ -1618,12 +1675,17 @@ namespace Windows.UI.Xaml
 			// Raise the callback for backing fields update before PropertyChanged to get
 			// the backingfield updated, in case the PropertyChanged handler reads the
 			// dependency property value through the cache.
-			propertyMetadata.RaiseBackingFieldUpdate(actualInstanceAlias, newValue);
+			propertyMetadata.RaiseBackingFieldUpdate(actualInstanceAlias, newValue);			
 
 			// Raise the changes for the callback register to the property itself
 			propertyMetadata.RaisePropertyChanged(actualInstanceAlias, eventArgs);
 
+			// Ensure binding is propagated
+			OnDependencyPropertyChanged(propertyDetails, eventArgs);
+
 			// Raise the common property change callback of WinUI
+			// This is raised *after* the data bound properties are updated
+			// but before the registered property callbacks
 			if (actualInstanceAlias is UIElement uiElt)
 			{
 				uiElt.OnPropertyChanged2(eventArgs);
@@ -1631,8 +1693,6 @@ namespace Windows.UI.Xaml
 
 			// Raise the changes for the callbacks register through RegisterPropertyChangedCallback.
 			propertyDetails.CallbackManager.RaisePropertyChanged(actualInstanceAlias, eventArgs);
-
-			OnDependencyPropertyChanged(propertyDetails, eventArgs);
 
 			// Raise the property change for generic handlers
 			for (var callbackIndex = 0; callbackIndex < _genericCallbacks.Data.Length; callbackIndex++)
@@ -1844,7 +1904,7 @@ namespace Windows.UI.Xaml
 				=> Instance.GetHashCode() ^
 					Property.UniqueId.GetHashCode();
 
-			public override bool Equals(object obj)
+			public override bool Equals(object? obj)
 				=> Equals(obj as DependencyPropertyPath);
 
 			public bool Equals(DependencyPropertyPath? other)
@@ -1875,7 +1935,7 @@ namespace Windows.UI.Xaml
 		{
 			public static readonly WeakReferenceValueComparer Default = new WeakReferenceValueComparer();
 
-			public bool Equals(WeakReference x, WeakReference y)
+			public bool Equals(WeakReference? x, WeakReference? y)
 			{
 				return ReferenceEquals(x?.Target, y?.Target);
 			}

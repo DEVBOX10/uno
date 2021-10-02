@@ -2,14 +2,10 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Uno.Extensions;
-using Uno.Roslyn;
 using Uno.UI.SourceGenerators.Helpers;
 using Uno.UI.SourceGenerators.XamlGenerator;
 
@@ -117,6 +113,7 @@ namespace Uno.UI.SourceGenerators.DependencyObject
 						builder.AppendLineInvariant($"using Uno.UI;");
 						builder.AppendLineInvariant($"using Uno.UI.DataBinding;");
 						builder.AppendLineInvariant($"using Windows.UI.Xaml;");
+						builder.AppendLineInvariant($"using Windows.UI.Xaml.Controls;");
 						builder.AppendLineInvariant($"using Windows.UI.Xaml.Data;");
 						builder.AppendLineInvariant($"using Uno.Diagnostics.Eventing;");
 
@@ -126,7 +123,7 @@ namespace Uno.UI.SourceGenerators.DependencyObject
 						{
 							using (GenerateNestingContainers(builder, typeSymbol))
 							{
-								using (builder.BlockInvariant($"{typeSymbol.GetAccessibilityAsCodeString()} partial class {typeSymbol.Name}"))
+								using (builder.BlockInvariant($"partial class {typeSymbol.Name}"))
 								{
 									foreach (var memberSymbol in typeSymbol.GetMembers())
 									{

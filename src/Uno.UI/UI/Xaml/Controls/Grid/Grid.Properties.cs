@@ -28,22 +28,39 @@ namespace Windows.UI.Xaml.Controls
 {
 	partial class Grid
 	{
+
+		#region BackgroundSizing DepedencyProperty
+		[GeneratedDependencyProperty(DefaultValue = default(BackgroundSizing), ChangedCallback = true)]
+		public static DependencyProperty BackgroundSizingProperty { get; } = CreateBackgroundSizingProperty();
+
+		public BackgroundSizing BackgroundSizing
+		{
+			get => GetBackgroundSizingValue();
+			set => SetBackgroundSizingValue(value);
+		}
+
+		private void OnBackgroundSizingChanged(DependencyPropertyChangedEventArgs e)
+		{
+			base.OnBackgroundSizingChangedInnerPanel(e);
+		}
+		#endregion
+
 		#region Row Property
 		[GeneratedDependencyProperty(DefaultValue = 0, AttachedBackingFieldOwner = typeof(UIElement), Attached = true, ChangedCallbackName = nameof(OnGenericPropertyChanged))]
 		public static DependencyProperty RowProperty { get ; } = CreateRowProperty();
 
-		public static int GetRow(View view) => GetRowValue(view as UIElement);
+		public static int GetRow(View view) => GetRowValue(view);
 
-		public static void SetRow(View view, int row) => SetRowValue(view as UIElement, row);
+		public static void SetRow(View view, int row) => SetRowValue(view, row);
 		#endregion
 
 		#region Column Property
 		[GeneratedDependencyProperty(DefaultValue = 0, AttachedBackingFieldOwner = typeof(UIElement), Attached = true, ChangedCallbackName = nameof(OnGenericPropertyChanged))]
 		public static DependencyProperty ColumnProperty { get ; } = CreateColumnProperty();
 
-		public static int GetColumn(View view) => GetColumnValue(view as UIElement);
+		public static int GetColumn(View view) => GetColumnValue(view);
 
-		public static void SetColumn(View view, int column) => SetColumnValue(view as UIElement, column);
+		public static void SetColumn(View view, int column) => SetColumnValue(view, column);
 		#endregion
 
 		#region RowSpan Property

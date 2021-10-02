@@ -1,12 +1,14 @@
 ﻿using System;
-using Uno.UI;
 using System.Collections.Generic;
 using System.Linq;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Uno.Foundation;
 using Microsoft.Extensions.Logging;
 using Uno;
+using Uno.Foundation;
+using Uno.UI;
+using Uno.UI.Xaml.Core;
+using Uno.UI.Xaml.Input;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
 
 namespace Windows.UI.Xaml.Input
 {
@@ -17,6 +19,8 @@ namespace Windows.UI.Xaml.Input
 		/// </summary>
 		private static bool _isCallingFocusNative;
 
+		private static bool _skipNativeFocus;
+
 		internal static void ProcessControlFocused(Control control)
 		{
 			if (_log.Value.IsEnabled(LogLevel.Debug))
@@ -24,19 +28,40 @@ namespace Windows.UI.Xaml.Input
 				_log.Value.LogDebug($"{nameof(ProcessControlFocused)}() focusedElement={GetFocusedElement()}, control={control}");
 			}
 
-			UpdateFocus(control, FocusNavigationDirection.None, FocusState.Pointer);
+			if (FocusProperties.IsFocusable(control))
+			{
+				var focusManager = VisualTree.GetFocusManagerForElement(control);
+				focusManager?.UpdateFocus(new FocusMovement(control, FocusNavigationDirection.None, FocusState.Pointer));
+			}
 		}
 
 		internal static void ProcessElementFocused(UIElement element)
 		{
 			if (_log.Value.IsEnabled(LogLevel.Debug))
 			{
-				_log.Value.LogDebug($"{nameof(ProcessElementFocused)}() focusedElement={GetFocusedElement()}, element={element}");
+				_log.Value.LogDebug($"{nameof(ProcessElementFocused)}() focusedElement={GetFocusedElement()}, element={element}, searching for focusable parent control");
 			}
 
-			// Try to find the first focusable parent and set it as focused, otherwise just keep it for reference (GetFocusedElement())
-			var ownerControl = element.GetParents().OfType<Control>().Where(control => control.IsFocusable).FirstOrDefault();
-			UpdateFocus(ownerControl, FocusNavigationDirection.None, FocusState.Pointer);
+			foreach (var parent in element.GetParents())
+			{
+				// Try to find the first focusable parent and set it as focused, otherwise just keep it for reference (GetFocusedElement())
+				if (parent is TextBlock textBlock && textBlock.IsFocusable)
+				{
+					// Focusable TextBlock parent, we can move focus to it.
+					var focusManager = VisualTree.GetFocusManagerForElement(textBlock);
+
+					// We cannot call native focus here, as it would fail and would then blur focus immediately.
+					_skipNativeFocus = true;
+					focusManager?.UpdateFocus(new FocusMovement(textBlock, FocusNavigationDirection.None, FocusState.Pointer));
+					_skipNativeFocus = false;
+					break;
+				}
+				else if (parent is Control control && control.IsFocusable)
+				{
+					ProcessControlFocused(control);
+					break;
+				}
+			}
 		}
 
 		internal static bool FocusNative(UIElement element)
@@ -46,8 +71,22 @@ namespace Windows.UI.Xaml.Input
 				_log.Value.LogDebug($"{nameof(FocusNative)}(element: {element})");
 			}
 
+			if (_skipNativeFocus)
+			{
+				_log.Value.LogDebug($"{nameof(FocusNative)} skipping native focus");
+				return false;
+			}
+
 			if (element == null)
 			{
+				return false;
+			}
+
+			var focusManager = VisualTree.GetFocusManagerForElement(element);
+
+			if (focusManager?.InitialFocus == true)
+			{
+				 // Do not focus natively on initial focus so the soft keyboard is not opened
 				return false;
 			}
 
@@ -89,39 +128,19 @@ namespace Windows.UI.Xaml.Input
 			else
 			{
 				// This might occur if a non-Uno element receives focus
-				UpdateFocus(null, FocusNavigationDirection.None, FocusState.Pointer);
+				var focusManager = VisualTree.GetFocusManagerForElement(Window.Current.RootElement);
+				focusManager.ClearFocus();
 			}
 		}
 
 		private static UIElement GetFocusElementFromHandle(int handle)
 		{
-
 			if (handle == -1)
 			{
 				// 
 				return null;
 			}
 			return UIElement.GetElementFromHandle(handle);
-		}
-
-		private static bool InnerTryMoveFocus(FocusNavigationDirection focusNavigationDirection)
-		{
-			return false;
-		}
-
-		private static UIElement InnerFindNextFocusableElement(FocusNavigationDirection focusNavigationDirection)
-		{
-			return null;
-		}
-
-		private static DependencyObject InnerFindFirstFocusableElement(DependencyObject searchScope)
-		{
-			return null;
-		}
-
-		private static DependencyObject InnerFindLastFocusableElement(DependencyObject searchScope)
-		{
-			return null;
 		}
 	}
 }

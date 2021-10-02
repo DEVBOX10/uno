@@ -21,9 +21,9 @@ namespace Windows.UI.Xaml.Controls
 
 		private void ApplyForeground()
 		{
-			if (_native != null && Foreground is SolidColorBrush foregroundColorBrush)
+			if (_native != null && Foreground is { } foreground)
 			{
-				_native.Color = foregroundColorBrush.ColorWithOpacity;
+				_native.Color = Brush.GetColorWithOpacity(foreground);
 			}
 		}
 
@@ -31,7 +31,7 @@ namespace Windows.UI.Xaml.Controls
 
 		partial void OnUnloadedPartial() => TrySetNativeAnimating();
 	
-		partial void OnIsActiveChangedPartial(bool _) => TrySetNativeAnimating();
+		partial void OnIsActiveChangedPartial(bool isActive) => TrySetNativeAnimating();
 
 		partial void TrySetNativeAnimating()
 		{

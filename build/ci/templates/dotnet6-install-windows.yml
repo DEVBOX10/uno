@@ -1,0 +1,27 @@
+parameters:
+  DotNetVersion: '6.0.100-rc.1.21452.64'
+  MauiCheck_Version: '0.8.5'
+  MauiCheck_Manifest: 'https://raw.githubusercontent.com/Redth/dotnet-maui-check/d469cb3804d68ad52a1bfec041b95a8800acf4ab/manifests/maui-preview.manifest.json'
+
+steps:
+
+  ## Required until .NET 6 installs properly on Windows using UseDotnet
+  - powershell: |
+      $ProgressPreference = 'SilentlyContinue'
+      Invoke-WebRequest -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile dotnet-install.ps1
+      & .\dotnet-install.ps1 -Version ${{ parameters.DotNetVersion }} -InstallDir "$env:ProgramFiles\dotnet\" -Verbose
+      & dotnet --list-sdks
+    displayName: Install .NET ${{ parameters.DotNetVersion }}
+    errorActionPreference: stop
+
+  - pwsh: |
+      echo "##vso[task.setvariable variable=JAVA_HOME]$(JAVA_HOME_11_X64)"
+      echo "##vso[task.setvariable variable=JavaSdkDirectory]$(JAVA_HOME_11_X64)"
+    displayName: Select JDK 11
+    
+  - powershell: |
+      & dotnet tool update --global redth.net.maui.check --version ${{ parameters.MauiCheck_Version }} --add-source https://api.nuget.org/v3/index.json
+      & maui-check -v --ci --non-interactive --fix --skip xcode --skip vswin --skip vsmac --manifest ${{ parameters.MauiCheck_Manifest }}
+    displayName: Install .NET Workloads
+    errorActionPreference: continue
+    ignoreLASTEXITCODE: true

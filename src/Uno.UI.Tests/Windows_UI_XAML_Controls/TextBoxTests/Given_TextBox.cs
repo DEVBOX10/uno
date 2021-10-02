@@ -1,10 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -49,6 +44,14 @@ namespace Uno.UI.Tests.TextBoxTests
 
 			Assert.AreEqual("Rhubarb", textBox.Text);
 			Assert.AreEqual(1, callbackCount);
+		}
+
+		[TestMethod]
+		public void Calling_Select_With_NegativeValues()
+		{
+			var textBox = new TextBox();
+			Assert.ThrowsException<ArgumentException>(() => textBox.Select(0, -1));
+			Assert.ThrowsException<ArgumentException>(() => textBox.Select(-1, 0));
 		}
 
 		[TestMethod]

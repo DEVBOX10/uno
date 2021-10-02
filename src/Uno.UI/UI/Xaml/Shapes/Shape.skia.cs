@@ -13,7 +13,6 @@ using Windows.UI.Composition;
 using Uno.Disposables;
 using System.IO.Compression;
 using SkiaSharp;
-using Windows.Devices.Usb;
 using System.Numerics;
 
 namespace Windows.UI.Xaml.Shapes
@@ -63,6 +62,11 @@ namespace Windows.UI.Xaml.Shapes
 			_rectangleVisual.Shapes.Clear();
 			_rectangleVisual.Shapes.Add(_pathSpriteShape);
 
+			UpdateRender();
+		}
+
+		private void UpdateRender()
+		{
 			UpdateFill();
 			UpdateStroke();
 			UpdateStrokeThickness();
@@ -76,16 +80,8 @@ namespace Windows.UI.Xaml.Shapes
 
 				_pathSpriteShape.FillBrush = null;
 
-				var scbFill = Fill as SolidColorBrush;
-				var lgbFill = Fill as LinearGradientBrush;
-				if (scbFill != null)
-				{
-					_fillSubscription.Disposable =
-						Brush.AssignAndObserveBrush(scbFill, c => _pathSpriteShape.FillBrush = Visual.Compositor.CreateColorBrush(scbFill.Color));
-				}
-				else if (lgbFill != null)
-				{
-				}
+				_fillSubscription.Disposable =
+							Brush.AssignAndObserveBrush(Fill, Visual.Compositor, compositionBrush => _pathSpriteShape.FillBrush = compositionBrush);
 			}
 		}
 
@@ -99,12 +95,14 @@ namespace Windows.UI.Xaml.Shapes
 
 		private void UpdateStroke()
 		{
-			var brush = Stroke as SolidColorBrush ?? SolidColorBrushHelper.Transparent;
-
 			if (_pathSpriteShape != null)
 			{
+				_strokeSubscription.Disposable = null;
+
+				_pathSpriteShape.StrokeBrush = null;
+
 				_strokeSubscription.Disposable =
-					Brush.AssignAndObserveBrush(brush, c => _pathSpriteShape.StrokeBrush = Visual.Compositor.CreateColorBrush(brush.Color));
+							Brush.AssignAndObserveBrush(Stroke, Visual.Compositor, compositionBrush => _pathSpriteShape.StrokeBrush = compositionBrush);
 			}
 		}
 	}

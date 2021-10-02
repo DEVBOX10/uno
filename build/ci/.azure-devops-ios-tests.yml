@@ -9,6 +9,8 @@ jobs:
 - job: iOS_Build
   displayName: 'iOS Samples App UI Tests (Build)'
 
+  dependsOn: Commitsar
+
   pool:
     vmImage: ${{ parameters.vmImage }}
 
@@ -63,7 +65,7 @@ jobs:
     nugetPackages: $(NUGET_PACKAGES)
     JobName: 'iOS_Automated_Tests_Group_01'
     JobDisplayName: 'iOS Automated Tests Group 01'
-    JobTimeoutInMinutes: 40
+    JobTimeoutInMinutes: 60
     vmImage: ${{ parameters.vmImage }}
     UITEST_SNAPSHOTS_ONLY: false
     UITEST_AUTOMATED_GROUP: 1
@@ -75,7 +77,7 @@ jobs:
     nugetPackages: $(NUGET_PACKAGES)
     JobName: 'iOS_Automated_Tests_Group_02'
     JobDisplayName: 'iOS Automated Tests Group 02'
-    JobTimeoutInMinutes: 40
+    JobTimeoutInMinutes: 60
     vmImage: ${{ parameters.vmImage }}
     UITEST_SNAPSHOTS_ONLY: false
     UITEST_AUTOMATED_GROUP: 2
@@ -87,7 +89,7 @@ jobs:
     nugetPackages: $(NUGET_PACKAGES)
     JobName: 'iOS_Automated_Tests_Group_03'
     JobDisplayName: 'iOS Automated Tests Group 03'
-    JobTimeoutInMinutes: 40
+    JobTimeoutInMinutes: 60
     vmImage: ${{ parameters.vmImage }}
     UITEST_SNAPSHOTS_ONLY: false
     UITEST_AUTOMATED_GROUP: 3
@@ -99,7 +101,7 @@ jobs:
     nugetPackages: $(NUGET_PACKAGES)
     JobName: 'iOS_Automated_Tests_Runtime_Tests'
     JobDisplayName: 'iOS Automated Runtime Tests'
-    JobTimeoutInMinutes: 40
+    JobTimeoutInMinutes: 60
     vmImage: ${{ parameters.vmImage }}
     UITEST_SNAPSHOTS_ONLY: false
     UITEST_AUTOMATED_GROUP: 4

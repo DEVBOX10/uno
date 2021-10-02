@@ -1,27 +1,12 @@
 ﻿#nullable enable
 
 using Uno.Extensions;
-using Uno.MsBuildTasks.Utils;
-using Uno.MsBuildTasks.Utils.XamlPathParser;
-using Uno.UI.SourceGenerators.XamlGenerator.Utils;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
-using Uno.Roslyn;
-using Microsoft.CodeAnalysis.CSharp.Formatting;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Formatting;
-using System.Threading;
-using Uno;
-using Uno.Logging;
 using Uno.UI.SourceGenerators.XamlGenerator.XamlRedirection;
-using System.Diagnostics;
 
 namespace Uno.UI.SourceGenerators.XamlGenerator
 {
@@ -39,6 +24,7 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 		private readonly static Func<INamedTypeSymbol, IPropertySymbol?> _findContentProperty;
 		private readonly static Func<INamedTypeSymbol, string, bool> _isAttachedProperty;
 		private readonly static Func<INamedTypeSymbol, string, INamedTypeSymbol> _getAttachedPropertyType;
+		private readonly static Func<INamedTypeSymbol, bool> _isTypeImplemented;
 
 		private void InitCaches()
 		{
@@ -186,7 +172,7 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 						break;
 					}
 
-				} while (type.Name != "Object");
+				} while (type.SpecialType != SpecialType.System_Object);
 			}
 
 			return false;
@@ -228,7 +214,7 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 						break;
 					}
 
-				} while (symbol.Name != "Object");
+				} while (symbol.SpecialType != SpecialType.System_Object);
 			}
 
 			return false;
@@ -246,29 +232,9 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 				FindType(xamlType)?.ToDisplayString().Equals(XamlConstants.Types.UserControl) ?? false;
 		}
 
-		private bool IsContentControl(XamlType xamlType)
-		{
-			return IsType(xamlType, XamlConstants.Types.ContentControl);
-		}
-
-		private bool IsPanel(XamlType xamlType)
-		{
-			return IsType(xamlType, XamlConstants.Types.Panel);
-		}
-
-		private bool IsLinearGradientBrush(XamlType xamlType)
-		{
-			return IsType(xamlType, XamlConstants.Types.LinearGradientBrush);
-		}
-
 		private bool IsFrameworkElement(XamlType xamlType)
 		{
 			return IsType(xamlType, XamlConstants.Types.FrameworkElement);
-		}
-
-		private bool IsDependencyObject(XamlType xamlType)
-		{
-			return IsType(xamlType, _dependencyObjectSymbol);
 		}
 
 		private bool IsAndroidView(XamlType xamlType)
@@ -286,6 +252,12 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 			return IsType(xamlType, _appKitViewSymbol);
 		}
 
+		private bool IsDependencyObject(XamlObjectDefinition component)
+			=> GetType(component.Type).GetAllInterfaces().Any(i => SymbolEqualityComparer.Default.Equals(i, _dependencyObjectSymbol));
+
+		private bool IsUIElement(XamlObjectDefinition component)
+			=> IsType(component.Type, _uiElementSymbol);
+
 		/// <summary>
 		/// Is the type derived from the native view type on a Xamarin platform?
 		/// </summary>
@@ -296,11 +268,6 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 		/// FrameworkElement is valid too)
 		/// </summary>
 		private bool IsManagedViewBaseType(INamedTypeSymbol? targetType) => SymbolEqualityComparer.Default.Equals(targetType, _uiElementSymbol) || SymbolEqualityComparer.Default.Equals(targetType, _frameworkElementSymbol);
-
-		private bool IsTransform(XamlType xamlType)
-		{
-			return IsType(xamlType, XamlConstants.Types.Transform);
-		}
 
 		private bool IsDependencyProperty(XamlMember member)
 		{
@@ -468,7 +435,7 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 
 							type = baseType;
 
-							if (type == null || type.Name == "Object")
+							if (type == null || type.SpecialType == SpecialType.System_Object)
 							{
 								return null;
 							}
@@ -560,21 +527,19 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 			do
 			{
 				var property = type.GetAllPropertiesWithName(name).FirstOrDefault();
-				var setMethod = type?.GetMethods().FirstOrDefault(p => p.Name == "Set" + name);
-
 				if (property?.GetMethod?.IsStatic ?? false)
 				{
 					return true;
 				}
 
-				if (setMethod?.IsStatic ?? false)
+				var setMethod = type?.GetMethods().FirstOrDefault(p => p.Name == "Set" + name);
+				if (setMethod is { IsStatic: true, Parameters: { Length: 2 } })
 				{
 					return true;
 				}
 
 				type = type?.BaseType;
-
-				if (type == null || type.Name == "Object")
+				if (type == null || type.SpecialType == SpecialType.System_Object)
 				{
 					return false;
 				}
@@ -604,7 +569,7 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 
 				type = type?.BaseType;
 
-				if (type == null || type.Name == "Object")
+				if (type == null || type.SpecialType == SpecialType.System_Object)
 				{
 					throw new InvalidOperationException($"No valid setter found for attached property {name}");
 				}
@@ -787,7 +752,7 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 
 				foreach (var clrNamespace in clrNamespaces)
 				{
-					if(_findType!(clrNamespace + "." + type.Name) is { } result)
+					if (_findType!(clrNamespace + "." + type.Name) is { } result)
 					{
 						return result;
 					}
@@ -871,9 +836,7 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 					// Search first using the default namespace
 					foreach (var clrNamespace in _clrNamespaces)
 					{
-						var type = _metadataHelper.FindTypeByFullName(clrNamespace + "." + name) as INamedTypeSymbol;
-
-						if (type != null)
+						if (_metadataHelper.FindTypeByFullName(clrNamespace + "." + name) is INamedTypeSymbol type)
 						{
 							return type;
 						}
@@ -944,5 +907,10 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 				.Select(p => p.Name)
 				.ToArray();
 		}
+
+		private bool IsTypeImplemented(INamedTypeSymbol type) => _isTypeImplemented(type);
+
+		private static bool SourceIsTypeImplemented(INamedTypeSymbol type)
+			=> type.GetAttributes().None(a => a.AttributeClass?.ToDisplayString() == XamlConstants.Types.NotImplementedAttribute);
 	}
 }

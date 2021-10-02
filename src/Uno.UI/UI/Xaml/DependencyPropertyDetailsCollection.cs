@@ -22,7 +22,7 @@ namespace Windows.UI.Xaml
 	/// </remarks>
 	partial class DependencyPropertyDetailsCollection : IDisposable
 	{
-		private static readonly DependencyPropertyDetails[] Empty = new DependencyPropertyDetails[0];
+		private static readonly DependencyPropertyDetails?[] Empty = new DependencyPropertyDetails?[0];
 
 		private readonly Type _ownerType;
 		private readonly ManagedWeakReference _ownerReference;
@@ -33,13 +33,13 @@ namespace Windows.UI.Xaml
 		private DependencyPropertyDetails? _dataContextPropertyDetails;
 		private DependencyPropertyDetails? _templatedParentPropertyDetails;
 
-		private readonly static ArrayPool<DependencyPropertyDetails> _pool = ArrayPool<DependencyPropertyDetails>.Create(500, 100);
+		private readonly static ArrayPool<DependencyPropertyDetails?> _pool = ArrayPool<DependencyPropertyDetails?>.Create(500, 100);
 
-		private DependencyPropertyDetails[]? _entries;
+		private DependencyPropertyDetails?[]? _entries;
 		private int _entriesLength;
 		private int _minId;
 		private int _maxId;
-		private DependencyObjectStore.DefaultValueProvider? _defaultValueProvider;
+		private List<DependencyObjectStore.DefaultValueProvider>? _defaultValueProviders = null;
 
 		private object? Owner => _hardOwnerReference ?? _ownerReference.Target;
 
@@ -56,7 +56,7 @@ namespace Windows.UI.Xaml
 			_templatedParentProperty = templatedParentProperty;
 		}
 
-		private DependencyPropertyDetails[] Entries
+		private DependencyPropertyDetails?[] Entries
 		{
 			get
 			{
@@ -141,9 +141,9 @@ namespace Windows.UI.Xaml
 				{
 					propertyEntry = new DependencyPropertyDetails(property, _ownerType);
 
-					if(_defaultValueProvider != null && _defaultValueProvider(property, out var v))
+					if (TryResolveDefaultValueFromProviders(property, out var value))
 					{
-						propertyEntry.SetDefaultValue(v);
+						propertyEntry.SetDefaultValue(value);
 					}
 				}
 
@@ -154,7 +154,7 @@ namespace Windows.UI.Xaml
 				if (forceCreate)
 				{
 					int newEntriesSize;
-					DependencyPropertyDetails[] newEntries;
+					DependencyPropertyDetails?[] newEntries;
 
 					if (entryIndex < 0)
 					{
@@ -178,9 +178,9 @@ namespace Windows.UI.Xaml
 
 					ref var propertyEntry = ref Entries![property.UniqueId - _minId];
 					propertyEntry = new DependencyPropertyDetails(property, _ownerType);
-					if (_defaultValueProvider != null && _defaultValueProvider(property, out var v))
+					if (TryResolveDefaultValueFromProviders(property, out var value))
 					{
-						propertyEntry.SetValue(v, DependencyPropertyValuePrecedences.DefaultValue);
+						propertyEntry.SetValue(value, DependencyPropertyValuePrecedences.DefaultValue);
 					}
 
 					return propertyEntry;
@@ -192,7 +192,25 @@ namespace Windows.UI.Xaml
 			}
 		}
 
-		private void AssignEntries(DependencyPropertyDetails[] newEntries, int newSize)
+		private bool TryResolveDefaultValueFromProviders(DependencyProperty property, out object? value)
+		{
+			if (_defaultValueProviders != null)
+			{
+				for (int i = _defaultValueProviders.Count - 1; i >= 0; i--)
+				{
+					var provider = _defaultValueProviders[i];
+					if (provider.Invoke(property, out var resolvedValue))
+					{
+						value = resolvedValue;
+						return true;
+					}
+				}
+			}
+			value = null;
+			return false;
+		}
+
+		private void AssignEntries(DependencyPropertyDetails?[] newEntries, int newSize)
 		{
 			ReturnEntriesToPool();
 
@@ -212,11 +230,27 @@ namespace Windows.UI.Xaml
 			}
 		}
 
-		internal IEnumerable<DependencyPropertyDetails> GetAllDetails() => Entries.Trim();
+		internal DependencyPropertyDetails?[] GetAllDetails() => Entries;
 
+		/// <summary>
+		/// Adds a default value provider.
+		/// </summary>
+		/// <param name="provider">Default value provider.</param>
+		/// <remarks>
+		/// Providers which are registered later have higher priority.
+		/// E.g. when both a derived and base class register their own default
+		/// value provider in the constructor for the same property, the derived
+		/// class value is used.
+		/// </remarks>
 		public void RegisterDefaultValueProvider(DependencyObjectStore.DefaultValueProvider provider)
 		{
-			_defaultValueProvider = provider;
+			if (provider == null)
+			{
+				throw new ArgumentNullException(nameof(provider));
+			}
+
+			_defaultValueProviders ??= new List<DependencyObjectStore.DefaultValueProvider>(2);
+			_defaultValueProviders.Add(provider);
 		}
 
 		internal void TryEnableHardReferences()

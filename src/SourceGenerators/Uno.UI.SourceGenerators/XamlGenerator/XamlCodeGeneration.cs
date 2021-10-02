@@ -1,4 +1,5 @@
-﻿#nullable enable
+﻿extern alias __uno;
+#nullable enable
 
 using System;
 using System.Collections.Generic;
@@ -15,6 +16,8 @@ using Uno.Logging;
 using Uno.UI.SourceGenerators.Telemetry;
 using Uno.UI.Xaml;
 using System.Drawing;
+using __uno::Uno.Xaml;
+using Microsoft.CodeAnalysis.Text;
 
 #if NETFRAMEWORK
 using Microsoft.Build.Execution;
@@ -47,7 +50,7 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 		private readonly string _projectDirectory;
 		private readonly string _projectFullPath;
 		private readonly bool _outputSourceComments = true;
-		private readonly RoslynMetadataHelper _metadataHelper;
+		private readonly bool _xamlResourcesTrimming;		private readonly RoslynMetadataHelper _metadataHelper;
 
 		/// <summary>
 		/// If set, code generated from XAML will be annotated with the source method and line # in XamlFileGenerator, for easier debugging.
@@ -69,8 +72,11 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 		private bool _skipUserControlsInVisualTree = false;
 		private readonly GeneratorExecutionContext _generatorContext;
 
-		private bool IsUnoAssembly => _defaultNamespace == "Uno.UI";
-		private bool IsUnoFluentAssembly => _defaultNamespace == "Uno.UI.FluentTheme";
+		private bool IsUnoAssembly
+			=> _defaultNamespace == "Uno.UI";
+
+		private bool IsUnoFluentAssembly
+			=> _defaultNamespace == "Uno.UI.FluentTheme" || _defaultNamespace.StartsWith("Uno.UI.FluentTheme.v");
 
 		/// <summary>
 		/// Resource files that should be initialized first, in given order, because other resource declarations depend on them.
@@ -82,7 +88,7 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 			"Generic.Native.xaml",
 		};
 
-		private const string WinUIThemeResourcePathSuffix = "themeresources.xaml";
+		private const string WinUIThemeResourcePathSuffixFormatString = "themeresources_v{0}.xaml";
 		private static string WinUICompactPathSuffix = Path.Combine("DensityStyles", "Compact.xaml");
 
 #pragma warning disable 649 // Unused member
@@ -167,14 +173,17 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 				_isLazyVisualStateManagerEnabled = isLazyVisualStateManagerEnabled;
 			}
 
+			if (bool.TryParse(context.GetMSBuildPropertyValue("UnoXamlResourcesTrimming"), out var xamlResourcesTrimming))
+			{
+				_xamlResourcesTrimming = xamlResourcesTrimming;
+			}
+
 			_targetPath = Path.Combine(
 				_projectDirectory,
 				context.GetMSBuildPropertyValue("IntermediateOutputPath")
 			);
 
 			_defaultLanguage = context.GetMSBuildPropertyValue("DefaultLanguage");
-
-			_analyzerSuppressions = context.GetMSBuildItems("XamlGeneratorAnalyzerSuppressions").Select(i => i.Identity).ToArray();
 
 			_uiAutomationMappings = context.GetMSBuildItems("CustomUiAutomationMemberMappingAdjusted")
 				.Select(i => new
@@ -248,7 +257,8 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 				var lastBinaryUpdateTime = _forceGeneration ? DateTime.MaxValue : GetLastBinaryUpdateTime();
 
 				var resourceKeys = GetResourceKeys();
-				var filesFull = new XamlFileParser(_excludeXamlNamespaces, _includeXamlNamespaces, _metadataHelper).ParseFiles(_xamlSourceFiles);
+				var filesFull = new XamlFileParser(_excludeXamlNamespaces, _includeXamlNamespaces, _metadataHelper)
+					.ParseFiles(_xamlSourceFiles, _generatorContext.CancellationToken);
 				var files = filesFull
 					.Trim()
 					.OrderBy(f => f.UniqueID)
@@ -268,6 +278,9 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 					.ToArray();
 
 				var filesToProcess = filesQuery.AsParallel();
+
+				filesToProcess = filesToProcess
+					.WithCancellation(_generatorContext.CancellationToken);
 
 				if (Debugger.IsAttached)
 				{
@@ -297,8 +310,9 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 									skipUserControlsInVisualTree: _skipUserControlsInVisualTree,
 									shouldAnnotateGeneratedXaml: _shouldAnnotateGeneratedXaml,
 									isUnoAssembly: IsUnoAssembly,
-									isLazyVisualStateManagerEnabled: _isLazyVisualStateManagerEnabled
-								)
+									isLazyVisualStateManagerEnabled: _isLazyVisualStateManagerEnabled,
+									generatorContext: _generatorContext,
+									xamlResourcesTrimming: _xamlResourcesTrimming								)
 								.GenerateFile()
 						)
 					)
@@ -316,13 +330,85 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 			{
 				TrackGenerationFailed(e, stopwatch.Elapsed);
 
+#if NETFRAMEWORK
 				throw;
+#else
+				return ProcessParsingException(e);
+#endif
 			}
 			finally
 			{
 				_telemetry.Flush();
 				_telemetry.Dispose();
 			}
+		}
+
+		private KeyValuePair<string, string>[] ProcessParsingException(Exception e)
+		{
+			IEnumerable<Exception> Flatten(Exception ex)
+			{
+				if (ex is AggregateException agg)
+				{
+					foreach (var inner in agg.InnerExceptions)
+					{
+						foreach (var inner2 in Flatten(inner))
+						{
+							yield return inner2;
+						}
+					}
+				}
+				else
+				{
+					if (ex.InnerException != null)
+					{
+						foreach (var inner2 in Flatten(ex.InnerException))
+						{
+							yield return inner2;
+						}
+					}
+
+					yield return ex;
+				}
+			}
+
+			foreach (var exception in Flatten(e))
+			{
+				var diagnostic = Diagnostic.Create(
+					XamlCodeGenerationDiagnostics.GenericXamlErrorRule,
+					GetExceptionFileLocation(exception),
+					exception.Message);
+
+				_generatorContext.ReportDiagnostic(diagnostic);
+			}
+
+			return new KeyValuePair<string, string>[0];
+		}
+
+		private Location? GetExceptionFileLocation(Exception exception)
+		{
+			if (exception is XamlParsingException xamlParsingException)
+			{
+				var xamlFile = _generatorContext.AdditionalFiles.FirstOrDefault(f => f.Path == xamlParsingException.FilePath);
+
+				if (xamlFile != null
+					&& xamlFile.GetText() is { } xamlText
+					&& xamlParsingException.LineNumber.HasValue
+					&& xamlParsingException.LinePosition.HasValue)
+				{
+					var linePosition = new LinePosition(
+						Math.Max(0, xamlParsingException.LineNumber.Value - 1),
+						Math.Max(0, xamlParsingException.LinePosition.Value - 1)
+					);
+
+					return Location.Create(
+						xamlFile.Path,
+						xamlText.Lines.ElementAtOrDefault(xamlParsingException.LineNumber.Value-1).Span,
+						new LinePositionSpan(linePosition, linePosition)
+					);
+				}
+			}
+
+			return null;
 		}
 
 		private XamlGlobalStaticResourcesMap BuildAssemblyGlobalStaticResourcesMap(XamlFileDefinition[] files, XamlFileDefinition[] filesFull, string[] links)
@@ -346,7 +432,13 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 						where sym != null
 						from module in sym.Modules
 						from reference in module.ReferencedAssemblies
+
+						// Only consider assemblies that reference Uno.UI
 						where reference.Name == "Uno.UI" || sym.Name == "Uno.UI"
+
+						// Don't consider Uno.UI.Fluent assemblies, as they manage their own initialization
+						where reference.Name != "Uno.UI.Fluent" && !reference.Name.StartsWith("Uno.UI.Fluent.v", StringComparison.InvariantCulture)
+
 						from typeName in sym.GlobalNamespace.GetNamespaceTypes()
 						where typeName.Name.EndsWith("GlobalStaticResources")
 						select typeName;
@@ -628,7 +720,10 @@ namespace Uno.UI.SourceGenerators.XamlGenerator
 							else if (files.Any() && IsUnoFluentAssembly)
 							{
 								// For Uno assembly, we expose WinUI resources using same uri as on Windows
-								RegisterForFile(WinUIThemeResourcePathSuffix, XamlFilePathHelper.WinUIThemeResourceURL);
+								for (int fluentVersion = 1; fluentVersion <= XamlConstants.MaxFluentResourcesVersion; fluentVersion++)
+								{
+									RegisterForFile(string.Format(WinUIThemeResourcePathSuffixFormatString, fluentVersion), XamlFilePathHelper.GetWinUIThemeResourceUrl(fluentVersion));
+								}
 								RegisterForFile(WinUICompactPathSuffix, XamlFilePathHelper.WinUICompactURL);
 							}
 

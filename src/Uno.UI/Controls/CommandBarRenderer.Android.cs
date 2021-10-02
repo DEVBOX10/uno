@@ -173,7 +173,7 @@ namespace Uno.UI.Controls
 			native.Subtitle = element.GetValue(SubtitleProperty) as string;
 
 			// Background
-			var backgroundColor = (element.Background as SolidColorBrush)?.ColorWithOpacity;
+			var backgroundColor = Brush.GetColorWithOpacity(element.Background);
 			if (backgroundColor != null)
 			{
 				native.SetBackgroundColor((Android.Graphics.Color)backgroundColor);
@@ -184,7 +184,7 @@ namespace Uno.UI.Controls
 			}
 
 			// Foreground
-			var foregroundColor = (element.Foreground as SolidColorBrush)?.ColorWithOpacity;
+			var foregroundColor = Brush.GetColorWithOpacity(element.Foreground);
 			if (foregroundColor != null)
 			{
 				native.SetTitleTextColor((Android.Graphics.Color)foregroundColor);
@@ -247,7 +247,7 @@ namespace Uno.UI.Controls
 				}
 
 				// CommandBarExtensions.BackButtonForeground
-				var backButtonForeground = (element.GetValue(BackButtonForegroundProperty) as SolidColorBrush)?.ColorWithOpacity;
+				var backButtonForeground = Brush.GetColorWithOpacity(element.GetValue(BackButtonForegroundProperty) as Brush);
 				if (backButtonForeground != null)
 				{
 					switch (native.NavigationIcon)
@@ -290,7 +290,7 @@ namespace Uno.UI.Controls
 			}
 		}
 
-		private void Native_MenuItemClick(object sender, Toolbar.MenuItemClickEventArgs e)
+		private void Native_MenuItemClick(object? sender, Toolbar.MenuItemClickEventArgs e)
 		{
 			CloseKeyboard();
 
@@ -303,7 +303,7 @@ namespace Uno.UI.Controls
 			appBarButton?.RaiseClick();
 		}
 
-		private void Native_NavigationClick(object sender, Toolbar.NavigationClickEventArgs e)
+		private void Native_NavigationClick(object? sender, Toolbar.NavigationClickEventArgs e)
 		{
 			CloseKeyboard();
 

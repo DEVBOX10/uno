@@ -85,6 +85,13 @@
 	<DefineConstants>$(DefineConstants);IOS1_0;XAMARIN;XAMARIN_IOS;XAMARIN_IOS_UNIFIED;UNO_HAS_UIELEMENT_IMPLICIT_PINNING</DefineConstants>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(TargetFramework)'=='net6.0-maccatalyst'">
+	<DefineConstants>$(DefineConstants);IOS1_0;XAMARIN;XAMARIN_IOS;XAMARIN_IOS_UNIFIED;UNO_HAS_UIELEMENT_IMPLICIT_PINNING</DefineConstants>
+
+	<!-- Remove Warnings about -->
+	<NoWarn>$(NoWarn);NU1703</NoWarn>
+  </PropertyGroup>
+
   <PropertyGroup Condition="$(IsXamarinMac)">
 	<DefineConstants>$(DefineConstants);UNO_HAS_UIELEMENT_IMPLICIT_PINNING;UNO_HAS_MANAGED_SCROLL_PRESENTER;UNO_HAS_MANAGED_POINTERS</DefineConstants>
   </PropertyGroup>
@@ -93,9 +100,6 @@
 	<DefineConstants>$(DefineConstants);XAMARIN;XAMARIN_ANDROID</DefineConstants>
 	<AndroidUseIntermediateDesignerFile>True</AndroidUseIntermediateDesignerFile>
 	<AndroidResgenFile>obj\$(TargetFramework)\Resources\Resource.Designer.cs</AndroidResgenFile>
-	<OutputPath>bin\$(Configuration)\$(TargetFramework)\</OutputPath>
-	<IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\</IntermediateOutputPath>
-	<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
 
   <PropertyGroup Condition=" '$(TargetFramework)' != 'uap10.0.17763' ">
@@ -115,7 +119,7 @@
 	<PackageReference Include="xamarin.build.download" />
   </ItemGroup>
 
-  <ItemGroup Condition=" $(IsMonoAndroid) or $(IsXamarinIOS) ">
+  <ItemGroup Condition=" ($(IsMonoAndroid) or $(IsXamarinIOS)) and '$(ExtrasIsReferenceAssembly)'!='' ">
 	<!-- remove files included by msbuild extras -->
 	<Page Remove="@(Page)" />
 	<Page Include="**\*.xaml" Exclude="bin\**\*.xaml;obj\**\*.xaml" />

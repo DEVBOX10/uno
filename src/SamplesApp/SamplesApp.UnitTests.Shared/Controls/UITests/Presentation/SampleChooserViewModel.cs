@@ -99,6 +99,8 @@ namespace SampleControl.Presentation
 			}
 		}
 
+		public event EventHandler SampleChanging;
+
 		/// <summary>
 		/// Displays a new page depending on the parameter that was sent.
 		/// </summary>
@@ -575,15 +577,10 @@ namespace SampleControl.Presentation
 		private List<SampleChooserCategory> GetSamples()
 		{
 			var categories =
-#if !__WASM__
-				from assembly in GetAllAssembies().AsParallel()
-#else
-				from assembly in GetAllAssembies()
-#endif
-				from type in FindDefinedAssemblies(assembly)
-				let sampleAttribute = FindSampleAttribute(type)
+				from type in _allSamples
+				let sampleAttribute = FindSampleAttribute(type.GetTypeInfo())
 				where sampleAttribute != null
-				let content = GetContent(type, sampleAttribute)
+				let content = GetContent(type.GetTypeInfo(), sampleAttribute)
 				from category in content.Categories
 				group content by category into contentByCategory
 				orderby contentByCategory.Key.ToLower(CultureInfo.CurrentUICulture)
@@ -769,6 +766,8 @@ description: {sample.Description}";
 		/// <returns>The updated content</returns>
 		public async Task<object> UpdateContent(CancellationToken ct, SampleChooserContent newContent)
 		{
+			SampleChanging?.Invoke(this, EventArgs.Empty);
+
 			//Activator is used here in order to generate the view and bind it directly with the proper view model
 			var control = Activator.CreateInstance(newContent.ControlType);
 

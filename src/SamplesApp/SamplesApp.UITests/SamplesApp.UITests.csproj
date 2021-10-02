@@ -1,24 +1,26 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net47</TargetFramework>
+		<TargetFramework>net48</TargetFramework>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 	</PropertyGroup>
 
 	<ItemGroup> 
 		<PackageReference Include="FluentAssertions" />
-		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.10.0" />
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
 		<PackageReference Include="NUnit" />
 		<PackageReference Include="NUnit3TestAdapter" /> 
-		<PackageReference Include="Xamarin.UITest" Version="3.0.15" />
+		<PackageReference Include="Xamarin.UITest" />
 		<PackageReference Include="Uno.UITest" />
 		<PackageReference Include="Uno.UITest.Selenium" />
 		<PackageReference Include="Uno.UITest.Xamarin" />
 		<PackageReference Include="Uno.UITest.Helpers" />
 		<PackageReference Include="Uno.SourceGenerationTasks" />
+		<PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.0" PrivateAssets="All" />
 	</ItemGroup> 
 	  
 	<ItemGroup>
-		<SourceGenerator Include="..\SamplesApp.UITests.Generator\Bin\$(Configuration)\net47\Uno.Samples.UITest.Generator.dll" />
+		<SourceGenerator Include="..\SamplesApp.UITests.Generator\bin\$(Configuration)\Uno.Samples.UITest.Generator.dll" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(DocsGeneration)'==''">
@@ -30,6 +32,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <Folder Include="MessageDialogTests\" />
 	  <Folder Include="Windows_UI_Xaml_Shapes\Basics_Shapes_Tests_EpectedResults\" />
 	</ItemGroup>
 

@@ -14,8 +14,11 @@ namespace Windows.Storage
 {
 	public partial class StorageFile
 	{
-		internal static StorageFile GetFromNativeInfo(NativeStorageItemInfo info, StorageFolder? parent = null) =>
-			new StorageFile(new NativeStorageFile(info, parent));
+		internal static StorageFile GetFromNativeInfo(NativeStorageItemInfo info)
+			=> new StorageFile(new NativeStorageFile(info, default));
+
+		internal static StorageFile GetFromNativeInfo(NativeStorageItemInfo info, StorageFolder? parent)
+			=> new StorageFile(new NativeStorageFile(info, parent));
 
 		internal sealed class NativeStorageFile : ImplementationBase
 		{
@@ -39,7 +42,7 @@ namespace Windows.Storage
 				_parent = parent;
 			}
 
-			public override StorageProvider Provider => StorageProviders.NativeWasm;
+			public override StorageProvider Provider => StorageProviders.WasmNative;
 
 			public override string Name => _fileName;
 

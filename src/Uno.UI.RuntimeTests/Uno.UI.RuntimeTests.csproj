@@ -1,12 +1,14 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="MSBuild.Sdk.Extras">
-  <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;xamarinios10;monoandroid11.0;xamarinmac20;uap10.0.17763</TargetFrameworks>
+	<PropertyGroup>
+		<TargetFrameworks>netstandard2.0;xamarinios10;monoandroid11.0;xamarinmac20;uap10.0.17763</TargetFrameworks>
 		
-    <!-- Ensures the .xr.xml files are generated in a proper layout folder -->
-    <GenerateLibraryLayout>true</GenerateLibraryLayout>
+		<!-- Ensures the .xr.xml files are generated in a proper layout folder -->
+		<GenerateLibraryLayout>true</GenerateLibraryLayout>
 		
 		<UnoRuntimeIdentifier Condition="'$(TargetFramework)'=='netstandard2.0'">Reference</UnoRuntimeIdentifier>
+
+		<NoWarn>$(NoWarn);CS0168;CS0219;CS0067;CS0162</NoWarn>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(UnoTargetFrameworkOverride)'!=''">
@@ -40,6 +42,17 @@
 		<Compile Include="$(MSBuildThisFileDirectory)..\Uno.UI.Tests\Windows_UI_XAML_Controls\BorderTests\*.cs">
 			<Link>UnitTests\Windows_UI_Xaml_Controls\BorderTests\%(RecursiveDir)%(FileName)%(Extension)</Link>
 		</Compile>
+		<Compile Include="$(MSBuildThisFileDirectory)..\Uno.UI.Tests\Windows_Globalization\Given_Rounder.cs">
+			<Link>UnitTests\Windows_Globalization\%(RecursiveDir)%(FileName)%(Extension)</Link>
+		</Compile>
+	</ItemGroup>
+	<ItemGroup>
+		<Compile Include="$(MSBuildThisFileDirectory)..\Uno.UI.Tests\Windows_Globalization\Given_SignificantDigitsNumberRounder.cs">
+			<Link>UnitTests\Windows_Globalization\%(RecursiveDir)%(FileName)%(Extension)</Link>
+		</Compile>
+		<Compile Include="$(MSBuildThisFileDirectory)..\Uno.UI.Tests\Windows_Globalization\Given_IncrementNumberRounder.cs">
+			<Link>UnitTests\Windows_Globalization\%(RecursiveDir)%(FileName)%(Extension)</Link>
+		</Compile>
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0'">
@@ -63,7 +76,7 @@
 
 	<ItemGroup Condition="'$(TargetFramework)'=='uap10.0.17763'">
 		<PackageReference Include="System.Numerics.Vectors" Version="4.3.0" />
-		<PackageReference Include="Microsoft.UI.Xaml" Version="2.5.0" />
+		<PackageReference Include="Microsoft.UI.Xaml" Version="2.7.0-prerelease.210816001" />
 
 		<!-- We remove Unit tests imported from MUX on UAP as they are usualy heavily relying on internal classes.-->
 		<Compile Remove="$(MSBuildThisFileDirectory)MUX\Microsoft_UI_XAML_Controls\**\*.cs" />
@@ -100,13 +113,13 @@
 	</ItemGroup>
 	
 	<ItemGroup>
-	  <Compile Include="Tests\Windows_UI_Xaml_Controls\HtmlElementAttributeTests\Given_HtmlElementAttribute.Wasm.cs" />
+		<Compile Include="Tests\Windows_UI_Xaml_Controls\HtmlElementAttributeTests\Given_HtmlElementAttribute.Wasm.cs" />
 	</ItemGroup>
 	
 	<ItemGroup>
-	  <Page Update="Tests\Windows_UI_Xaml\Controls\xLoad_xBind.xaml">
-	    <SubType>Designer</SubType>
-	  </Page>
+		<Page Update="Tests\Windows_UI_Xaml\Controls\xLoad_xBind.xaml">
+			<SubType>Designer</SubType>
+		</Page>
 	</ItemGroup>
 
 	<Import Project="..\SourceGenerators\Uno.UI.SourceGenerators\Content\Uno.UI.SourceGenerators.props" />

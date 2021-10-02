@@ -1,4 +1,6 @@
-﻿// MUX Reference NavigationViewItemPresenter.properties.cpp, commit de78834
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root for license information.
+// MUX Reference NavigationViewItemPresenter.properties.cpp, commit 2343eed
 
 using Windows.UI.Xaml;
 
@@ -30,7 +32,7 @@ namespace Microsoft.UI.Xaml.Controls
 		/// Identifies the BackButtonVisibility dependency property.
 		/// </summary>
 		public static DependencyProperty BackButtonVisibilityProperty { get; } =
-			DependencyProperty.Register(nameof(BackButtonVisibility), typeof(Visibility), typeof(NavigationViewTemplateSettings), new PropertyMetadata(Visibility.Collapsed));
+			DependencyProperty.Register(nameof(BackButtonVisibility), typeof(Visibility), typeof(NavigationViewTemplateSettings), new FrameworkPropertyMetadata(Visibility.Collapsed));
 
 		/// <summary>
 		/// Gets the visibility of the left pane.
@@ -45,7 +47,7 @@ namespace Microsoft.UI.Xaml.Controls
 		/// Identifies the LeftPaneVisibility dependency property.
 		/// </summary>
 		public static DependencyProperty LeftPaneVisibilityProperty { get; } =
-			DependencyProperty.Register(nameof(LeftPaneVisibility), typeof(Visibility), typeof(NavigationViewTemplateSettings), new PropertyMetadata(Visibility.Visible));
+			DependencyProperty.Register(nameof(LeftPaneVisibility), typeof(Visibility), typeof(NavigationViewTemplateSettings), new FrameworkPropertyMetadata(Visibility.Visible));
 
 		/// <summary>
 		/// Gets the visibility of the overflow button.
@@ -60,7 +62,7 @@ namespace Microsoft.UI.Xaml.Controls
 		/// Identifies the OverflowButtonVisibility dependency property.
 		/// </summary>
 		public static DependencyProperty OverflowButtonVisibilityProperty { get; } =
-			DependencyProperty.Register(nameof(OverflowButtonVisibility), typeof(Visibility), typeof(NavigationViewTemplateSettings), new PropertyMetadata(Visibility.Collapsed));
+			DependencyProperty.Register(nameof(OverflowButtonVisibility), typeof(Visibility), typeof(NavigationViewTemplateSettings), new FrameworkPropertyMetadata(Visibility.Collapsed));
 
 		/// <summary>
 		/// Gets the visibility of the pane toggle button.
@@ -75,7 +77,22 @@ namespace Microsoft.UI.Xaml.Controls
 		/// Identifies the PaneToggleButtonVisibility dependency property.
 		/// </summary>
 		public static DependencyProperty PaneToggleButtonVisibilityProperty { get; } =
-			DependencyProperty.Register(nameof(PaneToggleButtonVisibility), typeof(Visibility), typeof(NavigationViewTemplateSettings), new PropertyMetadata(Visibility.Visible));
+			DependencyProperty.Register(nameof(PaneToggleButtonVisibility), typeof(Visibility), typeof(NavigationViewTemplateSettings), new FrameworkPropertyMetadata(Visibility.Visible));
+
+		/// <summary>
+		/// Gets the pane toggle button width.
+		/// </summary>
+		public double PaneToggleButtonWidth
+		{
+			get => (double)GetValue(PaneToggleButtonWidthProperty);
+			internal set => SetValue(PaneToggleButtonWidthProperty, value);
+		}
+
+		/// <summary>
+		/// Identifies the PaneToggleButtonWidth dependency property.
+		/// </summary>
+		public static DependencyProperty PaneToggleButtonWidthProperty { get; } =
+			DependencyProperty.Register(nameof(PaneToggleButtonWidth), typeof(double), typeof(NavigationViewTemplateSettings), new FrameworkPropertyMetadata(0.0));
 
 		/// <summary>
 		/// Gets the SelectionFollowsFocus value.
@@ -90,7 +107,23 @@ namespace Microsoft.UI.Xaml.Controls
 		/// Identifies the SingleSelectionFollowsFocus dependency property.
 		/// </summary>
 		public static DependencyProperty SingleSelectionFollowsFocusProperty { get; } =
-			DependencyProperty.Register(nameof(SingleSelectionFollowsFocus), typeof(bool), typeof(NavigationViewTemplateSettings), new PropertyMetadata(false));
+			DependencyProperty.Register(nameof(SingleSelectionFollowsFocus), typeof(bool), typeof(NavigationViewTemplateSettings), new FrameworkPropertyMetadata(false));
+
+		/// <summary>
+		/// Gets the smaller pane toggle button width.
+		/// </summary>
+		public double SmallerPaneToggleButtonWidth
+		{
+			get => (double)GetValue(SmallerPaneToggleButtonWidthProperty);
+			internal set => SetValue(SmallerPaneToggleButtonWidthProperty, value);
+		}
+
+		/// <summary>
+		/// Identifies the SmallerPaneToggleButtonWidth dependency property.
+		/// </summary>
+		public static DependencyProperty SmallerPaneToggleButtonWidthProperty { get; } =
+			DependencyProperty.Register(nameof(SmallerPaneToggleButtonWidth), typeof(double), typeof(NavigationViewTemplateSettings), new FrameworkPropertyMetadata(0.0));
+
 
 		/// <summary>
 		/// Gets the padding value of the top pane.
@@ -105,7 +138,7 @@ namespace Microsoft.UI.Xaml.Controls
 		/// Identifies the TopPadding dependency property.
 		/// </summary>
 		public static DependencyProperty TopPaddingProperty { get; } =
-			DependencyProperty.Register(nameof(TopPadding), typeof(double), typeof(NavigationViewTemplateSettings), new PropertyMetadata(0.0));
+			DependencyProperty.Register(nameof(TopPadding), typeof(double), typeof(NavigationViewTemplateSettings), new FrameworkPropertyMetadata(0.0));
 
 		/// <summary>
 		/// Gets the visibility of the top pane.
@@ -120,6 +153,6 @@ namespace Microsoft.UI.Xaml.Controls
 		/// Identifies the TopPaneVisibility dependency property.
 		/// </summary>
 		public static DependencyProperty TopPaneVisibilityProperty { get; } =
-			DependencyProperty.Register(nameof(TopPaneVisibility), typeof(Visibility), typeof(NavigationViewTemplateSettings), new PropertyMetadata(Visibility.Collapsed));
+			DependencyProperty.Register(nameof(TopPaneVisibility), typeof(Visibility), typeof(NavigationViewTemplateSettings), new FrameworkPropertyMetadata(Visibility.Collapsed));
 	}
 }

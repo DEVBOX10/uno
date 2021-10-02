@@ -9,6 +9,8 @@ jobs:
   pool:
     vmImage: ${{ parameters.vmImage }}
 
+  dependsOn: Commitsar
+
   variables:
     CombinedConfiguration: Release|Any CPU
     CI_Build: true
@@ -19,10 +21,11 @@ jobs:
 
   steps:
    
-  - task: MSBuild@1
-    inputs:
-      solution: src/SamplesApp/SamplesApp.Skia.Gtk/SamplesApp.Skia.Gtk.csproj
-      msbuildArguments: /r /m /p:Configuration=Release /detailedsummary /m # /bl:$(build.artifactstagingdirectory)\build.binlog
+  - template: templates/gitversion.yml
+  - template: templates/dotnet-install.yml
+
+  - powershell: dotnet msbuild src/SamplesApp/SamplesApp.Skia.Gtk/SamplesApp.Skia.Gtk.csproj /r /m /p:Configuration=Release /detailedsummary /m # /bl:$(build.artifactstagingdirectory)\build.binlog
+    displayName: Build GTK Head
 
   - powershell: |
         $source = "$(GTK_RUNTIME_URL)"

@@ -8,6 +8,8 @@ using Microsoft.Extensions.Logging;
 using Uno.Disposables;
 using Uno.Extensions;
 using Uno.Logging;
+using Uno;
+using Windows.Devices.Haptics;
 
 namespace Windows.UI.Input
 {
@@ -88,17 +90,10 @@ namespace Windows.UI.Input
 			}
 			_gestures[value.PointerId] = gesture;
 
-			// Create of update a Manipulation responsible to recognize multi-pointer and drag gestures
+			// Create or update a Manipulation responsible to recognize multi-pointer and drag gestures
 			if (_isManipulationOrDragEnabled)
 			{
-				if (_manipulation == null)
-				{
-					_manipulation = new Manipulation(this, value);
-				}
-				else
-				{
-					_manipulation.Add(value);
-				}
+				Manipulation.AddPointer(this, value);
 			}
 		}
 
@@ -152,6 +147,14 @@ namespace Windows.UI.Input
 			_manipulation?.Remove(value);
 		}
 
+#if NET461
+		/// <summary>
+		/// For test purposes only!
+		/// </summary>
+		internal void RunInertiaSync()
+			=> _manipulation?.RunInertiaSync();
+#endif
+
 		public void CompleteGesture()
 		{
 			// Capture the list in order to avoid alteration while enumerating
@@ -180,13 +183,12 @@ namespace Windows.UI.Input
 
 		#region Manipulations
 		internal event TypedEventHandler<GestureRecognizer, ManipulationStartingEventArgs> ManipulationStarting; // This is not on the public API!
+		internal event TypedEventHandler<GestureRecognizer, Manipulation> ManipulationConfigured; // Right after the ManipulationStarting, once application has configured settings ** ONLY if not cancelled in starting **
+		internal event TypedEventHandler<GestureRecognizer, Manipulation> ManipulationAborted; // The manipulation has been aborted while in starting state ** ONLY if received a ManipulationConfigured **
 		public event TypedEventHandler<GestureRecognizer, ManipulationCompletedEventArgs> ManipulationCompleted;
-#pragma warning disable  // Event not raised: inertia is not supported yet
 		public event TypedEventHandler<GestureRecognizer, ManipulationInertiaStartingEventArgs> ManipulationInertiaStarting;
-#pragma warning restore 67
 		public event TypedEventHandler<GestureRecognizer, ManipulationStartedEventArgs> ManipulationStarted;
 		public event TypedEventHandler<GestureRecognizer, ManipulationUpdatedEventArgs> ManipulationUpdated;
-
 
 		internal Manipulation PendingManipulation => _manipulation;
 		#endregion
@@ -203,6 +205,10 @@ namespace Windows.UI.Input
 		#endregion
 
 		#region Dragging
+		/// <summary>
+		/// This is being raised for touch only, when the pointer remained long enough at the same location so the drag can start.
+		/// </summary>
+		internal event TypedEventHandler<GestureRecognizer, Manipulation> DragReady;
 		public event TypedEventHandler<GestureRecognizer, DraggingEventArgs> Dragging;
 		#endregion
 

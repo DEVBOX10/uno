@@ -10,6 +10,7 @@ using Uno;
 using Uno.Foundation;
 using Uno.Helpers.Serialization;
 using Uno.Storage.Internal;
+using Uno.Storage.Pickers;
 using Uno.Storage.Pickers.Internal;
 
 namespace Windows.Storage.Pickers
@@ -49,7 +50,12 @@ namespace Windows.Storage.Pickers
 			var showAllEntryParameter = "true";
 			var fileTypeMapParameter = JsonHelper.Serialize(BuildFileTypesMap());
 
-			var promise = $"{JsType}.nativePickSaveFileAsync({showAllEntryParameter},'{WebAssemblyRuntime.EscapeJs(fileTypeMapParameter)}')";
+			var suggestedFileName = SuggestedFileName != "" ? WebAssemblyRuntime.EscapeJs(SuggestedFileName) : "";
+
+			var id = WebAssemblyRuntime.EscapeJs(SettingsIdentifier);
+
+			var startIn = SuggestedStartLocation.ToStartInDirectory();
+			var promise = $"{JsType}.nativePickSaveFileAsync({showAllEntryParameter},'{WebAssemblyRuntime.EscapeJs(fileTypeMapParameter)}','{suggestedFileName}','{id}','{startIn}')";
 			var nativeStorageItemInfo = await WebAssemblyRuntime.InvokeAsync(promise);
 			if (nativeStorageItemInfo is null)
 			{
@@ -98,6 +104,7 @@ namespace Windows.Storage.Pickers
 				// The mime type is chosen by the extension, and we cannot reliably send multiple mime type in the browser
 				var fileName = SuggestedFileName + extension;
 				SuggestedSaveFile = await temporaryFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
+				SuggestedSaveFile.ProviderOverride = StorageProviders.WasmDownloadPicker;
 			}
 			return SuggestedSaveFile;
 		}

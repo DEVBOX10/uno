@@ -422,8 +422,12 @@ namespace Windows.UI.Xaml.Controls
 #endif
 			}
 
-			_foregroundChanged.Disposable =
-				Brush.AssignAndObserveBrush(Foreground, c => refreshForeground(), refreshForeground);
+			_foregroundChanged.Disposable = null;
+			if (Foreground?.SupportsAssignAndObserveBrush ?? false)
+			{
+				_foregroundChanged.Disposable =
+					Brush.AssignAndObserveBrush(Foreground, c => refreshForeground(), refreshForeground);
+			}
 
 			refreshForeground();
 		}
@@ -730,6 +734,12 @@ namespace Windows.UI.Xaml.Controls
 				e.Handled = true;
 				// hyperlink.CompleteGesture(); No needs to complete the gesture as the TextBlock won't even receive the Pressed.
 			}
+			else if (sender is TextBlock textBlock && textBlock.IsTextSelectionEnabled)
+			{
+				// Selectable TextBlock should also handle pointer pressed to ensure
+				// RootVisual does not steal its focus.
+				e.Handled = true;
+			}
 		};
 
 		internal static readonly PointerEventHandler OnPointerReleased = (object sender, PointerRoutedEventArgs e) =>
@@ -794,7 +804,7 @@ namespace Windows.UI.Xaml.Controls
 				that.CompleteGesture();
 
 				// On UWP we don't get any CaptureLost, so make sure to manually release the capture silently
-				that.ReleasePointerCapture(e.Pointer, muteEvent: true);
+				that.ReleasePointerCapture(e.Pointer.UniqueId, muteEvent: true);
 
 				// KNOWN ISSUE:
 				// On UWP the 'click' event is raised **after** the PointerReleased ... but deferring the event on the Dispatcher
@@ -934,5 +944,13 @@ namespace Windows.UI.Xaml.Controls
 
 			SetDefaultForeground(ForegroundProperty);
 		}
+
+		internal override bool CanHaveChildren() => true;
+
+		internal override bool IsFocusable =>
+			/*IsActive() &&*/ //TODO Uno: No concept of IsActive in Uno yet.
+			IsVisible() &&
+			/*IsEnabled() &&*/ (IsTextSelectionEnabled || IsTabStop) &&
+			AreAllAncestorsVisible();
 	}
 }

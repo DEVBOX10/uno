@@ -193,11 +193,34 @@ namespace Windows.UI.Xaml.Media
 					$"Use {nameof(TryAdaptNative)} if it's not known whether view will be native.");
 			}
 
-			return new ContentPresenter
+			var host = new ContentPresenter
 			{
 				IsNativeHost = true,
 				Content = nativeView
 			};
+
+			// Propagate layout-related attached properties to the managed wrapper, so the host panel takes them into account
+			PropagateAttachedProperties(
+				host,
+				nativeView,
+				Grid.RowProperty,
+				Grid.RowSpanProperty,
+				Grid.ColumnProperty,
+				Grid.ColumnSpanProperty,
+				Canvas.LeftProperty,
+				Canvas.TopProperty,
+				Canvas.ZIndexProperty
+			);
+
+			return host;
+		}
+
+		private static void PropagateAttachedProperties(FrameworkElement host, _View nativeView, params DependencyProperty[] properties)
+		{
+			foreach (var property in properties)
+			{
+				host.SetValue(property, nativeView.GetValue(property));
+			}
 		}
 
 		/// <summary>
@@ -340,7 +363,9 @@ namespace Windows.UI.Xaml.Media
 			// The maximum region where the current element and its children might draw themselves
 			// TODO: Get the real clipping rect! For now we assume no clipping.
 			// This is expressed in element coordinate space.
-			var clippingBounds = Rect.Infinite;
+			// For some controls imported from WinUI, such as NavigationView, 
+			// the Clip property may be significant. 
+			var clippingBounds = element.Clip?.Bounds ?? Rect.Infinite;
 
 			// The region where the current element draws itself.
 			// Be aware that children might be out of this rendering bounds if no clipping defined. TODO: .Intersect(clippingBounds)
@@ -411,7 +436,7 @@ namespace Windows.UI.Xaml.Media
 			}
 
 			// Validate if any child is an acceptable target
-			var children = childrenFilter is null ? element.GetChildren().OfType<UIElement>() : childrenFilter(element.GetChildren().OfType<UIElement>());
+			var children = childrenFilter is null ? GetManagedVisualChildren(element) : childrenFilter(GetManagedVisualChildren(element));
 			using var child = children.Reverse().GetEnumerator();
 			var isChildStale = isStale;
 			while (child.MoveNext())
@@ -474,7 +499,7 @@ namespace Windows.UI.Xaml.Media
 
 		internal static UIElement SearchDownForLeaf(UIElement root, Predicate<UIElement> predicate)
 		{
-			foreach (var child in root.GetChildren().OfType<UIElement>().Reverse())
+			foreach (var child in GetManagedVisualChildren(root).Reverse())
 			{
 				if (predicate(child))
 				{
@@ -509,6 +534,32 @@ namespace Windows.UI.Xaml.Media
 				yield return enumerator.Current;
 			}
 		}
+
+#if __IOS__ || __MACOS__ || __ANDROID__
+		/// <summary>
+		/// Gets all immediate UIElement children of this <paramref name="view"/>. If any immediate subviews are native, it will descend into
+		/// them depth-first until it finds a UIElement, and return those UIElements.
+		/// </summary>
+		private static IEnumerable<UIElement> GetManagedVisualChildren(_ViewGroup view)
+		{
+			foreach (var child in view.GetChildren())
+			{
+				if (child is UIElement uiElement)
+				{
+					yield return uiElement;
+				}
+				else if (child is _ViewGroup childVG)
+				{
+					foreach (var firstManagedChild in GetManagedVisualChildren(childVG))
+					{
+						yield return firstManagedChild;
+					}
+				}
+			}
+		}
+#else
+		private static IEnumerable<UIElement> GetManagedVisualChildren(_View view) => view.GetChildren().OfType<UIElement>();
+#endif
 		#endregion
 
 		#region HitTest tracing
@@ -561,7 +612,7 @@ namespace Windows.UI.Xaml.Media
 			}
 #endif
 		}
-		#endregion
+#endregion
 
 		internal struct Branch
 		{

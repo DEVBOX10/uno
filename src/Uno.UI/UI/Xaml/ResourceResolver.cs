@@ -72,6 +72,33 @@ namespace Uno.UI
 		}
 
 		/// <summary>
+		/// Performs a one-time, typed resolution of a named resource, using Application.Resources.
+		/// </summary>
+		[EditorBrowsable(EditorBrowsableState.Never)]
+		public static object ResolveResourceStatic(object key, Type type, object context = null)
+		{
+			if (TryStaticRetrieval(new SpecializedResourceDictionary.ResourceKey(key), context, out var value))
+			{
+				if (value.GetType().Is(type))
+				{
+					return value;
+				}
+				else
+				{
+					var convertedValue = BindingPropertyHelper.Convert(() => type, value);
+					if (convertedValue is null && _log.IsEnabled(LogLevel.Warning))
+					{
+						_log.LogWarning($"Unable to convert value '{value}' of type '{value.GetType()}' to type '{type}'");
+					}
+
+					return convertedValue;
+				}
+			}
+
+			return null;
+		}
+
+		/// <summary>
 		/// Performs a one-time resolution of a named resource, using Application.Resources.
 		/// </summary>
 		[EditorBrowsable(EditorBrowsableState.Never)]
@@ -210,8 +237,14 @@ namespace Uno.UI
 		/// </summary>
 		private static bool TryStaticRetrieval(in SpecializedResourceDictionary.ResourceKey resourceKey, object context, out object value)
 		{
-			foreach (var source in CurrentScope.Sources)
+			// This block is a manual enumeration to avoid the foreach pattern
+			// See https://github.com/dotnet/runtime/issues/56309 for details
+			var sourcesEnumerator = CurrentScope.Sources.GetEnumerator();
+
+			while(sourcesEnumerator.MoveNext())
 			{
+				var source = sourcesEnumerator.Current;
+
 				var dictionary = (source.Target as FrameworkElement)?.Resources
 					?? source.Target as ResourceDictionary;
 				if (dictionary != null && dictionary.TryGetValue(resourceKey, out value, shouldCheckSystem: false))

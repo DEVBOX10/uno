@@ -108,7 +108,7 @@ namespace Windows.UI.Xaml
 		}
 
 		/// <summary>
-		/// This is used by the manager to abort a pending D&D for any consideration without an event args for the given pointer
+		/// This is used by the manager to abort a pending DnD for any consideration without an event args for the given pointer
 		/// It ** MUST ** be invoked on the UI thread.
 		/// </summary>
 		internal void Abort()
@@ -155,6 +155,7 @@ namespace Windows.UI.Xaml
 
 			_state = State.None;
 			_acceptedOperation = DataPackageOperation.None;
+			_viewOverride.Clear();
 			await _target.LeaveAsync(Info).AsTask(ct);
 
 			// When the pointer goes out of the window, we hide our internal control and,
