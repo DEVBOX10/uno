@@ -46,6 +46,7 @@ namespace Uno.UWPSyncGenerator
 
 		private ISymbol _voidSymbol;
 		private ISymbol _dependencyPropertySymbol;
+		protected ISymbol FlagsAttributeSymbol { get; private set; }
 		protected ISymbol UIElementSymbol { get; private set; }
 		private static string MSBuildBasePath;
 
@@ -77,14 +78,21 @@ namespace Uno.UWPSyncGenerator
 
 			_voidSymbol = _referenceCompilation.GetTypeByMetadataName("System.Void");
 			_dependencyPropertySymbol = _referenceCompilation.GetTypeByMetadataName(BaseXamlNamespace + ".DependencyProperty");
+			FlagsAttributeSymbol = _referenceCompilation.GetTypeByMetadataName("System.FlagsAttribute");
 			UIElementSymbol = _referenceCompilation.GetTypeByMetadataName(BaseXamlNamespace + ".UIElement");
 			var a = _referenceCompilation.GetTypeByMetadataName("Microsoft.UI.ViewManagement.StatusBar");
 
 
 			var origins = from externalRedfs in _referenceCompilation.ExternalReferences
 						  where Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Windows.Foundation")
+						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Microsoft.WinUI")
 						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Microsoft.UI")
-						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Microsoft.System")
+						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Microsoft.UI.Text")
+						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Microsoft.Foundation")
+						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Microsoft.UI.Composition")
+						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Microsoft.UI.Dispatching")
+						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Microsoft.UI.Input")
+						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Microsoft.UI.Windowing")
 						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Microsoft.ApplicationModel.Resources")
 						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Microsoft.Graphics")
 						  || Path.GetFileNameWithoutExtension(externalRedfs.Display).StartsWith("Windows.Phone.PhoneContract")
@@ -100,9 +108,12 @@ namespace Uno.UWPSyncGenerator
 			var unoUINamespaces = new[] {
 				"Windows.UI.Xaml",
 #if HAS_UNO_WINUI
+				"Microsoft.Foundation",
 				"Microsoft.UI.Xaml",
 				"Microsoft.UI.Composition",
+				"Microsoft.UI.Dispatching",
 				"Microsoft.UI.Text",
+				"Microsoft.UI.Windowing",
 				"Microsoft.UI.Input",
 				"Microsoft.System",
 				"Microsoft.Graphics",
@@ -114,6 +125,7 @@ namespace Uno.UWPSyncGenerator
 			var q = from asm in origins
 					where asm.Name == sourceAssembly
 					from targetType in GetNamespaceTypes(asm.Modules.First().GlobalNamespace)
+					where !SkipNamespace(targetType)
 					where targetType.DeclaredAccessibility == Accessibility.Public
 					where ((baseName == "Uno" || baseName == "Uno.Foundation") && !targetType.ContainingNamespace.ToString().StartsWith("Windows.UI.Xaml") && !targetType.ContainingNamespace.ToString().StartsWith("Microsoft.UI.Xaml"))
 					|| (baseName == "Uno.UI" && unoUINamespaces.Any(n => targetType.ContainingNamespace.ToString().StartsWith(n)))
@@ -133,6 +145,17 @@ namespace Uno.UWPSyncGenerator
 					ProcessType(type, ns.Namespace);
 				}
 			}
+		}
+
+		private bool SkipNamespace(INamedTypeSymbol namedTypeSymbol)
+		{
+			if (namedTypeSymbol.ContainingNamespace.ToDisplayString().StartsWith("Microsoft.UI.Input.Experimental"))
+			{
+				// Skip Microsoft.UI.Input.Experimental as it is not part of WinAppSDK desktop APIs
+				return true;
+			}
+
+			return false;
 		}
 
 		protected abstract void ProcessType(INamedTypeSymbol type, INamespaceSymbol ns);
@@ -185,25 +208,26 @@ namespace Uno.UWPSyncGenerator
 			{
 				return @"..\..\..\Uno.Foundation\Generated\2.0.0.0";
 			}
-			else if (!(
+			else if (
 				type.ContainingNamespace.ToString().StartsWith("Windows.UI.Xaml")
 				|| type.ContainingNamespace.ToString().StartsWith("Microsoft.UI.Xaml")
 #if HAS_UNO_WINUI
 				|| type.ContainingNamespace.ToString().StartsWith("Microsoft.System")
 				|| type.ContainingNamespace.ToString().StartsWith("Microsoft.UI.Composition")
+				|| type.ContainingNamespace.ToString().StartsWith("Microsoft.UI.Dispatching")
 				|| type.ContainingNamespace.ToString().StartsWith("Microsoft.UI.Text")
 				|| type.ContainingNamespace.ToString().StartsWith("Microsoft.UI.Input")
 				|| type.ContainingNamespace.ToString().StartsWith("Microsoft.Graphics")
 				|| type.ContainingNamespace.ToString().StartsWith("Microsoft.ApplicationModel.Resources")
 				|| type.ContainingNamespace.ToString().StartsWith("Microsoft.Web")
 #endif
-			))
+			)
 			{
-				return @"..\..\..\Uno.UWP\Generated\3.0.0.0";
+				return @"..\..\..\Uno.UI\Generated\3.0.0.0";
 			}
 			else
 			{
-				return @"..\..\..\Uno.UI\Generated\3.0.0.0";
+				return @"..\..\..\Uno.UWP\Generated\3.0.0.0";
 			}
 		}
 
@@ -447,6 +471,22 @@ namespace Uno.UWPSyncGenerator
 				case "Microsoft.UI.Xaml.Controls.XamlControlsResources":
 					// Skipped because the type is placed in the Uno.UI.FluentTheme assembly
 					return true;
+
+				case "Microsoft.UI.Xaml.Data.INotifyPropertyChanged":
+				case "Microsoft.UI.Xaml.Data.PropertyChangedEventArgs":
+				case "Microsoft.UI.Xaml.Data.PropertyChangedEventHandler":
+					// Skipped because the types are hidden from the projections in WinAppSDK
+					return true;
+
+#if HAS_UNO_WINUI
+				case "Windows.UI.Text.FontWeights":
+					// Skipped because the type not present WinAppSDK projection
+					return true;
+
+				case "Windows.UI.Colors":
+					// Skipped because the type not present WinAppSDK projection
+					return true;
+#endif
 			}
 
 
@@ -596,7 +636,7 @@ namespace Uno.UWPSyncGenerator
 								b.AppendLineInvariant($"throw new global::System.NotSupportedException();");
 							}
 						}
-						if (property.GetMethod != null)
+						if (property.SetMethod != null)
 						{
 							using (b.BlockInvariant($"set"))
 							{
@@ -769,6 +809,12 @@ namespace Uno.UWPSyncGenerator
 				BaseXamlNamespace + ".Controls.Primitives.CarouselPanel",
 				BaseXamlNamespace + ".Controls.MediaPlayerPresenter",
 				BaseXamlNamespace + ".Controls.NavigationViewItemBase",
+
+#if HAS_UNO_WINUI
+				// Mismatching public inheritance hierarchy because RadioMenuFlyoutItem has double inheritance in WinUI.
+				// Remove this and update RadioMenuFlyoutItem if WinUI 3 removed the double inheritance.
+				BaseXamlNamespace + ".Controls.RadioMenuFlyoutItem"
+#endif
 			};
 
 			var isSkipped = skippedTypes.Contains(type.BaseType?.ToString());
@@ -817,10 +863,9 @@ namespace Uno.UWPSyncGenerator
 
 					if (type.TypeKind == TypeKind.Enum)
 					{
-						// if (!field.IsSpecialName)
-						{
-							b.AppendLineInvariant($"{field.Name},");
-						}
+						var constantValue = field.ConstantValue != null ? $" = {field.ConstantValue}" : string.Empty;
+
+						b.AppendLineInvariant($"{field.Name}{constantValue},");
 					}
 					else
 					{
@@ -929,6 +974,7 @@ namespace Uno.UWPSyncGenerator
 				if (
 					method.MethodKind == MethodKind.Constructor
 					&& type.TypeKind != TypeKind.Interface
+					&& !SkipMethod(type, method)
 					&& type.Name != "DependencyObject"
 					&& (
 						!type.IsValueType
@@ -1081,6 +1127,55 @@ namespace Uno.UWPSyncGenerator
 					case "SetBinding":
 						return true;
 				}
+			}
+
+			if (method.ContainingType.Name == "SwapChainPanel")
+			{
+				switch (method.Name)
+				{
+					// This member uses the experimental input layer from UWP
+					case "CreateCoreIndependentInputSource":
+						return true;
+				}
+			}
+
+			if (method.ContainingType.Name == "SwapChainPanel")
+			{
+				switch (method.Name)
+				{
+					// This member uses the experimental input layer from UWP
+					case "CreateCoreIndependentInputSource":
+						return true;
+				}
+			}
+
+			if (method.ContainingType.Name == "VisualInteractionSource")
+			{
+				switch (method.Name)
+				{
+					// This member uses the experimental input layer from UWP
+					case "TryRedirectForManipulation":
+						return true;
+				}
+			}
+
+			if (method.ContainingType.Name == "UIElement")
+			{
+				switch (method.Name)
+				{
+					// This member uses the experimental input layer from UWP
+					case "StartDragAsync":
+						return true;
+				}
+			}
+
+			if (method.ContainingType.Name == "ScrollControllerInteractionRequestedEventArgs"
+				&& method.MethodKind == MethodKind.Constructor
+				&& method.Parameters.Length == 1
+				&& method.Parameters[0].Type.ToDisplayString() == "Microsoft.UI.Input.Experimental.ExpPointerPoint")
+			{
+				// This member uses the experimental input layer from UWP
+				return true;
 			}
 
 			return false;
@@ -1392,22 +1487,6 @@ namespace Uno.UWPSyncGenerator
 
 		private bool SkipProperty(IPropertySymbol property)
 		{
-			if (property.ContainingType.Name == "WebView")
-			{
-				switch (property.Name)
-				{
-					case "XYFocusRight":
-					case "XYFocusLeft":
-					case "XYFocusDown":
-					case "XYFocusUp":
-					case "XYFocusRightProperty":
-					case "XYFocusLeftProperty":
-					case "XYFocusDownProperty":
-					case "XYFocusUpProperty":
-						return true;
-				}
-			}
-
 			if (property.ContainingType.Name == "WebView2")
 			{
 				switch (property.Name)
@@ -1453,6 +1532,36 @@ namespace Uno.UWPSyncGenerator
 				switch (property.Name)
 				{
 					case "TemplatedParent":
+						return true;
+				}
+			}
+
+			if (property.ContainingType.Name == "ExpCompositionContent")
+			{
+				switch (property.Name)
+				{
+					case "InputSite":
+						// Member uses the experimental Input layer from UAP
+						return true;
+				}
+			}
+
+			if (property.ContainingType.Name == "ExpCompositionContent")
+			{
+				switch (property.Name)
+				{
+					case "InputSite":
+						// Member uses the experimental Input layer from UAP
+						return true;
+				}
+			}
+
+			if (property.ContainingType.Name == "ScrollControllerInteractionRequestedEventArgs")
+			{
+				switch (property.Name)
+				{
+					case "PointerPoint":
+						// Member uses the experimental Input layer from UAP
 						return true;
 				}
 			}

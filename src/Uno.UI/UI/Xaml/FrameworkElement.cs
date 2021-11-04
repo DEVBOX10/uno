@@ -1,4 +1,6 @@
-﻿using Uno.Diagnostics.Eventing;
+﻿#pragma warning disable CS0105 // Ignore duplicate namespaces, to remove when moving to WinUI source tree.
+
+using Uno.Diagnostics.Eventing;
 using Windows.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
@@ -89,6 +91,12 @@ namespace Windows.UI.Xaml
 		/// Indicates that this view can participate in layout optimizations using the simplest logic.
 		/// </summary>
 		protected virtual bool IsSimpleLayout => false;
+
+		/// <summary>
+		/// Flag for whether this FrameworkElement has a Style set by an ItemsControl. This typically happens when the user provides an explicit container
+		/// in XAML, but does not set a local style for the container.
+		/// </summary>
+		internal bool IsStyleSetFromItemsControl { get; set; }
 
 		#region Tag Dependency Property
 

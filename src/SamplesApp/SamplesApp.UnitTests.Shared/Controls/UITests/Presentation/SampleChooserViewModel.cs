@@ -20,6 +20,7 @@ using Microsoft.Extensions.Logging;
 using Windows.UI.Xaml;
 using System.IO;
 using Windows.UI.Popups;
+using Uno.UI.Samples.Tests;
 
 #if XAMARIN || UNO_REFERENCE_API
 using Windows.UI.Xaml.Controls;
@@ -401,6 +402,39 @@ namespace SampleControl.Presentation
 				doneAction?.Invoke();
 
 				IsSplitVisible = true;
+			}
+		}
+
+		internal async Task RunRuntimeTests(CancellationToken ct, string testResultsFilePath, Action doneAction = null)
+		{
+			try
+			{
+				var testQuery = from category in _categories
+								from sample in category.SamplesContent
+								where sample.ControlType == typeof(SamplesApp.Samples.UnitTests.UnitTestsPage)
+								select sample;
+
+				var runtimeTests = testQuery.FirstOrDefault();
+
+				if (runtimeTests == null)
+				{
+					throw new InvalidOperationException($"Unable to find UnitTestsPage");
+				}
+
+				var content = await UpdateContent(ct, runtimeTests) as FrameworkElement;
+				ContentPhone = content;
+
+				if (ContentPhone is FrameworkElement fe
+					&& fe.FindName("UnitTestsRootControl") is Uno.UI.Samples.Tests.UnitTestsControl unitTests)
+				{
+					await unitTests.RunTests(ct, UnitTestEngineConfig.Default);
+
+					File.WriteAllText(testResultsFilePath, unitTests.NUnitTestResultsDocument, System.Text.Encoding.Unicode);
+				}
+			}
+			finally
+			{
+				doneAction?.Invoke();
 			}
 		}
 

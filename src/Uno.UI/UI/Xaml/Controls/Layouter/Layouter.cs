@@ -54,7 +54,7 @@ namespace Windows.UI.Xaml.Controls
 
 		internal Size _unclippedDesiredSize;
 
-		private UIElement _elementAsUIElement;
+		private readonly UIElement _elementAsUIElement;
 
 		public IFrameworkElement Panel { get; }
 
@@ -173,8 +173,6 @@ namespace Windows.UI.Xaml.Controls
 		/// </summary>
 		public void Arrange(Rect finalRect)
 		{
-			LayoutInformation.SetLayoutSlot(Panel, finalRect);
-
 			using var traceActivity = _trace.IsEnabled
 				? _trace.WriteEventActivity(
 					FrameworkElement.TraceProvider.FrameworkElement_ArrangeStart,
@@ -465,6 +463,9 @@ namespace Windows.UI.Xaml.Controls
 			{
 				return;
 			}
+
+			LayoutInformation.SetLayoutSlot(view, frame);
+
 			var (finalFrame, clippedFrame) = ApplyMarginAndAlignments(view, frame);
 			if (view is UIElement elt)
 			{
@@ -529,6 +530,11 @@ namespace Windows.UI.Xaml.Controls
 				var childMaxWidth = frameworkElement.MaxWidth;
 				var childMinHeight = frameworkElement.MinHeight;
 				var childMinWidth = frameworkElement.MinWidth;
+				if (frameworkElement is ILayoutOptOut optOutElement && !optOutElement.ShouldUseMinSize)
+				{
+					childMinHeight = 0;
+					childMinWidth = 0;
+				}
 				var childWidth = frameworkElement.Width;
 				var childHeight = frameworkElement.Height;
 				var childMargin = frameworkElement.Margin;
@@ -536,8 +542,8 @@ namespace Windows.UI.Xaml.Controls
 				var hasChildWidth = !IsNaN(childWidth);
 				var hasChildMaxWidth = !IsInfinity(childMaxWidth) && !IsNaN(childMaxWidth);
 				var hasChildMaxHeight = !IsInfinity(childMaxHeight) && !IsNaN(childMaxHeight);
-				var hasChildMinWidth = childMinWidth > 0.0f;
-				var hasChildMinHeight = childMinHeight > 0.0f;
+				var hasChildMinWidth = childMinWidth > 0.0;
+				var hasChildMinHeight = childMinHeight > 0.0;
 
 				if (
 					childVerticalAlignment != VerticalAlignment.Stretch
