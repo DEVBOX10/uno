@@ -8,7 +8,7 @@ using Windows.UI.Xaml.Controls;
 using Uno.UI.Xaml.Controls;
 using System.ComponentModel;
 using Windows.UI.Xaml.Media;
-using Microsoft.Extensions.Logging;
+using Uno.Foundation.Logging;
 
 namespace Uno.UI
 {
@@ -219,6 +219,13 @@ namespace Uno.UI
 			/// disabled to improve application performance on WebAssembly. See See #7005 for additional details.
 			/// </summary>
 			public static bool HandleLoadUnloadExceptions { get; set; } = true;
+
+			/// <summary>
+			/// When true, any FrameworkElement with Background non-null will intercept pointer events. When set to false, the default, only
+			/// certain views (Panels, Borders, and ContentPresenters) will intercept pointers if their background is non-null, while others (Control)
+			/// will not, which is how WinUI behaves. Set to true if you have code written for earlier versions of Uno that relies upon the old behavior.
+			/// </summary>
+			public static bool UseLegacyHitTest { get; set; } = false;
 		}
 
 		public static class Image
@@ -560,6 +567,12 @@ namespace Uno.UI
 		public static class DatePicker
 		{
 #if __IOS__
+			/// <summary>
+			/// Gets or set whether the <see cref="Windows.UI.Xaml.Controls.DatePicker" /> rendered matches the Legacy Style or not.
+			/// </summary>
+			/// <remarks>
+			/// Important: This flag will only have an impact on iOS 14 devices
+			/// </remarks>
 			public static bool UseLegacyStyle { get; set; } = false;
 #endif
 		}
@@ -567,6 +580,12 @@ namespace Uno.UI
 		public static class TimePicker
 		{
 #if __IOS__
+			/// <summary>
+			/// Gets or set whether the TimePicker rendered matches the Legacy Style or not.
+			/// </summary>
+			/// <remarks>
+			/// Important: This flag will only have an impact on iOS 14 devices
+			/// </remarks>
 			public static bool UseLegacyStyle { get; set; } = false;
 #endif
 		}

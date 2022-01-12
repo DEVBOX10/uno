@@ -36,6 +36,8 @@ using Uno.UI.Xaml;
 using Uno.UI.Runtime.Skia.Wpf;
 using Uno.ApplicationModel.DataTransfer;
 using Uno.Extensions.ApplicationModel.DataTransfer;
+using Windows.System.Profile.Internal;
+using Uno.Extensions.System.Profile;
 
 namespace Uno.UI.Skia.Platform
 {
@@ -53,6 +55,9 @@ namespace Uno.UI.Skia.Platform
 		private bool ignorePixelScaling;
 		private FocusManager? _focusManager;
 
+		private double _dpiScaleX;
+		private double _dpiScaleY;
+
 		static WpfHost()
 		{
 			DefaultStyleKeyProperty.OverrideMetadata(typeof(WpfHost), new WpfFrameworkPropertyMetadata(typeof(WpfHost)));
@@ -69,6 +74,7 @@ namespace Uno.UI.Skia.Platform
 			ApiExtensibility.Register<TextBoxView>(typeof(ITextBoxViewExtension), o => new TextBoxViewExtension(o));
 			ApiExtensibility.Register(typeof(ILauncherExtension), o => new LauncherExtension(o));
 			ApiExtensibility.Register(typeof(IClipboardExtension), o => new ClipboardExtensions(o));
+			ApiExtensibility.Register(typeof(IAnalyticsInfoExtension), o => new AnalyticsInfoExtension());
 		}
 
 		public static WpfHost Current => _current;
@@ -118,22 +124,25 @@ namespace Uno.UI.Skia.Platform
 				return true;
 			}
 
-			Windows.System.DispatcherQueue.EnqueueNativeOverride = EnqueueNative;
-
 			Windows.UI.Core.CoreDispatcher.DispatchOverride = d => dispatcher.BeginInvoke(d);
 			Windows.UI.Core.CoreDispatcher.HasThreadAccessOverride = dispatcher.CheckAccess;
+
+			var dpi = VisualTreeHelper.GetDpi(WpfApplication.Current.MainWindow);
+			_dpiScaleX = dpi.DpiScaleX;
+			_dpiScaleY = dpi.DpiScaleY;
 
 			WinUI.Application.Start(CreateApp, args);
 
 			WinUI.Window.InvalidateRender += () =>
 			{
-				InvalidateFocusVisual();
+				InvalidateOverlays();
 				InvalidateVisual();
 			};
 
 			WpfApplication.Current.Activated += Current_Activated;
 			WpfApplication.Current.Deactivated += Current_Deactivated;
 			WpfApplication.Current.MainWindow.StateChanged += MainWindow_StateChanged;
+			WpfApplication.Current.MainWindow.DpiChanged += MainWindow_DpiChanged;
 
 			Windows.Foundation.Size preferredWindowSize = ApplicationView.PreferredLaunchViewSize;
 			if (preferredWindowSize != Windows.Foundation.Size.Empty)
@@ -144,6 +153,12 @@ namespace Uno.UI.Skia.Platform
 
 			SizeChanged += WpfHost_SizeChanged;
 			Loaded += WpfHost_Loaded;
+		}
+
+		private void MainWindow_DpiChanged(object sender, DpiChangedEventArgs e)
+		{
+			_dpiScaleX = e.NewDpi.DpiScaleX;
+			_dpiScaleY = e.NewDpi.DpiScaleY;
 		}
 
 		public override void OnApplyTemplate()
@@ -228,9 +243,9 @@ namespace Uno.UI.Skia.Platform
 
 
 			int width, height;
-			var dpi = VisualTreeHelper.GetDpi(WpfApplication.Current.MainWindow);
-			double dpiScaleX = dpi.DpiScaleX;
-			double dpiScaleY = dpi.DpiScaleY;
+			
+			double dpiScaleX = _dpiScaleX;
+			double dpiScaleY = _dpiScaleY;
 			if (IgnorePixelScaling)
 			{
 				width = (int)ActualWidth;
@@ -268,13 +283,14 @@ namespace Uno.UI.Skia.Platform
 			drawingContext.DrawImage(bitmap, new Rect(0, 0, ActualWidth, ActualHeight));
 		}
 
-		private void InvalidateFocusVisual()
+		private void InvalidateOverlays()
 		{
-			if (_focusManager == null)
-			{
-				_focusManager = VisualTree.GetFocusManagerForElement(Windows.UI.Xaml.Window.Current?.RootElement);
-			}
+			_focusManager ??= VisualTree.GetFocusManagerForElement(Windows.UI.Xaml.Window.Current?.RootElement);
 			_focusManager?.FocusRectManager?.RedrawFocusVisual();
+			if (_focusManager?.FocusedElement is TextBox textBox)
+			{
+				textBox.TextBoxView?.Extension?.InvalidateLayout();
+			}
 		}
 	}
 }

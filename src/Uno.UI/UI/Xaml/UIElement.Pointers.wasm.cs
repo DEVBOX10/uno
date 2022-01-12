@@ -25,7 +25,7 @@ namespace Windows.UI.Xaml
 		// https://developer.mozilla.org/en-US/docs/Web/API/PointerEvent
 		// https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent
 
-#region Native event registration handling
+		#region Native event registration handling
 		partial void OnGestureRecognizerInitialized(GestureRecognizer recognizer)
 		{
 			// When a gesture recognizer is initialized, we subscribe to pointer events in order to feed it.
@@ -107,26 +107,20 @@ namespace Windows.UI.Xaml
 					break;
 			}
 		}
-#endregion
+		#endregion
 
-#region Native event dispatch
-		// Note for Enter and Leave:
-		//	canBubble: true is actually not true.
-		//	When we subscribe to pointer enter in a window, we don't receive pointer enter for each sub-views!
-		//	But the web-browser will actually behave like WinUI for pointerenter and pointerleave, so here by setting it to true,
-		//	we just ensure that the managed code won't try to bubble it by its own.
-		//	However, if the event is Handled in managed, it will then bubble while it should not! https://github.com/unoplatform/uno/issues/3007
+		#region Native event dispatch
 		// Note about the HtmlEventDispatchResult:
 		//	For pointer events we never want to prevent the default behavior.
 		//	Especially for wheel where preventing the default would break scrolling.
 		//	cf. remarks on HtmlEventDispatchResult.PreventDefault
 		private static HtmlEventDispatchResult DispatchNativePointerEnter(UIElement target, string eventPayload)
-			=> TryParse(eventPayload, out var args) && target.OnNativePointerEnter(ToPointerArgs(target, args, isInContact: false))
+			=> TryParse(eventPayload, out var args) && target.OnNativePointerEnter(ToPointerArgs(target, args))
 				? HtmlEventDispatchResult.StopPropagation
 				: HtmlEventDispatchResult.Ok;
 
 		private static HtmlEventDispatchResult DispatchNativePointerLeave(UIElement target, string eventPayload)
-			=> TryParse(eventPayload, out var args) && target.OnNativePointerExited(ToPointerArgs(target, args, isInContact: false))
+			=> TryParse(eventPayload, out var args) && target.OnNativePointerExited(ToPointerArgs(target, args))
 				? HtmlEventDispatchResult.StopPropagation
 				: HtmlEventDispatchResult.Ok;
 
@@ -136,12 +130,12 @@ namespace Windows.UI.Xaml
 				: HtmlEventDispatchResult.Ok;
 
 		private static HtmlEventDispatchResult DispatchNativePointerUp(UIElement target, string eventPayload)
-			=> TryParse(eventPayload, out var args) && target.OnNativePointerUp(ToPointerArgs(target, args, isInContact: true))
+			=> TryParse(eventPayload, out var args) && target.OnNativePointerUp(ToPointerArgs(target, args, isInContact: false))
 				? HtmlEventDispatchResult.StopPropagation
 				: HtmlEventDispatchResult.Ok;
 
 		private static HtmlEventDispatchResult DispatchNativePointerMove(UIElement target, string eventPayload)
-			=> TryParse(eventPayload, out var args) && target.OnNativePointerMove(ToPointerArgs(target, args, isInContact: true))
+			=> TryParse(eventPayload, out var args) && target.OnNativePointerMove(ToPointerArgs(target, args))
 				? HtmlEventDispatchResult.StopPropagation
 				: HtmlEventDispatchResult.Ok;
 
@@ -207,7 +201,7 @@ namespace Windows.UI.Xaml
 		private static PointerRoutedEventArgs ToPointerArgs(
 			UIElement snd,
 			NativePointerEventArgs args,
-			bool? isInContact,
+			bool? isInContact = null,
 			(bool isHorizontalWheel, double delta) wheel = default)
 		{
 			var pointerId = (uint)args.pointerId;
@@ -253,9 +247,9 @@ namespace Windows.UI.Xaml
 
 			return type;
 		}
-#endregion
+		#endregion
 
-#region Capture
+		#region Capture
 		partial void OnManipulationModeChanged(ManipulationModes _, ManipulationModes newMode)
 			=> SetStyle("touch-action", newMode == ManipulationModes.None ? "none" : "auto");
 
@@ -280,9 +274,9 @@ namespace Windows.UI.Xaml
 				SetStyle("touch-action", "auto");
 			}
 		}
-#endregion
+		#endregion
 
-#region HitTestVisibility
+		#region HitTestVisibility
 		internal void UpdateHitTest()
 		{
 			this.CoerceValue(HitTestVisibilityProperty);
@@ -370,7 +364,7 @@ namespace Windows.UI.Xaml
 			this.ClearValue(HitTestVisibilityProperty);
 		}
 
-#endregion
+		#endregion
 
 		// TODO: This should be marshaled instead of being parsed! https://github.com/unoplatform/uno/issues/2116
 		private struct NativePointerEventArgs
