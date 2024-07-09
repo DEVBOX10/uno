@@ -19,7 +19,7 @@ namespace Uno.UI.Tests.ResourceLoader.Strings.en {
     // class via a tool like ResGen or Visual Studio.
     // To add or remove a member, edit your .ResX file then rerun ResGen
     // with the /str option, or rebuild your VS project.
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "16.0.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "17.0.0.0")]
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     internal class Resources {
@@ -70,11 +70,57 @@ namespace Uno.UI.Tests.ResourceLoader.Strings.en {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Enter.
+        /// </summary>
+        internal static string button2Convert__using_Uno_UI_Tests_Windows_UI_Xaml_Markup_XUidTests_Controls_When_XUid_And_AttachedProperty_And_Conversion_KeyboardShortcutManager_VirtualKey {
+            get {
+                return ResourceManager.GetString("button2Convert.[using:Uno.UI.Tests.Windows_UI_Xaml_Markup.XUidTests.Controls]When" +
+                        "_XUid_And_AttachedProperty_And_Conversion_KeyboardShortcutManager.VirtualKey", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Text in &apos;en&apos;.
         /// </summary>
         internal static string Given_ResourceLoader_When_LocalizedResource {
             get {
                 return ResourceManager.GetString("Given_ResourceLoader.When_LocalizedResource", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Localized value.
+        /// </summary>
+        internal static string OpenVideosButton__using_Windows_UI_Xaml_Controls_ToolTipService_ToolTip {
+            get {
+                return ResourceManager.GetString("OpenVideosButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to .
+        /// </summary>
+        internal static string TestEmptyConverterText_ValueIfNotNull {
+            get {
+                return ResourceManager.GetString("TestEmptyConverterText.ValueIfNotNull", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Test.
+        /// </summary>
+        internal static string TestEmptyConverterText_ValueIfNull {
+            get {
+                return ResourceManager.GetString("TestEmptyConverterText.ValueIfNull", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to .
+        /// </summary>
+        internal static string TestEmptyResource {
+            get {
+                return ResourceManager.GetString("TestEmptyResource", resourceCulture);
             }
         }
         

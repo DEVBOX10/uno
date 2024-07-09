@@ -12,8 +12,8 @@ using Windows.Storage.Streams;
 
 namespace Windows.Devices.Midi
 {
-    public partial class MidiInPort
-    {
+	public partial class MidiInPort
+	{
 		private MidiEndpoint _endpoint;
 		private MidiClient _client;
 		private MidiPort _port;
@@ -40,7 +40,7 @@ namespace Windows.Devices.Midi
 
 		partial void DisposeNative()
 		{
-			
+
 			_port?.Dispose();
 			_client?.Dispose();
 			_endpoint?.Dispose();
@@ -49,7 +49,7 @@ namespace Windows.Devices.Midi
 			_endpoint = null;
 		}
 
-		private static async Task<MidiInPort> FromIdInternalAsync(DeviceIdentifier identifier)
+		private static Task<MidiInPort> FromIdInternalAsync(DeviceIdentifier identifier)
 		{
 			var provider = new MidiInDeviceClassProvider();
 			var nativeDeviceInfo = provider.GetNativeEndpoint(identifier.Id);
@@ -59,7 +59,7 @@ namespace Windows.Devices.Midi
 					"Given MIDI out device does not exist or is no longer connected");
 			}
 
-			return new MidiInPort(identifier.ToString(), nativeDeviceInfo);						
+			return Task.FromResult(new MidiInPort(identifier.ToString(), nativeDeviceInfo));
 		}
 
 
@@ -68,7 +68,9 @@ namespace Windows.Devices.Midi
 			foreach (var packet in e.Packets)
 			{
 				var bytes = new byte[packet.Length];
+#pragma warning disable CS0618 // MidiPacket.Bytes is obsolete. We should use MidiPacket.ByteArray once we have https://github.com/xamarin/xamarin-macios/pull/20540.
 				Marshal.Copy(packet.Bytes, bytes, 0, packet.Length);
+#pragma warning restore CS0618
 				OnMessageReceived(bytes, 0, bytes.Length, TimeSpan.FromMilliseconds(packet.TimeStamp));
 			}
 		}

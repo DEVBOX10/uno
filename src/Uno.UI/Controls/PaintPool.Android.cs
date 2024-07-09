@@ -1,15 +1,16 @@
 ﻿using Android.Graphics;
 using Android.Text;
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Uno.Extensions;
 using Uno.Foundation.Logging;
 using Windows.UI.Text;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Documents;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Documents;
+using Microsoft.UI.Xaml.Media;
 using Color = Windows.UI.Color;
 
 namespace Uno.UI.Controls
@@ -19,31 +20,18 @@ namespace Uno.UI.Controls
 	/// </summary>
 	internal class TextPaintPool
 	{
-		private static readonly Action LogCharacterSpacingNotSupported =
-			Actions.CreateOnce(() => typeof(TextPaintPool).Log().Warn("CharacterSpacing is only supported on Android API Level 21+"));
-
-		private class Entry
+		private record Entry(
+			FontWeight FontWeight,
+			FontStyle FontStyle,
+			FontStretch FontStretch,
+			FontFamily FontFamily,
+			double FontSize,
+			double CharacterSpacing,
+			Windows.UI.Color Foreground,
+			BaseLineAlignment BaseLineAlignment,
+			TextDecorations TextDecorations)
 		{
-			public readonly FontWeight FontWeight;
-			public readonly FontStyle FontStyle;
-			public readonly FontFamily FontFamily;
-			public readonly double FontSize;
-			public readonly double CharacterSpacing;
-			public readonly Windows.UI.Color Foreground;
-			public readonly BaseLineAlignment BaseLineAlignment;
-			public readonly TextDecorations TextDecorations;
-
-			public Entry(FontWeight fontWeight, FontStyle fontStyle, FontFamily fontFamily, double fontSize, double characterSpacing, Windows.UI.Color foreground, BaseLineAlignment baselineAlignment, TextDecorations textDecorations)
-			{
-				FontWeight = fontWeight;
-				FontStyle = fontStyle;
-				FontFamily = fontFamily;
-				FontSize = fontSize;
-				CharacterSpacing = characterSpacing;
-				Foreground = foreground;
-				BaseLineAlignment = baselineAlignment;
-				TextDecorations = textDecorations;
-			}
+			public long Timestamp { get; set; }
 		}
 
 		private class EntryComparer : IEqualityComparer<Entry>
@@ -51,6 +39,7 @@ namespace Uno.UI.Controls
 			public bool Equals(Entry x, Entry y) =>
 				x.FontWeight == y.FontWeight
 				&& x.FontStyle == y.FontStyle
+				&& x.FontStretch == y.FontStretch
 				&& x.FontFamily == y.FontFamily
 				&& x.Foreground == y.Foreground
 				&& x.FontSize == y.FontSize
@@ -61,6 +50,7 @@ namespace Uno.UI.Controls
 			public int GetHashCode(Entry entry) =>
 				entry.FontWeight.GetHashCode()
 				^ entry.FontStyle.GetHashCode()
+				^ entry.FontStretch.GetHashCode()
 				^ entry.FontFamily?.GetHashCode() ?? 0
 				^ entry.Foreground.GetHashCode()
 				^ entry.FontSize.GetHashCode()
@@ -69,7 +59,11 @@ namespace Uno.UI.Controls
 				^ entry.TextDecorations.GetHashCode();
 		}
 
-		private static Dictionary<Entry, TextPaint> _entries = new Dictionary<Entry, TextPaint>(new EntryComparer());
+		private static Dictionary<Entry, TextPaint> _entries = new(new EntryComparer());
+		private static List<Entry> _entriesList = new();
+		private static Stopwatch _entriesTime = Stopwatch.StartNew();
+		private static long _minEntryTimestamp;
+		private const int MaxEntries = 500;
 
 		/// <summary>
 		/// Builds a TextPaint configuration.
@@ -83,59 +77,70 @@ namespace Uno.UI.Controls
 		/// can be tricky to place properly.
 		/// </remarks>
 		/// <returns>A <see cref="TextPaint"/> instance.</returns>
-		public static TextPaint GetPaint(FontWeight fontWeight, FontStyle fontStyle, FontFamily fontFamily, double fontSize, double characterSpacing, Windows.UI.Color foreground, Shader shader, BaseLineAlignment baselineAlignment, TextDecorations textDecorations)
+		public static TextPaint GetPaint(FontWeight fontWeight, FontStyle fontStyle, FontStretch fontStretch, FontFamily fontFamily, double fontSize, double characterSpacing, Windows.UI.Color foreground, Shader shader, BaseLineAlignment baselineAlignment, TextDecorations textDecorations)
 		{
 			if (shader != null)
 			{
 				// The "Shader" native object can't be use as a cache key
-				return InnerBuildPaint(fontWeight, fontStyle, fontFamily, fontSize, characterSpacing, foreground,  shader, baselineAlignment, textDecorations);
+				return InnerBuildPaint(fontWeight, fontStyle, fontStretch, fontFamily, fontSize, characterSpacing, foreground, shader, baselineAlignment, textDecorations);
 			}
 
-			var key = new Entry(fontWeight, fontStyle, fontFamily, fontSize, characterSpacing, foreground, baselineAlignment, textDecorations);
+			var key = new Entry(fontWeight, fontStyle, fontStretch, fontFamily, fontSize, characterSpacing, foreground, baselineAlignment, textDecorations);
 
 			if (!_entries.TryGetValue(key, out var paint))
 			{
-				_entries.Add(key, paint = InnerBuildPaint(fontWeight, fontStyle, fontFamily, fontSize, characterSpacing, foreground, shader, baselineAlignment, textDecorations));
+				_entries.Add(key, paint = InnerBuildPaint(fontWeight, fontStyle, fontStretch, fontFamily, fontSize, characterSpacing, foreground, shader, baselineAlignment, textDecorations));
+				_entriesList.Add(key);
+
+				TryScavenge();
 			}
+
+			key.Timestamp = _entriesTime.ElapsedTicks;
 
 			return paint;
 		}
 
-		private static TextPaint InnerBuildPaint(FontWeight fontWeight, FontStyle fontStyle, FontFamily fontFamily,  double fontSize, double characterSpacing, Color foreground, Shader shader,  BaseLineAlignment baselineAlignment, TextDecorations textDecorations)
+		private static void TryScavenge()
 		{
-			var paint = new TextPaint(PaintFlags.AntiAlias);
+			if (_entriesList.Count > MaxEntries)
+			{
+				var cutoff = ((_entriesTime.ElapsedTicks - _minEntryTimestamp) / 2) + _minEntryTimestamp;
 
+				for (int i = 0; i < _entriesList.Count; i++)
+				{
+					var entry = _entriesList[i];
+
+					if (entry.Timestamp < cutoff)
+					{
+						_entries.Remove(entry);
+						_entriesList.RemoveAt(i--);
+					}
+				}
+
+				_minEntryTimestamp = cutoff;
+
+				if (typeof(TextPaintPool).Log().IsEnabled(LogLevel.Debug))
+				{
+					typeof(TextPaintPool).Log().Debug($"Cleared pool ({_entries.Count} left)");
+				}
+			}
+		}
+
+		private static TextPaint InnerBuildPaint(FontWeight fontWeight, FontStyle fontStyle, FontStretch fontStretch, FontFamily fontFamily, double fontSize, double characterSpacing, Color foreground, Shader shader, BaseLineAlignment baselineAlignment, TextDecorations textDecorations)
+		{
 			var paintSpecs = BuildPaintValueSpecs(fontSize, characterSpacing);
 
-			paint.Density = paintSpecs.density;
-			paint.TextSize = paintSpecs.textSize;
-			paint.UnderlineText = (textDecorations & TextDecorations.Underline) == TextDecorations.Underline;
-			paint.StrikeThruText = (textDecorations & TextDecorations.Strikethrough) == TextDecorations.Strikethrough;
-			if (shader != null)
-			{
-				paint.SetShader(shader);
-			}
-
-			if (baselineAlignment == BaseLineAlignment.Superscript)
-			{
-				paint.BaselineShift += (int)(paint.Ascent() / 2);
-			}
-
-			if (Android.OS.Build.VERSION.SdkInt >= Android.OS.BuildVersionCodes.Lollipop)
-			{
-				paint.LetterSpacing = paintSpecs.letterSpacing;
-			}
-			else
-			{
-				LogCharacterSpacingNotSupported();
-			}
-
-			var typefaceStyle = TypefaceStyleHelper.GetTypefaceStyle(fontStyle, fontWeight);
-			var typeface = FontHelper.FontFamilyToTypeFace(fontFamily, fontWeight, typefaceStyle);
-			paint.SetTypeface(typeface);
-			paint.Color = foreground;
-
-			return paint;
+			return TextPaintPoolNative.BuildPaint(
+				paintSpecs.density,
+				paintSpecs.textSize,
+				paintSpecs.letterSpacing,
+				FontHelper.FontFamilyToTypeFace(fontFamily, fontWeight, fontStyle, fontStretch),
+				(int)((Android.Graphics.Color)foreground),
+				(textDecorations & TextDecorations.Underline) == TextDecorations.Underline,
+				(textDecorations & TextDecorations.Strikethrough) == TextDecorations.Strikethrough,
+				baselineAlignment == BaseLineAlignment.Superscript,
+				shader
+			);
 		}
 
 		internal static (float density, float textSize, float letterSpacing) BuildPaintValueSpecs(double fontSize, double characterSpacing)

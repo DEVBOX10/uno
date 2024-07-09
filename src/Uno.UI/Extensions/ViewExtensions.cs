@@ -1,3 +1,4 @@
+﻿#nullable enable
 #if __IOS__
 using UIKit;
 using _View = UIKit.UIView;
@@ -7,16 +8,16 @@ using _View = AppKit.NSView;
 #elif __ANDROID__
 using _View = Android.Views.ViewGroup;
 #else
-using _View = Windows.UI.Xaml.UIElement;
+using _View = Microsoft.UI.Xaml.UIElement;
 #endif
 
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Uno.Extensions;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace Uno.UI.Extensions
 {
@@ -50,7 +51,7 @@ namespace Uno.UI.Extensions
 
 			string GetGridDetails(Grid grid)
 			{
-				string columns = default;
+				string? columns = default;
 				if (grid.ColumnDefinitions.Count > 1)
 				{
 					columns = " Cols=" + grid.ColumnDefinitions
@@ -58,7 +59,7 @@ namespace Uno.UI.Extensions
 						.JoinBy(",");
 				}
 
-				string rows = default;
+				string? rows = default;
 				if (grid.RowDefinitions.Count > 1)
 				{
 					rows = " Rows=" + grid.RowDefinitions
@@ -66,7 +67,7 @@ namespace Uno.UI.Extensions
 						.JoinBy(",");
 				}
 
-				return columns + rows;
+				return "" + columns + rows;
 			}
 		}
 
@@ -93,12 +94,34 @@ namespace Uno.UI.Extensions
 			return sb.ToString();
 		}
 
+		internal static string GetLayoutDetails(this UIElement uiElement)
+		{
+			var sb = new StringBuilder();
+
+			sb
+				.Append(uiElement.IsMeasureDirtyPathDisabled ? " MEASURE_DIRTY_PATH_DISABLED" : "")
+				.Append(uiElement.IsMeasureDirtyPath ? " MEASURE_DIRTY_PATH" : "")
+				.Append(uiElement.IsMeasureDirty ? " MEASURE_DIRTY" : "")
+#if __WASM__ || __SKIA__ || __IOS__ || __ANDROID__
+				.Append(!uiElement.IsFirstMeasureDone ? " NEVER_MEASURED" : "")
+#endif
+				.Append(uiElement.IsArrangeDirtyPathDisabled ? " ARRANGE_DIRTY_PATH_DISABLED" : "")
+				.Append(uiElement.IsArrangeDirtyPath ? " ARRANGE_DIRTY_PATH" : "")
+				.Append(uiElement.IsArrangeDirty ? " ARRANGE_DIRTY" : "")
+#if __WASM__ || __SKIA__
+				.Append(!uiElement.IsFirstArrangeDone ? " NEVER_ARRANGED" : "")
+#endif
+				;
+
+			return sb.ToString();
+		}
+
 		internal static string GetTransformDetails(this Transform transform)
 		{
 			string GetMatrix(MatrixTransform matrix)
 			{
-				var m = matrix.Matrix.Inner;
-				return $" Matrix=[{m.M11}, {m.M21}, {m.M31}, {m.M12}, {m.M22}, {m.M32}]";
+				var m = matrix.Matrix;
+				return $" Matrix=[{m.M11}, {m.M21}, {m.OffsetX}, {m.M12}, {m.M22}, {m.OffsetY}]";
 			}
 
 			return transform switch

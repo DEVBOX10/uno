@@ -3,20 +3,22 @@ using System.Collections.Generic;
 using System.Linq;
 using Windows.UI;
 using Windows.UI.Core;
-using Windows.UI.Xaml.Markup;
+using Microsoft.UI.Xaml.Markup;
 using Uno.Disposables;
 using Uno.Extensions;
 using Uno.Foundation.Logging;
 using System.Diagnostics;
 
-namespace Windows.UI.Xaml.Media.Animation
+namespace Microsoft.UI.Xaml.Media.Animation
 {
-	[ContentProperty(Name = "KeyFrames")]
+	[ContentProperty(Name = nameof(KeyFrames))]
 	partial class ColorAnimationUsingKeyFrames : Timeline, ITimeline
 	{
 		private readonly Stopwatch _activeDuration = new Stopwatch();
+		private bool _wasBeginScheduled;
+		private bool _wasRequestedToStop;
 		private int _replayCount = 1;
-		private ColorOffset? _startingValue = null;
+		private ColorOffset? _startingValue;
 		private ColorOffset _finalValue;
 
 		private List<IValueAnimator> _animators;
@@ -39,16 +41,27 @@ namespace Windows.UI.Xaml.Media.Animation
 			"KeyFrames",
 			typeof(ColorKeyFrameCollection),
 			typeof(ColorAnimationUsingKeyFrames),
-			new FrameworkPropertyMetadata(default(ColorKeyFrameCollection)));
+			new FrameworkPropertyMetadata(default(ColorKeyFrameCollection), OnKeyFramesChanged));
 		public ColorKeyFrameCollection KeyFrames
 		{
 			get => (ColorKeyFrameCollection)GetValue(KeyFramesProperty);
 			set => SetValue(KeyFramesProperty, value);
 		}
+		private static void OnKeyFramesChanged(DependencyObject sender, DependencyPropertyChangedEventArgs e)
+		{
+			if (sender is ColorAnimationUsingKeyFrames owner)
+			{
+				(e.OldValue as ColorKeyFrameCollection)?.SetParent(null);
+
+				// The parent must always be set, so that items in the collection can use that to walk up the visual tree.
+				// This is needed when updating the resource bindings that point to local resources (for example, from Page.Resources).
+				(e.NewValue as ColorKeyFrameCollection)?.SetParent(owner);
+			}
+		}
 
 		public ColorAnimationUsingKeyFrames()
 		{
-			KeyFrames = new ColorKeyFrameCollection(this, isAutoPropertyInheritanceEnabled: false);
+			KeyFrames = new ColorKeyFrameCollection();
 		}
 
 		internal override TimeSpan GetCalculatedDuration()
@@ -68,41 +81,49 @@ namespace Windows.UI.Xaml.Media.Animation
 			return base.GetCalculatedDuration();
 		}
 
-		bool _wasBeginScheduled = false;
 		void ITimeline.Begin()
 		{
+			// It's important to keep this line here, and not
+			// inside the if (!_wasBeginScheduled)
+			// If Begin(), Stop(), Begin() are called successively in sequence,
+			// we want _wasRequestedToStop to be false.
+			_wasRequestedToStop = false;
+
 			if (!_wasBeginScheduled)
 			{
 				// We dispatch the begin so that we can use bindings on ColorKeyFrame.Value from RelativeParent.
 				// This works because the template bindings are executed just after the constructor.
 				// WARNING: This does not allow us to bind ColorKeyFrame.Value with ViewModel properties.
+
 				_wasBeginScheduled = true;
 
-#if !NET461
+#if !IS_UNIT_TESTS
 #if __ANDROID__
-				Dispatcher.RunAnimation(() =>
+				_ = Dispatcher.RunAnimation(() =>
 #else
-				Dispatcher.RunAsync(CoreDispatcherPriority.High, () =>
+				_ = Dispatcher.RunAsync(CoreDispatcherPriority.High, () =>
+#endif
 #endif
 				{
-#endif
-					if (KeyFrames.Count < 1)
+					_wasBeginScheduled = false;
+
+					if (KeyFrames.Count < 1 || // nothing to do
+						_wasRequestedToStop // was requested to stop, between Begin() and dispatched here
+					)
 					{
-						return; // nothing to do
+						return;
 					}
 
 					PropertyInfo?.CloneShareableObjectsInPath();
-
-					_wasBeginScheduled = false;
-					_subscriptions.Clear(); //Dispose all and start a new
 
 					_activeDuration.Restart();
 					_replayCount = 1;
 
 					//Start the animation
 					Play();
-#if !NET461
-				});
+				}
+#if !IS_UNIT_TESTS
+				);
 #endif
 			}
 		}
@@ -151,7 +172,7 @@ namespace Windows.UI.Xaml.Media.Animation
 				_currentAnimator = targetAnimator;
 			}
 
-			if(_currentAnimator == null)
+			if (_currentAnimator == null)
 			{
 				return;
 			}
@@ -160,7 +181,7 @@ namespace Windows.UI.Xaml.Media.Animation
 
 			if (State == TimelineState.Active || State == TimelineState.Paused)
 			{
-				CoreDispatcher.Main.RunAsync(
+				_ = CoreDispatcher.Main.RunAsync(
 					CoreDispatcherPriority.Normal,
 					() =>
 					{
@@ -179,7 +200,7 @@ namespace Windows.UI.Xaml.Media.Animation
 
 		void ITimeline.SkipToFill()
 		{
-			if (_currentAnimator != null && _currentAnimator.IsRunning)
+			if (_currentAnimator is { IsRunning: true })
 			{
 				_currentAnimator.Cancel();//Stop the animator if it is running
 				_startingValue = null;
@@ -192,12 +213,14 @@ namespace Windows.UI.Xaml.Media.Animation
 
 		void ITimeline.Deactivate()
 		{
-			if (_currentAnimator != null && _currentAnimator.IsRunning)
+			if (_currentAnimator is { IsRunning: true })
 			{
 				_currentAnimator.Cancel();//Stop the animator if it is running
 				_startingValue = null;
 			}
+
 			State = TimelineState.Stopped;
+			_wasRequestedToStop = true;
 		}
 
 		void ITimeline.Stop()
@@ -205,7 +228,9 @@ namespace Windows.UI.Xaml.Media.Animation
 			_currentAnimator?.Cancel(); // stop could be called before the initialization
 			_startingValue = null;
 			ClearValue();
+
 			State = TimelineState.Stopped;
+			_wasRequestedToStop = true;
 		}
 
 		/// <summary>
@@ -213,7 +238,8 @@ namespace Windows.UI.Xaml.Media.Animation
 		/// </summary>
 		private void Play()
 		{
-			InitializeAnimators();//Create the animator
+			_subscriptions.Clear(); // Dispose all and start a new
+			InitializeAnimators(); // Create the animator
 
 			if (!EnableDependentAnimation && this.GetIsDependantAnimation())
 			{ // Don't start the animator its a dependent animation
@@ -233,7 +259,7 @@ namespace Windows.UI.Xaml.Media.Animation
 		}
 
 		/// <summary>
-		/// Initializes the animators and 
+		/// Initializes the animators and
 		/// </summary>
 		private void InitializeAnimators()
 		{
@@ -276,7 +302,7 @@ namespace Windows.UI.Xaml.Media.Animation
 
 				var i = index;
 
-#if __ANDROID_19__
+#if __ANDROID__
 				if (Android.OS.Build.VERSION.SdkInt >= Android.OS.BuildVersionCodes.Kitkat)
 				{
 					animator.AnimationPause += (a, _) => OnFrame((IValueAnimator)a);
@@ -336,6 +362,11 @@ namespace Windows.UI.Xaml.Media.Animation
 			return default;
 		}
 
+		private ColorOffset? FindFinalValue()
+		{
+			return (ColorOffset?)KeyFrames.OrderBy(x => x.KeyTime)?.LastOrDefault()?.Value;
+		}
+
 		/// <summary>
 		/// Replay this animation.
 		/// </summary>
@@ -347,10 +378,12 @@ namespace Windows.UI.Xaml.Media.Animation
 		}
 
 		/// <summary>
-		/// Replays the Animation if required, Sets the final state, Raises the Completed event. 
+		/// Replays the Animation if required, Sets the final state, Raises the Completed event.
 		/// </summary>
 		private void OnEnd()
 		{
+			_subscriptions.Clear();
+
 			// If the animation was GPU based, remove the animated value
 			if (NeedsRepeat(_activeDuration, _replayCount))
 			{
@@ -375,7 +408,7 @@ namespace Windows.UI.Xaml.Media.Animation
 		/// <summary>
 		/// Dispose the animation.
 		/// </summary>
-		protected override void Dispose(bool disposing)
+		private protected override void Dispose(bool disposing)
 		{
 			if (disposing)
 			{
@@ -387,12 +420,18 @@ namespace Windows.UI.Xaml.Media.Animation
 			base.Dispose(disposing);
 		}
 
+		private protected override void OnThemeChanged()
+		{
+			// Value may have changed
+			_finalValue = FindFinalValue() ?? default;
+		}
+
 		partial void OnFrame(IValueAnimator currentAnimator);
 		partial void DisposePartial();
 		partial void UseHardware();
 		partial void HoldValue();
 
-#if NET461
+#if IS_UNIT_TESTS
 		private bool ReportEachFrame() => true;
 #endif
 	}

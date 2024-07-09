@@ -18,7 +18,7 @@ using SamplesApp.UITests.TestFramework;
 using Uno.UITest.Helpers;
 using Uno.UITest.Helpers.Queries;
 
-namespace Windows.UI.Xaml.Tests.MUXControls.InteractionTests
+namespace Microsoft.UI.Xaml.Tests.MUXControls.InteractionTests
 {
 	[Ignore("Tests are not stabilized yet")]
 	public partial class Given_InfoBar : SampleControlUITestBase
@@ -84,7 +84,7 @@ namespace Windows.UI.Xaml.Tests.MUXControls.InteractionTests
 		private void Check(string checkboxName)
 		{
 			var checkBox = _app.Marked(checkboxName);
-			checkBox.Tap();
+			checkBox.FastTap();
 			Log.Comment("Checked " + checkboxName + " checkbox");
 			//Wait.ForIdle();
 		}
@@ -92,7 +92,7 @@ namespace Windows.UI.Xaml.Tests.MUXControls.InteractionTests
 		private void Uncheck(string checkboxName)
 		{
 			var checkBox = _app.Marked(checkboxName);
-			checkBox.Tap();
+			checkBox.FastTap();
 			Log.Comment("Unchecked " + checkboxName + " checkbox");
 			//Wait.ForIdle();
 		}

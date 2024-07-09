@@ -8,11 +8,12 @@ using Uno.UI.DataBinding;
 using System.Runtime.CompilerServices;
 using System.Drawing;
 using Uno.Disposables;
-using Windows.UI.Xaml;
+using Microsoft.UI.Xaml;
 using System.ComponentModel;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media;
 using AppKit;
 using System.Collections;
+using ObjCRuntime;
 
 namespace Uno.UI.Controls
 {
@@ -43,7 +44,7 @@ namespace Uno.UI.Controls
 
 			var position = _shadowChildren.IndexOf(NSView, ReferenceEqualityComparer<NSView>.Default);
 
-			if(position != -1)
+			if (position != -1)
 			{
 				_shadowChildren.RemoveAt(position);
 			}
@@ -53,13 +54,14 @@ namespace Uno.UI.Controls
 		{
 			Initialize();
 			WantsLayer = true;
-			if (Layer != null)
+			var layer = Layer;
+			if (layer != null)
 			{
-				Layer.MasksToBounds = false;
+				layer.MasksToBounds = false;
 			}
 		}
 
-		public BindableNSView(IntPtr handle)
+		public BindableNSView(NativeHandle handle)
 			: base(handle)
 		{
 			Initialize();

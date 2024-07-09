@@ -1,14 +1,14 @@
 ﻿using System;
 using System.Linq;
 using Windows.Foundation;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Uno.UI;
 using Uno.UI.Samples.Controls;
 
 namespace UITests.Shared.Windows_UI_Input.GestureRecognizerTests
 {
-	[SampleControlInfo("Gesture recognizer")]
+	[SampleControlInfo("Gesture Recognizer")]
 	public sealed partial class TransformationsHoverSibling : Page
 	{
 		public TransformationsHoverSibling()

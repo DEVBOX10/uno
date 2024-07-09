@@ -1,36 +1,46 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Uno;
-using Windows.UI.Xaml.Automation.Provider;
-using Windows.UI.Xaml.Controls;
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root for license information.
+// MUX reference ButtonAutomationPeer_Partial.cpp, tag winui3/release/1.4.2
 
-namespace Windows.UI.Xaml.Automation.Peers
+using Microsoft.UI.Xaml.Automation.Provider;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+
+namespace Microsoft.UI.Xaml.Automation.Peers;
+
+/// <summary>
+/// Exposes Button types to UI Automation.
+/// </summary>
+/// <param name="owner"></param>
+public partial class ButtonAutomationPeer : ButtonBaseAutomationPeer, IInvokeProvider
 {
-	public partial class ButtonAutomationPeer : ButtonBaseAutomationPeer, IInvokeProvider
+	public ButtonAutomationPeer(Button owner) : base(owner)
 	{
-		public ButtonAutomationPeer(Button owner) : base(owner)
+
+	}
+
+	protected override object GetPatternCore(PatternInterface patternInterface)
+	{
+		if (patternInterface == PatternInterface.Invoke)
 		{
-		}
-		
-		protected override string GetClassNameCore()
-		{
-			return "Button";
+			return this;
 		}
 
-		protected override AutomationControlType GetAutomationControlTypeCore()
-		{
-			return AutomationControlType.Button;
-		}
+		return base.GetPatternCore(patternInterface);
+	}
 
-		public void Invoke()
+	protected override string GetClassNameCore() => nameof(Button);
+
+	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
+
+	/// <summary>
+	/// Sends a request to click the button associated with the automation peer.
+	/// </summary>
+	public void Invoke()
+	{
+		if (IsEnabled())
 		{
-			if (IsEnabled())
-			{
-				(Owner as Button).AutomationPeerClick();
-			}
+			(Owner as ButtonBase).ProgrammaticClick();
 		}
 	}
 }

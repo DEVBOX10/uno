@@ -1,20 +1,19 @@
 ﻿using System;
-using System.Diagnostics;
-using System.Windows.Input;
+using Uno.Disposables;
 using Uno.UI.Samples.Controls;
 using Uno.UI.Samples.UITests.Helpers;
 using Windows.Devices.Geolocation;
 using Windows.UI.Core;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Data;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
+using Private.Infrastructure;
 
 using ICommand = System.Windows.Input.ICommand;
-using EventHandler = System.EventHandler;
 
 namespace UITests.Shared.Windows_Devices
 {
-	[SampleControlInfo("Windows.Devices", "Geolocator", description: "Demonstrates use of Windows.Devices.Geolocation.Geolocator", viewModelType: typeof(GeolocatorTestsViewModel))]
+	[SampleControlInfo("Windows.Devices", "Geolocator", description: "Demonstrates use of Windows.Devices.Geolocation.Geolocator", viewModelType: typeof(GeolocatorTestsViewModel), ignoreInSnapshotTests: true)]
 	public sealed partial class GeolocatorTests : UserControl
 	{
 		public GeolocatorTests()
@@ -25,7 +24,7 @@ namespace UITests.Shared.Windows_Devices
 
 		internal GeolocatorTestsViewModel ViewModel { get; private set; }
 
-		private void GeolocatorTests_DataContextChanged(DependencyObject sender, Windows.UI.Xaml.DataContextChangedEventArgs args)
+		private void GeolocatorTests_DataContextChanged(DependencyObject sender, Microsoft.UI.Xaml.DataContextChangedEventArgs args)
 		{
 			ViewModel = args.NewValue as GeolocatorTestsViewModel;
 		}
@@ -44,11 +43,17 @@ namespace UITests.Shared.Windows_Devices
 		private bool _statusChangedAttached;
 		private string _error = "";
 
-		public GeolocatorTestsViewModel(CoreDispatcher dispatcher) : base(dispatcher)
+		public GeolocatorTestsViewModel(Private.Infrastructure.UnitTestDispatcherCompat dispatcher) : base(dispatcher)
 		{
 			PositionStatus = _geolocator.LocationStatus;
 			timeout = TimeSpan.FromSeconds(10);
 			maximumAge = TimeSpan.FromSeconds(15);
+
+			Disposables.Add(Disposable.Create(() =>
+			{
+				_geolocator.PositionChanged -= Geolocator_PositionChanged;
+				_geolocator.StatusChanged -= Geolocator_StatusChanged;
+			}));
 		}
 
 		public Geoposition Geoposition
@@ -100,7 +105,7 @@ namespace UITests.Shared.Windows_Devices
 			set => _geolocator.DesiredAccuracyInMeters = value;
 		}
 
-		
+
 
 		public PositionStatus PositionStatus
 		{
@@ -129,27 +134,26 @@ namespace UITests.Shared.Windows_Devices
 		public ICommand GetGeopositionCommand =>
 			GetOrCreateCommand(GetGeoposition);
 
-
-		internal Command AttachPositionChangedCommand => new Command((p) =>
+		public Command AttachPositionChangedCommand => GetOrCreateCommand(() =>
 		{
 			_geolocator.PositionChanged += Geolocator_PositionChanged;
 			PositionChangedAttached = true;
 		});
 
-		internal Command DetachPositionChangedCommand => new Command((p) =>
+		public Command DetachPositionChangedCommand => GetOrCreateCommand(() =>
 		{
 			_geolocator.PositionChanged -= Geolocator_PositionChanged;
 			PositionChangedAttached = false;
 		});
 
 
-		internal Command AttachStatusChangedCommand => new Command((p) =>
+		public Command AttachStatusChangedCommand => GetOrCreateCommand(() =>
 		{
 			_geolocator.StatusChanged += Geolocator_StatusChanged;
 			StatusChangedAttached = true;
 		});
 
-		public Command DetachStatusChangedCommand => new Command((p) =>
+		public Command DetachStatusChangedCommand => GetOrCreateCommand(() =>
 		{
 			_geolocator.StatusChanged -= Geolocator_StatusChanged;
 			StatusChangedAttached = false;
@@ -165,8 +169,10 @@ namespace UITests.Shared.Windows_Devices
 			}
 		}
 
-		private async void RequestAccess() =>
+		private async void RequestAccess()
+		{
 			GeolocationAccessStatus = await Geolocator.RequestAccessAsync();
+		}
 
 		private async void GetGeoposition()
 		{
@@ -179,7 +185,7 @@ namespace UITests.Shared.Windows_Devices
 
 				Geoposition = await _geolocator.GetGeopositionAsync(maximumAge1, timeout1);
 
-				if(Geoposition.Coordinate.Timestamp < DateTimeOffset.Now - maximumAge)
+				if (Geoposition.Coordinate.Timestamp < DateTimeOffset.Now - maximumAge)
 				{
 					Error = "Implementation error: Position data is too old";
 				}
@@ -199,7 +205,7 @@ namespace UITests.Shared.Windows_Devices
 
 		private async void Geolocator_StatusChanged(Geolocator sender, StatusChangedEventArgs args)
 		{
-			await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+			await Dispatcher.RunAsync(UnitTestDispatcherCompat.Priority.Normal, () =>
 			{
 				PositionStatus = args.Status;
 			});
@@ -207,7 +213,7 @@ namespace UITests.Shared.Windows_Devices
 
 		private async void Geolocator_PositionChanged(Geolocator sender, PositionChangedEventArgs args)
 		{
-			await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+			await Dispatcher.RunAsync(UnitTestDispatcherCompat.Priority.Normal, () =>
 			{
 				TrackedGeoposition = args.Position;
 			});

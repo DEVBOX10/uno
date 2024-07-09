@@ -1,13 +1,6 @@
 ﻿#if XAMARIN || __WASM__
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Navigation;
-using _WebView = Windows.UI.Xaml.Controls.WebView;
+using Microsoft.UI.Xaml;
+using _WebView = Microsoft.UI.Xaml.Controls.WebView;
 
 namespace Uno.UI.Samples.Behaviors
 {
@@ -19,7 +12,7 @@ namespace Uno.UI.Samples.Behaviors
 		/// <summary>
 		/// Register attached source string
 		/// </summary>
-		public static DependencyProperty SourceStringProperty { get ; } =
+		public static DependencyProperty SourceStringProperty { get; } =
 			DependencyProperty.RegisterAttached("SourceString", typeof(string), typeof(WebViewBehavior), new PropertyMetadata(string.Empty, OnSourceStringChanged));
 
 		/// <summary>
@@ -44,7 +37,7 @@ namespace Uno.UI.Samples.Behaviors
 
 		private static void OnSourceStringChanged(object d, DependencyPropertyChangedEventArgs e)
 		{
-			(d as _WebView).NavigateToString(e.NewValue.ToString());
+			(d as _WebView)?.NavigateToString(e.NewValue?.ToString() ?? string.Empty);
 		}
 	}
 }

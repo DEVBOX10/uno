@@ -1,10 +1,10 @@
-using UITests.Shared.Windows_UI_Xaml_Controls.GridTestsControl;
+﻿using UITests.Shared.Windows_UI_Xaml_Controls.GridTestsControl;
 using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Uno.UI.Samples.Content.UITests.GridTestsControl
 {
-	[SampleControlInfo("GridTestsControl", "GridDataboundGridColumn", typeof(GridTestsViewModel), ignoreInSnapshotTests: true)]
+	[SampleControlInfo("Grid", "GridDataboundGridColumn", typeof(GridTestsViewModel), ignoreInSnapshotTests: true)]
 	public sealed partial class GridDataboundGridColumn : UserControl
 	{
 		public GridDataboundGridColumn()

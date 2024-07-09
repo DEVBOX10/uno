@@ -1,4 +1,3 @@
-#if __ANDROID__
 #nullable enable
 using System;
 using Android.App;
@@ -17,7 +16,7 @@ namespace Windows.Graphics.Display
 		private DisplayMetricsCache _cachedDisplayMetrics;
 		private SurfaceOrientation _cachedRotation;
 
-		private static DisplayInformation InternalGetForCurrentView()
+		private static DisplayInformation GetForCurrentViewAndroid()
 		{
 			if (_instance == null)
 			{
@@ -50,9 +49,9 @@ namespace Windows.Graphics.Display
 
 		public DisplayOrientations CurrentOrientation => GetCurrentOrientation();
 
-		
+
 		/// <summary>
-		/// Gets the native orientation of the display monitor, 
+		/// Gets the native orientation of the display monitor,
 		///  which is typically the orientation where the buttons
 		///  on the device match the orientation of the monitor.
 		/// </summary>
@@ -65,8 +64,7 @@ namespace Windows.Graphics.Display
 		public uint ScreenWidthInRawPixels
 			=> (uint)_cachedDisplayMetrics.WidthPixels;
 
-		public double RawPixelsPerViewPixel
-			=> 1.0f * (int)_cachedDisplayMetrics.DensityDpi / (int)DisplayMetricsDensity.Default;
+		public double RawPixelsPerViewPixel => _cachedDisplayMetrics.Density;
 
 		public float LogicalDpi
 			// DisplayMetrics of 1.0 matches 100%, or UWP's default 96.0 DPI.
@@ -80,7 +78,7 @@ namespace Windows.Graphics.Display
 		/// Gets the raw dots per inch (DPI) along the x axis of the display monitor.
 		/// </summary>
 		/// <remarks>
-		/// As per <see href="https://docs.microsoft.com/en-us/uwp/api/windows.graphics.display.displayinformation.rawdpix#remarks">Docs</see> 
+		/// As per <see href="https://docs.microsoft.com/en-us/uwp/api/windows.graphics.display.displayinformation.rawdpix#remarks">Docs</see>
 		/// defaults to 0 if not set
 		/// </remarks>
 		public float RawDpiX
@@ -90,7 +88,7 @@ namespace Windows.Graphics.Display
 		/// Gets the raw dots per inch (DPI) along the y axis of the display monitor.
 		/// </summary>
 		/// <remarks>
-		/// As per <see href="https://docs.microsoft.com/en-us/uwp/api/windows.graphics.display.displayinformation.rawdpiy#remarks">Docs</see> 
+		/// As per <see href="https://docs.microsoft.com/en-us/uwp/api/windows.graphics.display.displayinformation.rawdpiy#remarks">Docs</see>
 		/// defaults to 0 if not set
 		/// </remarks>
 		public float RawDpiY
@@ -100,7 +98,7 @@ namespace Windows.Graphics.Display
 		/// Diagonal size of the display in inches.
 		/// </summary>
 		/// <remarks>
-		/// As per <see href="https://docs.microsoft.com/en-us/uwp/api/windows.graphics.display.displayinformation.diagonalsizeininches#property-value">Docs</see> 
+		/// As per <see href="https://docs.microsoft.com/en-us/uwp/api/windows.graphics.display.displayinformation.diagonalsizeininches#property-value">Docs</see>
 		/// defaults to null if not set
 		/// </remarks>
 		public double? DiagonalSizeInInches
@@ -212,9 +210,9 @@ namespace Windows.Graphics.Display
 
 		private IWindowManager CreateWindowManager()
 		{
-			if(ContextHelper.Current.GetSystemService(Context.WindowService) is { } windowService)
+			if (ContextHelper.Current.GetSystemService(Context.WindowService) is { } windowService)
 			{
-				return windowService.JavaCast<IWindowManager>();;
+				return windowService.JavaCast<IWindowManager>();
 			}
 
 			throw new InvalidOperationException("Failed to get the system Window Service");
@@ -238,11 +236,20 @@ namespace Windows.Graphics.Display
 			using var windowManager = CreateWindowManager();
 			if (windowManager.DefaultDisplay is { } defaultDisplay)
 			{
-#pragma warning disable CS0618 // GetRealMetrics is obsolete in API 31
-				defaultDisplay.GetRealMetrics(displayMetrics);
-#pragma warning restore CS0618 // GetRealMetrics is obsolete in API 31
 
-				_cachedDisplayMetrics = new DisplayMetricsCache(displayMetrics);
+				if (Android.OS.Build.VERSION.SdkInt <= Android.OS.BuildVersionCodes.R)
+				{
+#pragma warning disable CS0618 // GetRealMetrics is obsolete in API 31
+#pragma warning disable CA1422 // Validate platform compatibility
+					defaultDisplay.GetRealMetrics(displayMetrics);
+#pragma warning restore CA1422 // Validate platform compatibility
+#pragma warning restore CS0618 // GetRealMetrics is obsolete in API 31
+					_cachedDisplayMetrics = new DisplayMetricsCache(displayMetrics);
+				}
+				else
+				{
+					_cachedDisplayMetrics = new DisplayMetricsCache(windowManager.CurrentWindowMetrics, Android.Content.Res.Resources.System?.Configuration);
+				}
 				_cachedRotation = windowManager.DefaultDisplay.Rotation;
 			}
 			else
@@ -264,6 +271,20 @@ namespace Windows.Graphics.Display
 				Ydpi = displayMetric.Ydpi;
 			}
 
+			public DisplayMetricsCache(WindowMetrics windowMetric, Android.Content.Res.Configuration? configuration)
+			{
+				HeightPixels = windowMetric.Bounds.Height();
+				WidthPixels = windowMetric.Bounds.Width();
+				if (configuration != null)
+				{
+					Xdpi = configuration.DensityDpi;
+					Ydpi = configuration.DensityDpi;
+					Density = configuration.DensityDpi / (float)DisplayMetricsDensity.Default;
+					ScaledDensity = Density;
+					DensityDpi = ConvertIntToDensityEnum(configuration.DensityDpi);
+				}
+			}
+
 			public float Density { get; }
 
 			public DisplayMetricsDensity DensityDpi { get; }
@@ -277,7 +298,42 @@ namespace Windows.Graphics.Display
 			public float Xdpi { get; }
 
 			public float Ydpi { get; }
+
+			private DisplayMetricsDensity ConvertIntToDensityEnum(int DPI)
+			{
+				return DPI switch
+				{
+					120 => DisplayMetricsDensity.Low,
+					160 => DisplayMetricsDensity.Medium,
+					240 => DisplayMetricsDensity.High,
+					320 => DisplayMetricsDensity.Xhigh,
+					480 => DisplayMetricsDensity.Xxhigh,
+					640 => DisplayMetricsDensity.Xxxhigh,
+
+					213 => DisplayMetricsDensity.Tv,
+
+					< 120 => DisplayMetricsDensity.Low,
+					< 160 => DisplayMetricsDensity.D140,
+					< 180 => DisplayMetricsDensity.D180,
+					< 200 => DisplayMetricsDensity.D200,
+					< 220 => DisplayMetricsDensity.D220,
+					< 260 => DisplayMetricsDensity.D220,
+					< 280 => DisplayMetricsDensity.D280,
+
+					< 300 => DisplayMetricsDensity.D300,
+					< 340 => DisplayMetricsDensity.D340,
+					< 360 => DisplayMetricsDensity.D360,
+					< 400 => DisplayMetricsDensity.D400,
+					< 420 => DisplayMetricsDensity.D420,
+					< 440 => DisplayMetricsDensity.D440,
+					< 450 => DisplayMetricsDensity.D450,
+					< 560 => DisplayMetricsDensity.D560,
+
+					_ => DisplayMetricsDensity.D600
+				};
+
+			}
+
 		}
 	}
 }
-#endif

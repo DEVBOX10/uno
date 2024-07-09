@@ -1,5 +1,4 @@
-#if __MACOS__
-#nullable enable
+﻿#nullable enable
 
 using System;
 using System.Numerics;
@@ -10,10 +9,13 @@ using Foundation;
 using Uno.Extensions;
 using Uno.Foundation.Logging;
 using Windows.UI.Core;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Input;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Input;
 using Point = Windows.Foundation.Point;
-using UIElement = Windows.UI.Xaml.UIElement;
+using UIElement = Microsoft.UI.Xaml.UIElement;
+using ObjCRuntime;
+using NSDraggingInfo = AppKit.INSDraggingInfo;
+using Uno.UI.Xaml.Controls;
 
 namespace Windows.ApplicationModel.DataTransfer.DragDrop.Core
 {
@@ -26,7 +28,7 @@ namespace Windows.ApplicationModel.DataTransfer.DragDrop.Core
 		public MacOSDragDropExtension(DragDropManager owner)
 		{
 			_manager = owner;
-			_window = (Uno.UI.Controls.Window)CoreWindow.GetForCurrentThread()!.NativeWindow;
+			_window = (Uno.UI.Controls.Window)NativeWindowWrapper.Instance.NativeWindow;
 
 			_window.DraggingEnteredAction = OnDraggingEnteredEvent;
 			_window.DraggingUpdatedAction = OnDraggingUpdated;
@@ -59,7 +61,7 @@ namespace Windows.ApplicationModel.DataTransfer.DragDrop.Core
 
 		private void OnDraggingExited(NSDraggingInfo draggingInfo)
 		{
-			_ = _manager.ProcessAborted(new DragEventSource(_fakePointerId, draggingInfo, _window));
+			_ = _manager.ProcessAborted(_fakePointerId);
 			return;
 		}
 
@@ -75,7 +77,7 @@ namespace Windows.ApplicationModel.DataTransfer.DragDrop.Core
 		}
 
 		public void StartNativeDrag(CoreDragInfo info)
-			=> CoreDispatcher.Main.RunAsync(CoreDispatcherPriority.High, async () =>
+			=> _ = CoreDispatcher.Main.RunAsync(CoreDispatcherPriority.High, async () =>
 			{
 				try
 				{
@@ -255,7 +257,7 @@ namespace Windows.ApplicationModel.DataTransfer.DragDrop.Core
 		{
 			private static long _nextFrameId;
 			private readonly NSDraggingInfo? _macOSDraggingInfo;
-			private	readonly NSWindow _window;
+			private readonly NSWindow _window;
 
 			public DragEventSource(long pointerId, NSWindow window)
 			{
@@ -322,5 +324,3 @@ namespace Windows.ApplicationModel.DataTransfer.DragDrop.Core
 		}
 	}
 }
-
-#endif

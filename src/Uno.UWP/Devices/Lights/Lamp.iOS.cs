@@ -1,5 +1,4 @@
-﻿#if __IOS__
-using System;
+﻿using System;
 using AVFoundation;
 
 namespace Windows.Devices.Lights
@@ -88,7 +87,7 @@ namespace Windows.Devices.Lights
 
 		private static Lamp TryCreateInstance()
 		{
-			var captureDevice = AVCaptureDevice.GetDefaultDevice(AVMediaType.Video);
+			var captureDevice = AVCaptureDevice.GetDefaultDevice(AVMediaTypes.Video.GetConstant());
 
 			var lampAvailable =
 				captureDevice != null &&
@@ -109,4 +108,3 @@ namespace Windows.Devices.Lights
 		}
 	}
 }
-#endif

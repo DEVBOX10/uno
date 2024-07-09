@@ -1,12 +1,12 @@
 ﻿using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 // The User Control item template is documented at https://go.microsoft.com/fwlink/?LinkId=234236
 
 namespace Uno.UI.Samples.Content.UITests.TextBlockControl
 {
-	[SampleControlInfo("TextBlockControl", "ForcedTextWithCarriageReturn_MaxLines_Two")]
+	[SampleControlInfo("TextBlock", "ForcedTextWithCarriageReturn_MaxLines_Two")]
 	public sealed partial class ForcedTextWithCarriageReturn_MaxLines_Two : UserControl
 	{
 		public ForcedTextWithCarriageReturn_MaxLines_Two()

@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace Windows.UI.Xaml.Media.Animation
+namespace Microsoft.UI.Xaml.Media.Animation
 {
 	/// <summary>
 	/// Animates a property using Xaml property setters.
@@ -26,12 +26,12 @@ namespace Windows.UI.Xaml.Media.Animation
 		private NSTimer _timer;
 #endif
 
-		private double _startTime = 0;
+		private double _startTime;
 
 		private bool _isDisposed;
 		private bool _isAttachedToLooper;
 
-		protected IEasingFunction _easingFunction = null;
+		protected IEasingFunction _easingFunction;
 
 		public void Start()
 		{
@@ -194,10 +194,10 @@ namespace Windows.UI.Xaml.Media.Animation
 		{
 			if (_isAttachedToLooper)
 			{
-#if __IOS__
 				//Detach the _displayLink to the MainLoop (uiThread).
-				_displayLink?.RemoveFromRunLoop(NSRunLoop.Main, NSRunLoop.NSDefaultRunLoopMode);//detaches from the UI thread
-				_displayLink?.RemoveFromRunLoop(NSRunLoop.Main, NSRunLoop.UITrackingRunLoopMode);
+#if __IOS__
+				_displayLink?.RemoveFromRunLoop(NSRunLoop.Main, NSRunLoopMode.Default);//detaches from the UI thread
+				_displayLink?.RemoveFromRunLoop(NSRunLoop.Main, NSRunLoopMode.UITracking);
 				_displayLink = null;
 #endif
 				_isAttachedToLooper = false;

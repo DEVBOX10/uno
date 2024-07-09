@@ -1,8 +1,8 @@
 ﻿using Uno.Extensions;
 using Uno.UI.DataBinding;
-using Windows.UI.Xaml;
+using Microsoft.UI.Xaml;
 using Uno.UI.Extensions;
-using Windows.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Data;
 using System;
 using System.Collections.Generic;
 using Uno.Disposables;
@@ -14,15 +14,12 @@ using UIKit;
 using CoreGraphics;
 using Uno.Foundation.Logging;
 using Windows.Foundation;
-using Windows.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Uno.UI;
 using Uno.UI.UI.Xaml.Controls.Layouter;
 using Uno.UI.Xaml.Input;
 using DraggingEventArgs = UIKit.DraggingEventArgs;
-
-#if NET6_0_OR_GREATER
 using ObjCRuntime;
-#endif
 
 #if HAS_UNO_WINUI
 using Microsoft.UI.Input;
@@ -31,7 +28,7 @@ using Windows.UI.Input;
 using Windows.Devices.Input;
 #endif
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	partial class NativeScrollContentPresenter : UIScrollView, DependencyObject, ISetLayoutSlots
 	{
@@ -43,6 +40,11 @@ namespace Windows.UI.Xaml.Controls
 		private bool _isInAnimatedScroll;
 
 		CGPoint IUIScrollView.UpperScrollLimit => UpperScrollLimit;
+
+		CGPoint IUIScrollView.ContentOffset => ContentOffset;
+
+		nfloat IUIScrollView.ZoomScale => ZoomScale;
+
 		internal CGPoint UpperScrollLimit
 		{
 			get
@@ -158,12 +160,42 @@ namespace Windows.UI.Xaml.Controls
 			}
 		}
 
+		void IUIScrollView.ApplyZoomScale(nfloat scale, bool animated)
+		{
+			if (!animated)
+			{
+				ZoomScale = scale;
+			}
+			else
+			{
+				base.SetZoomScale(scale, true);
+			}
+		}
+
+		void IUIScrollView.ApplyContentOffset(CGPoint contentOffset, bool animated)
+		{
+			if (!animated)
+			{
+				ContentOffset = contentOffset;
+			}
+			else
+			{
+				base.SetContentOffset(contentOffset, true);
+			}
+		}
+
 		partial void OnContentChanged(UIView previousView, UIView newView)
 		{
 			// If Content is a view it may have already been set as Content somewhere else in certain scenarios
 			if (previousView?.Superview == this)
 			{
 				previousView.RemoveFromSuperview();
+			}
+
+			// Ensure we're working with an empty view, in case previously removed views were missed.
+			while (Subviews.Length > 0)
+			{
+				Subviews[0].RemoveFromSuperview();
 			}
 
 			if (newView != null)
@@ -212,28 +244,12 @@ namespace Windows.UI.Xaml.Controls
 		{
 			if (_content != null)
 			{
-				double horizontalMargin = 0;
-				double verticalMargin = 0;
-
-				if (_content is IFrameworkElement frameworkElement)
-				{
-					horizontalMargin = frameworkElement.Margin.Left + frameworkElement.Margin.Right;
-					verticalMargin = frameworkElement.Margin.Top + frameworkElement.Margin.Bottom;
-				}
-
 				size = AdjustSize(size);
 
 				var availableSizeForChild = size;
-				if (!(_content is IFrameworkElement))
-				{
-					// Apply margin if the content is native (otherwise it will apply it itself)
-					availableSizeForChild.Width -= (nfloat)horizontalMargin;
-					availableSizeForChild.Height -= (nfloat)verticalMargin;
-				}
 
+				//No need to add margin at this level. It's already taken care of during the Layouter measuring.
 				_measuredSize = _content.SizeThatFits(availableSizeForChild);
-				_measuredSize.Width += (nfloat)horizontalMargin;
-				_measuredSize.Height += (nfloat)verticalMargin;
 
 				// The dimensions are constrained to the size of the ScrollViewer, if available
 				// otherwise to the size of the child.
@@ -280,8 +296,8 @@ namespace Windows.UI.Xaml.Controls
 						_content.Frame = new CGRect(
 							GetAdjustedArrangeX(iFwElt, adjustedMeasure, (nfloat)contentMargin.Horizontal()),
 							GetAdjustedArrangeY(iFwElt, adjustedMeasure, (nfloat)contentMargin.Vertical()),
-							adjustedMeasure.Width,
-							adjustedMeasure.Height
+							Math.Max(0, adjustedMeasure.Width),
+							Math.Max(0, adjustedMeasure.Height)
 						);
 					}
 				}
@@ -509,7 +525,7 @@ namespace Windows.UI.Xaml.Controls
 				case ScrollBarVisibility.Auto:
 				case ScrollBarVisibility.Hidden:
 				case ScrollBarVisibility.Visible:
-					return nfloat.NaN;
+					return nfloat.PositiveInfinity;
 
 				default:
 				case ScrollBarVisibility.Disabled:
@@ -539,8 +555,12 @@ namespace Windows.UI.Xaml.Controls
 			// Like native dispatch on iOS, we do "implicit captures" the target.
 			if (this.GetParent() is UIElement parent)
 			{
+				// canBubbleNatively: true => We let native bubbling occur properly as it's never swallowed by system
+				//							  but blocking it would be breaking in lot of aspects
+				//							  (e.g. it would prevent all sub-sequent events for the given pointer).
+
 				_touchTarget = parent;
-				_touchTarget.TouchesBegan(touches, evt);
+				_touchTarget.TouchesBegan(touches, evt, canBubbleNatively: true);
 			}
 		}
 
@@ -549,7 +569,8 @@ namespace Windows.UI.Xaml.Controls
 		{
 			base.TouchesMoved(touches, evt);
 
-			_touchTarget?.TouchesMoved(touches, evt);
+			// canBubbleNatively: false => The system might silently swallow pointers after a few moves so we prefer to bubble in managed.
+			_touchTarget?.TouchesMoved(touches, evt, canBubbleNatively: false);
 		}
 
 		/// <inheritdoc />
@@ -557,7 +578,8 @@ namespace Windows.UI.Xaml.Controls
 		{
 			base.TouchesEnded(touches, evt);
 
-			_touchTarget?.TouchesEnded(touches, evt);
+			// canBubbleNatively: false => system might silently swallow pointer after few moves so we prefer to bubble in managed.
+			_touchTarget?.TouchesEnded(touches, evt, canBubbleNatively: false);
 			_touchTarget = null;
 		}
 
@@ -566,7 +588,8 @@ namespace Windows.UI.Xaml.Controls
 		{
 			base.TouchesCancelled(touches, evt);
 
-			_touchTarget?.TouchesCancelled(touches, evt);
+			// canBubbleNatively: false => system might silently swallow pointer after few moves so we prefer to bubble in managed.
+			_touchTarget?.TouchesCancelled(touches, evt, canBubbleNatively: false);
 			_touchTarget = null;
 		}
 

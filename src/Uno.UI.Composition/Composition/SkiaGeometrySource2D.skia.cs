@@ -4,9 +4,9 @@ using SkiaSharp;
 using System;
 using Windows.Graphics;
 
-namespace Windows.UI.Composition
+namespace Microsoft.UI.Composition
 {
-	public class SkiaGeometrySource2D : IGeometrySource2D
+	internal class SkiaGeometrySource2D : IGeometrySource2D
 	{
 		public SkiaGeometrySource2D()
 		{
@@ -18,6 +18,6 @@ namespace Windows.UI.Composition
 			Geometry = source ?? throw new ArgumentNullException(nameof(source));
 		}
 
-		public SKPath Geometry { get; }
+		public SKPath Geometry { get; set; }
 	}
 }

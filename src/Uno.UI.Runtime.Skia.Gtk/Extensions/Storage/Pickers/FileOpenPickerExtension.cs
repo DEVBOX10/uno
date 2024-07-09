@@ -6,9 +6,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Uno.UI.Runtime.Skia;
+using Uno.UI.Runtime.Skia.Gtk;
 using Windows.Storage;
 using Windows.Storage.Pickers;
+using Uno.UI.Helpers;
 
 namespace Uno.Extensions.Storage.Pickers
 {
@@ -41,9 +42,9 @@ namespace Uno.Extensions.Storage.Pickers
 				commitText = _picker.CommitButtonText;
 			}
 
-			FileChooserDialog dialog = new FileChooserDialog(
+			using FileChooserDialog dialog = new FileChooserDialog(
 				"Open",
-				GtkHost.Window,
+				GtkHost.Current!.InitialWindow,
 				FileChooserAction.Open,
 				"Cancel", ResponseType.Cancel,
 				commitText, ResponseType.Accept);
@@ -77,7 +78,6 @@ namespace Uno.Extensions.Storage.Pickers
 				}
 			}
 
-			dialog.Destroy();
 			return files.ToArray();
 		}
 	}

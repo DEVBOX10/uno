@@ -103,7 +103,6 @@ namespace SamplesApp.UITests.Windows_UI_Xaml_Input
 
 		[Test]
 		[AutoRetry]
-		[ActivePlatforms(Platform.Android, Platform.iOS)] // Failing on WASM: https://github.com/unoplatform/uno/issues/2905
 		public void TestListViewReleasedOut()
 		{
 			Run("UITests.Shared.Windows_UI_Input.VisualStatesTests.ListViewItem");
@@ -120,18 +119,18 @@ namespace SamplesApp.UITests.Windows_UI_Xaml_Input
 
 		[Test]
 		[AutoRetry]
-		[ActivePlatforms(Platform.Browser)] // For mouse, focus should be set immediately
+		[Ignore("Test is flaky on WASM")] // WASM-only test, but very flaky #9080
 		public void TestTextBoxReleaseOutFocused()
 		{
 			Run("UITests.Shared.Windows_UI_Input.VisualStatesTests.TextBox_VisualStates");
 
-			// Note: We don not validateFinalStateScreenShot as we are expecting to finish "focused" so may have the flashing cursor.
+			// Note: We do not validateFinalStateScreenShot as we are expecting to finish "focused" so may have the flashing cursor.
 			TestVisualTests("MyTextBox", ReleaseOut, validateFinalStateScreenShot: false, "CommonStates.PointerOver", "CommonStates.Focused");
 		}
 
 		[Test]
 		[AutoRetry]
-		[ActivePlatforms(/*Platform.Android, */Platform.iOS)] // For touch, focus should be set only when released outside of TextBox
+		[ActivePlatforms(/*Platform.Android, */Platform.iOS)] // For touch, focus should be set only when released over the TextBox
 		public void TestTextBoxReleaseOutUnfocused()
 		{
 			Run("UITests.Shared.Windows_UI_Input.VisualStatesTests.TextBox_VisualStates");
@@ -141,6 +140,7 @@ namespace SamplesApp.UITests.Windows_UI_Xaml_Input
 
 		[Test]
 		[AutoRetry]
+		[ActivePlatforms(Platform.iOS, Platform.Android)] // Test is very flaky on WASM #9080
 		public void TestTextBoxTap()
 		{
 			Run("UITests.Shared.Windows_UI_Input.VisualStatesTests.TextBox_VisualStates");
@@ -173,7 +173,7 @@ namespace SamplesApp.UITests.Windows_UI_Xaml_Input
 			var actualStates = _app
 				.Marked("VisualStatesLog")
 				.GetDependencyPropertyValue<string>("Text")
-				.Split(new[] {Environment.NewLine}, StringSplitOptions.RemoveEmptyEntries)
+				.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
 				.Where(line => line.StartsWith(targetName))
 				.Select(line => line.Trim().Substring(targetName.Length + 1))
 				.ToArray();

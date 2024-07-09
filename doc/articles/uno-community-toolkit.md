@@ -1,192 +1,52 @@
+---
+uid: Uno.Development.CommunityToolkit
+---
+
 # How to use Windows Community Toolkit
 
-The [Windows Community Toolkit](https://docs.microsoft.com/en-us/windows/communitytoolkit/) is a collection of helper functions, custom controls, and app services. It simplifies and demonstrates common developer patterns when building experiences for Windows 10.
+The [Windows Community Toolkit](https://learn.microsoft.com/windows/communitytoolkit/) is a collection of helper functions, custom controls, and app services. It simplifies and demonstrates common developer patterns when building experiences for Windows.
 
-This tutorial will walk through adding and implementing the DataGrid control but the steps can be followed for any of the Uno ported Windows Community Toolkit controls.
+Depending on the version of the Windows Community Toolkit that you want to use, these tutorials below will walk you through adding and implementing:
 
-> [!TIP]
-> The complete source code that goes along with this guide is available in the [unoplatform/Uno.Samples](https://github.com/unoplatform/Uno.Samples) GitHub repository - [Uno Windows Community Toolkit Sample](https://github.com/unoplatform/Uno.Samples/tree/master/UI/UnoWCTDataGridSample)
+- **[For WCT version 8.x](xref:Uno.Development.CommunityToolkit.v8):** The `SettingsCard` control, but the same steps can be followed for **other\*** Windows Community Toolkit components supported out of the box.
+- **[For WCT version 7.x](xref:Uno.Development.CommunityToolkit.v7):** The `DataGrid` control, but the same steps can be followed for **other\*** Uno ported Windows Community Toolkit components.
 
-## Prerequisites
+**\* See the [non-Windows platform compatibility](#non-windows-platform-compatibility) section below for more details.**
 
-# [Visual Studio for Windows](#tab/tabid-vswin)
+> [!IMPORTANT]
+> **Here is the [Migration Guide from v7 to v8 for Windows Community Toolkit](https://github.com/CommunityToolkit/Windows/wiki/Migration-Guide-from-v7-to-v8) for additional information on what changed lately between these versions.**
+>
+> For some controls (`DataGrid`, `Carousel`, ect...) you will need to use **version 7.x** for them as they are no longer available in the latest 8.x version of Windows Community Toolkit. The complete list of changes is available in the [migration guide](https://github.com/CommunityToolkit/Windows/wiki/Migration-Guide-from-v7-to-v8).
+>
+> For additional information, here are the releases notes for Windows Community Toolkit:
+>
+> - [Release notes for version 7.x](https://github.com/CommunityToolkit/WindowsCommunityToolkit/releases)
+> - [Release notes for version 8.x](https://github.com/CommunityToolkit/Windows/releases)
 
-* [Visual Studio 2019 16.3 or later](http://www.visualstudio.com/downloads/)
-  * **Universal Windows Platform** workload installed
-  * **Mobile Development with .NET (Xamarin)** workload installed
-  * **ASP**.**NET and web** workload installed
-  * [Uno Platform Extension](https://marketplace.visualstudio.com/items?itemName=nventivecorp.uno-platform-addin) installed
+## Non-Windows platform compatibility
 
-# [VS Code](#tab/tabid-vscode)
+### Overview
 
-* [**Visual Studio Code**](https://code.visualstudio.com/)
+While all Windows Community Toolkit packages are supported for UWP and WinAppSDK, this is not the case for the other platforms Uno Platform supports.
 
-* [**Mono**](https://www.mono-project.com/download/stable/)
+### Unsupported Components
 
-* **.NET Core SDK**
-    * [.NET Core 3.1 SDK](https://dotnet.microsoft.com/download/dotnet-core/3.1) (**version 3.1.8 (SDK 3.1.402)** or later)
-    * [.NET Core 5.0 SDK](https://dotnet.microsoft.com/download/dotnet-core/5.0) (**version 5.0 (SDK 5.0.100)** or later)
+Some components, like [Media](https://github.com/CommunityToolkit/Windows/tree/main/components/Media/src), rely heavily on Composition APIs that are not yet supported by Uno Platform on all platforms. As a result, the Media package does not have the Uno-powered [MultiTargets](https://github.com/CommunityToolkit/Windows/blob/main/components/Media/src/MultiTarget.props) enabled, as the component would be non-functional out of the box.
 
-    > Use `dotnet --version` from the terminal to get the version installed.
+In such cases, the Windows Community Toolkit prefers to disable the package for Uno Platform rather than enable it and have it not work. To address these functional gaps, we encourage contributing to Uno Platform to bridge the gaps for the missing supported APIs or to the [Windows Community Toolkit](https://github.com/CommunityToolkit/Windows) by seeking or helping to build Uno-compatible alternatives.
 
-# [Visual Studio for Mac](#tab/tabid-vsmac)
+### Partial Support
 
-* [**Visual Studio for Mac 8.8**](https://visualstudio.microsoft.com/vs/mac/)
-* [**Xcode**](https://apps.apple.com/us/app/xcode/id497799835?mt=12) 10.0 or higher
-* An [**Apple ID**](https://support.apple.com/en-us/HT204316)
-* **.NET Core SDK**
-    * [.NET Core 3.1 SDK](https://dotnet.microsoft.com/download/dotnet-core/3.1) (**version 3.1.8 (SDK 3.1.402)** or later)
-    * [.NET Core 5.0 SDK](https://dotnet.microsoft.com/download/dotnet-core/5.0) (**version 5.0 (SDK 5.0.100)** or later)
-* [**GTK+3**](https://formulae.brew.sh/formula/gtk+3) for running the Skia/GTK projects
+In limited cases, WCT packages may have partial support for Uno Platform where the TargetFramework is enabled, but not all Toolkit code works out of the box. Currently, the only package in this scenario is Animations. It has a special FrameworkLayer abstraction that enables `AnimationBuilder` and `CustomAnimation` on Uno-powered MultiTargets but does not extend to `ImplicitAnimationSet` or Connected Animations.
+See [CommunityToolkit/Windows #319](https://github.com/CommunityToolkit/Windows/issues/319) for tracking.
 
-# [JetBrains Rider](#tab/tabid-rider)
+### Majority Support
 
-* [**Rider Version 2020.2+**](https://www.jetbrains.com/rider/download/)
-* [**Rider Xamarin Android Support Plugin**](https://plugins.jetbrains.com/plugin/12056-rider-xamarin-android-support/) (you may install it directly from Rider)
+The majority of controls are supported on all platforms by default.
+If you find a package that doesn't work as expected on Uno Platform, please open an [issue](https://github.com/unoplatform/uno/issues/new/choose) or [discussion](https://github.com/unoplatform/uno/discussions) to let us know.
 
-***
+## Troubleshooting
 
-<br>
+The features and support for Uno Platform and Windows Community Toolkit components are constantly evolving. Therefore, you may encounter some issues while building your application. We encourage you to report these [issues](https://github.com/unoplatform/uno/issues/new/choose) and engage in [discussions](https://github.com/unoplatform/uno/discussions) to help improve the platform.
 
-> [!Tip]
-> For a step-by-step guide to installing the prerequisites for your preferred IDE and environment, consult the [Get Started guide](get-started.md).
-
-## Package ids for Uno Platform
-
-Uno has ported the Windows Community Toolkit for use in Uno applications to allow for use on Windows,
-Android, iOS, macOS, and WebAssembly.
-
-The following packages are available:
-- [Uno.Microsoft.Toolkit](https://www.nuget.org/packages/Uno.Microsoft.Toolkit )
-- [Uno.Microsoft.Toolkit.Parsers](https://www.nuget.org/packages/Uno.Microsoft.Toolkit.Parsers)
-- [Uno.Microsoft.Toolkit.Services](https://www.nuget.org/packages/Uno.Microsoft.Toolkit.Services)
-- [Uno.Microsoft.Toolkit.UWP](https://www.nuget.org/packages/Uno.Microsoft.Toolkit.UWP)
-- [Uno.Microsoft.Toolkit.Uwp.Notifications](https://www.nuget.org/packages/Uno.Microsoft.Toolkit.Uwp.Notifications)
-- [Uno.Microsoft.Toolkit.Uwp.Services](https://www.nuget.org/packages/Uno.Microsoft.Toolkit.Uwp.Services)
-- [Uno.Microsoft.Toolkit.Uwp.UI.Controls.DataGrid](https://www.nuget.org/packages/Uno.Microsoft.Toolkit.UWP.UI.DataGrid)
-- [Uno.Microsoft.Toolkit.Uwp.UI](https://www.nuget.org/packages/Uno.Microsoft.Toolkit.UWP.UI)
-- [Uno.Microsoft.Toolkit.Uwp.UI.Animations](https://www.nuget.org/packages/Uno.Microsoft.Toolkit.Uwp.UI.Animations)
-- [Uno.Microsoft.Toolkit.Uwp.UI.Controls](https://www.nuget.org/packages/Uno.Microsoft.Toolkit.Uwp.UI.Controls)
-- [Uno.Microsoft.Toolkit.Uwp.UI.Controls.Graph](https://www.nuget.org/packages/Uno.Microsoft.Toolkit.UWP.UI.Controls.Graph)
-- [Uno.Microsoft.Toolkit.Uwp.Connectivity](https://www.nuget.org/packages/Uno.Microsoft.Toolkit.Uwp.Connectivity)
-
-These package ids are for Uno (ie non-Windows) projects. For UWP and WinUI 3 projects, you should use the equivalent package ids published by Microsoft (`Microsoft.Toolkit`, `Microsoft.Toolkit.Parsers` etc). 
-
-## Task 1 - Add Windows Community Toolkit to Uno Projects
-  
-  
-1. Install Nuget package for targeted control  
- ![datagrid-nuget](Assets/datagrid-nuget.JPG)  
-
-**Note:** Be aware of which versions of Uno.UI are compatible with the Nuget package of each control.  
-      If using version `3.0.0` or higher of `Uno.UI`, use version `6.1.0` or higher of `DataGrid` Nuget package.
-
-**Note:** For UWP and WinUI 3 projects, you should use the packages published by Microsoft that are **not** prefixed with `Uno.*`. 
-      
-
-2. Add a reference to the UWP UI Controls 
-
-   In XAML:  
-    ```xmlns:controls="using:Microsoft.Toolkit.Uwp.UI.Controls"```  
-  
-   In C#:  
-    ```using Microsoft.Toolkit.Uwp;```
-
-3. Implement the control.
-
-## Task 2 - Add the DataGrid Control 
-
-This control will create an easily organized grid that will allow you to create flexible columns and rows.
-
-1. Begin by adding the control using the syntax below. Change the `x:Name` to the name of your DataGrid.  
-```<controls:DataGrid x:Name="dataGrid"></controls:DataGrid>```
-
-2. Add columns. Similar to how you would configure columns for a XAML `Grid` layout, you can add column definitions within your `DataGrid` control:
-
-    ```xml
-    <controls:DataGrid.Columns>
-        <controls:DataGridTextColumn Header="Rank"/>
-        <controls:DataGridComboBoxColumn Header="Mountain"/>
-    </controls:DataGrid.Columns>
-    ```
-
-    This will create two columns that can be adjusted by the user.
-    ![datagrid-column-gif](Assets/datagrid-basic-columns.gif)
-
-    Alternatively, you can use the `AutoGenerateColumns` attribute on your `DataGrid` control if you do not know how many columns your data will require.  
-
-    ``` xml
-    <controls:DataGrid x:Name="dataGrid" AutoGenerateColumns="True" />
-    ```
-
-3. Format your rows in the same way as your columns or use a `DataTemplate` added as an attribute on the `DataGrid` control:
-
-    ``` xml
-    <controls:DataGrid x:Name="dataGrid" RowDetailsTemplate="{StaticResource RowDetailsTemplate}">
-    ```
-
-4. Data can be added with data binding. First, add your `ItemsSource` as a property of your `DataGrid` control.  
-
-    ``` xml
-    <controls:DataGrid x:Name="dataGrid" ItemsSource="{x:Bind MyViewModel.Customers}" />  
-    ```
-
-    Then, set the binding on each column:
-
-    ``` xml
-    <controls:DataGrid.Columns>
-        <controls:DataGridTextColumn Header="Rank" Binding="{Binding Rank}" Tag="Rank" />
-        <controls:DataGridTextColumn Header="Mountain" Binding="{Binding Mountain}" Tag="Mountain" />
-    </controls:DataGrid.Columns>
-    ```  
-
-## Referencing the Windows Community Toolkit from a Cross-Targeted Library
-
-The Uno Platform build of the Windows Community toolkit is not needed when running on UWP, which is why you'll need to make some small changes to the project.
-
-Adding the Uno version of the community toolkit to a Uno Platform cross-targeted library can cause build errors like this one:
-
-```
-Controls\TextBox\Themes\Generic.xaml : Xaml Internal Error error WMC9999: 
-Type universe cannot resolve assembly: Uno.UI, Version=255.255.255.255, 
-Culture=neutral, PublicKeyToken=null.
-```
-
-To fix this, instead of adding the Uno version of the toolkit like the code below:
-
-```xml
-<ItemGroup>
-  <PackageReference Include="Uno.Microsoft.Toolkit.Uwp.UI.Controls" Version="7.0.0" />
-</ItemGroup>
-```
-
-Add a conditional reference:
-
-```xml
-<ItemGroup Condition="'$(TargetFramework)' == 'uap10.0.17763'">
-  <PackageReference Include="Microsoft.Toolkit.Uwp.UI.Controls" Version="7.0.0" />
-</ItemGroup>
-<ItemGroup Condition="'$(TargetFramework)' != 'uap10.0.17763'">
-  <PackageReference Include="Uno.Microsoft.Toolkit.Uwp.UI.Controls" Version="7.0.0" />
-</ItemGroup>
-```
-
-You may need to replace `uap10.0.17763` with the version defined in the `TargetFrameworks` node at the top of the csproj file.
-
-## See a working example with data
-
-![datagrid-full-sample](Assets/datagrid-full-sample.gif)
-
-A working sample complete with data is available on GitHub: [Uno Windows Community Toolkit Sample](https://github.com/unoplatform/Uno.Samples/tree/master/UI/UnoWCTDataGridSample)
-
-<br>
-
-***
-
-## Help! I'm having trouble
-
-> [!TIP]
-> If you ran into difficulties with any part of this guide, you can:
-> 
-> * Ask for help on our [Discord channel](https://www.platform.uno/discord) - #uno-platform
-> * Ask a question on [Stack Overflow](https://stackoverflow.com/questions/tagged/uno-platform) with the 'uno-platform' tag
+[!include[getting-help](includes/getting-help.md)]

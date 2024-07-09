@@ -1,10 +1,10 @@
 ﻿using Uno.UI.Samples.Controls;
 using Uno.UI.Samples.Presentation.SamplePages;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Uno.UI.Samples.Content.UITests.ButtonTestsControl
 {
-	[SampleControlInfo("Button", "RadioButton_With_GroupName", typeof(ButtonTestsViewModel))]
+	[SampleControlInfo("Buttons", "RadioButton_With_GroupName", typeof(ButtonTestsViewModel))]
 
 	public sealed partial class RadioButton_With_GroupName : UserControl
 	{

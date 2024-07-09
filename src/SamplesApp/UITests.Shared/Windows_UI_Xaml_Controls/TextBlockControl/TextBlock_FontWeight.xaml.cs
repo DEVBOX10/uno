@@ -1,9 +1,9 @@
 ﻿using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Uno.UI.Samples.Content.UITests.TextBlockControl
 {
-	[SampleControlInfo("TextBlockControl", "TextBlock_FontWeight")]
+	[SampleControlInfo("TextBlock", "TextBlock_FontWeight")]
 	public sealed partial class TextBlock_FontWeight : UserControl
 	{
 		public TextBlock_FontWeight()

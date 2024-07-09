@@ -12,11 +12,12 @@ using Uno.Extensions;
 using Uno.Extensions.Specialized;
 using Uno.Foundation.Logging;
 using Uno.UI;
-using _DragEventArgs = global::Windows.UI.Xaml.DragEventArgs;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Media.Imaging;
+using _DragEventArgs = global::Microsoft.UI.Xaml.DragEventArgs;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Media.Imaging;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	partial class ListViewBase
 	{
@@ -24,9 +25,14 @@ namespace Windows.UI.Xaml.Controls
 		private const string ReorderItemFormatId = DataPackage.UnoPrivateDataPrefix + "__list__view__base__source__item__";
 		private const string ReorderContainerFormatId = DataPackage.UnoPrivateDataPrefix + "__list__view__base__source__container__";
 		private const string DragItemsFormatId = DataPackage.UnoPrivateDataPrefix + "__list__view__base__items__";
+		internal bool IsCustomReorder;
 
 		public event DragItemsStartingEventHandler DragItemsStarting;
 		public event TypedEventHandler<ListViewBase, DragItemsCompletedEventArgs> DragItemsCompleted;
+
+#pragma warning disable CS0414 // Field currently used only on Android.
+		private bool _isProcessingReorder;
+#pragma warning restore CS0414
 
 		#region CanReorderItems (DP)
 		public static DependencyProperty CanReorderItemsProperty { get; } = DependencyProperty.Register(
@@ -90,11 +96,9 @@ namespace Windows.UI.Xaml.Controls
 			// Known issue: the ContainerClearedForItem might not be invoked properly for all items on some platforms.
 			// This patch is acceptable as event handlers are static (so they won't leak).
 			itemContainer.DragStarting -= OnItemContainerDragStarting;
-			itemContainer.DropCompleted -= OnItemContainerDragCompleted;
 
 			itemContainer.CanDrag = true;
 			itemContainer.DragStarting += OnItemContainerDragStarting;
-			itemContainer.DropCompleted += OnItemContainerDragCompleted;
 		}
 
 		private static void ClearContainerForDragDrop(UIElement itemContainer)
@@ -104,8 +108,8 @@ namespace Windows.UI.Xaml.Controls
 				return;
 			}
 
+			itemContainer.CanDrag = false;
 			itemContainer.DragStarting -= OnItemContainerDragStarting;
-			itemContainer.DropCompleted -= OnItemContainerDragCompleted;
 
 			itemContainer.DragEnter -= OnReorderDragUpdated;
 			itemContainer.DragOver -= OnReorderDragUpdated;
@@ -117,6 +121,9 @@ namespace Windows.UI.Xaml.Controls
 		{
 			if (ItemsControlFromItemContainer(sender) is ListViewBase that && that.CanDragItems)
 			{
+				// only raise DragItemsCompleted if DragItemsStarting was raised
+				sender.DropCompleted -= OnItemContainerDragCompleted;
+				sender.DropCompleted += OnItemContainerDragCompleted;
 				// The items contains all selected items ONLY if the draggedItem is selected.
 				var draggedItem = that.ItemFromContainer(sender);
 				var items =
@@ -147,16 +154,19 @@ namespace Windows.UI.Xaml.Controls
 					that.DragLeave -= OnReorderDragLeave;
 					that.Drop -= OnReorderCompleted;
 
-					that.DragEnter += OnReorderDragUpdated;
-					that.DragOver += OnReorderDragUpdated;
-					that.DragLeave += OnReorderDragLeave;
-					that.Drop += OnReorderCompleted;
-
+					if (!that.IsCustomReorder)
+					{
+						that.DragEnter += OnReorderDragUpdated;
+						that.DragOver += OnReorderDragUpdated;
+						that.DragLeave += OnReorderDragLeave;
+						that.Drop += OnReorderCompleted;
+					}
 					that.m_tpPrimaryDraggedContainer = sender as SelectorItem;
 
 					that.ChangeSelectorItemsVisualState(true);
 				}
 			}
+
 		}
 
 		private static void OnItemContainerDragCompleted(UIElement sender, DropCompletedEventArgs innerArgs)
@@ -182,20 +192,18 @@ namespace Windows.UI.Xaml.Controls
 				// (eg if drag was released outside bounds of list)
 				that.CleanupReordering();
 			}
+			sender.DropCompleted -= OnItemContainerDragCompleted;
 		}
 
-		private static void OnReorderDragUpdated(object sender, _DragEventArgs dragEventArgs) => OnReorderUpdated(sender, dragEventArgs, setVelocity: true);
-		private static void OnReorderDragLeave(object sender, _DragEventArgs dragEventArgs) => OnReorderUpdated(sender, dragEventArgs, setVelocity: false);
-
-		private static void OnReorderUpdated(object sender, _DragEventArgs dragEventArgs, bool setVelocity)
+		private static void OnReorderDragUpdated(object sender, _DragEventArgs dragEventArgs)
 		{
-			var that = sender as ListView;
-			var src = dragEventArgs.DataView.FindRawData(ReorderOwnerFormatId) as ListView;
+			var that = sender as ListViewBase;
+			var src = dragEventArgs.DataView.FindRawData(ReorderOwnerFormatId) as ListViewBase;
 			var item = dragEventArgs.DataView.FindRawData(ReorderItemFormatId);
 			var container = dragEventArgs.DataView.FindRawData(ReorderContainerFormatId) as FrameworkElement; // TODO: This might have changed/been recycled if scrolled 
 			if (that is null || src is null || item is null || container is null || src != that)
 			{
-				dragEventArgs.Log().Warn("Invalid reorder event.");
+				if (dragEventArgs.Log().IsEnabled(LogLevel.Warning)) dragEventArgs.Log().Warn("Invalid reorder event.");
 				dragEventArgs.AcceptedOperation = DataPackageOperation.None;
 
 				return;
@@ -213,31 +221,39 @@ namespace Windows.UI.Xaml.Controls
 			var position = dragEventArgs.GetPosition(that);
 			that.UpdateReordering(position, container, item);
 
-			if (setVelocity)
+			// See what our edge scrolling action should be...
+			var panVelocity = that.ComputeEdgeScrollVelocity(position);
+			// And request it.
+			that.SetPendingAutoPanVelocity(panVelocity);
+		}
+
+		private static void OnReorderDragLeave(object sender, _DragEventArgs dragEventArgs)
+		{
+			var that = sender as ListViewBase;
+			var src = dragEventArgs.DataView.FindRawData(ReorderOwnerFormatId) as ListViewBase;
+			if (that is null || src != that)
 			{
-				// See what our edge scrolling action should be...
-				var panVelocity = that.ComputeEdgeScrollVelocity(position);
-				// And request it.
-				that.SetPendingAutoPanVelocity(panVelocity);
+				if (dragEventArgs.Log().IsEnabled(LogLevel.Warning)) dragEventArgs.Log().Warn("Invalid reorder event.");
+
+				return;
 			}
-			else
-			{
-				that.SetPendingAutoPanVelocity(PanVelocity.Stationary);
-			}
+
+			that.CleanupReordering();
+			that.SetPendingAutoPanVelocity(PanVelocity.Stationary);
 		}
 
 		private static void OnReorderCompleted(object sender, _DragEventArgs dragEventArgs)
 		{
-			var that = sender as ListView;
+			var that = sender as ListViewBase;
 
 			that?.SetPendingAutoPanVelocity(PanVelocity.Stationary);
 
-			var src = dragEventArgs.DataView.FindRawData(ReorderOwnerFormatId) as ListView;
+			var src = dragEventArgs.DataView.FindRawData(ReorderOwnerFormatId) as ListViewBase;
 			var item = dragEventArgs.DataView.FindRawData(ReorderItemFormatId);
 			var container = dragEventArgs.DataView.FindRawData(ReorderContainerFormatId) as FrameworkElement; // TODO: This might have changed/been recycled if scrolled 
 			if (that is null || src is null || item is null || container is null || src != that)
 			{
-				dragEventArgs.Log().Warn("Invalid reorder event.");
+				if (dragEventArgs.Log().IsEnabled(LogLevel.Warning)) dragEventArgs.Log().Warn("Invalid reorder event.");
 
 				return;
 			}
@@ -281,6 +297,13 @@ namespace Windows.UI.Xaml.Controls
 						list.IndexOf,
 						(oldIndex, newIndex) => DoMove(list, oldIndex, newIndex));
 					break;
+
+				case ICollectionView view when !view.IsReadOnly:
+					ProcessMove(
+						view.Count,
+						view.IndexOf,
+						(oldIndex, newIndex) => DoMove(view, oldIndex, newIndex));
+					break;
 			}
 
 			void ProcessMove(
@@ -294,54 +317,60 @@ namespace Windows.UI.Xaml.Controls
 					return;
 				}
 
-				int newIndex;
-				if (updatedIndex.Value.Row == int.MaxValue)
+				try
 				{
-					// I.e. we are at the end, there is no items below
-					newIndex = count - 1;
-				}
-				else
-				{
-					newIndex = that.GetIndexFromIndexPath(updatedIndex.Value);
+					that._isProcessingReorder = true;
+
+					int newIndex;
+					if (updatedIndex.Value.Row == int.MaxValue)
+					{
+						// I.e. we are at the end, there is no items below
+						newIndex = count - 1;
+					}
+					else
+					{
+						newIndex = that.GetIndexFromIndexPath(updatedIndex.Value);
 #if !__IOS__ // This correction doesn't apply on iOS
-					if (indexOfDraggedItem < newIndex)
-					{
-						// If we've moved items down, we have to take in consideration that the updatedIndex
-						// is already assuming that the item has been removed, so it's offsetted by 1.
-						newIndex--;
-					}
+						if (indexOfDraggedItem < newIndex)
+						{
+							// If we've moved items down, we have to take in consideration that the updatedIndex
+							// is already assuming that the item has been removed, so it's offsetted by 1.
+							newIndex--;
+						}
 #endif
+					}
+
+					// When moving more than one item (multi-select), we keep their actual order in the list, no matter which one was dragged.
+					movedItems.Sort((it1, it2) => indexOf(it1).CompareTo(indexOf(it2)));
+
+					for (var i = 0; i < movedItems.Count; i++)
+					{
+						var movedItem = movedItems[i];
+						var oldIndex = indexOf(movedItem);
+
+						if (oldIndex < 0 || oldIndex == newIndex)
+						{
+							continue; // Item removed or already at the right place, nothing to do.
+						}
+
+						var restoreSelection = that.SelectedIndex == oldIndex;
+
+						mv(oldIndex, newIndex);
+
+						if (restoreSelection)
+						{
+							that.SelectedIndex = newIndex;
+						}
+
+						if (oldIndex > newIndex)
+						{
+							newIndex++;
+						}
+					}
 				}
-
-				// When moving more than one item (multi-select), we keep their actual order in the list, no matter which one was dragged.
-				movedItems.Sort((it1, it2) => indexOf(it1).CompareTo(indexOf(it2)));
-
-				for (var i = 0; i < movedItems.Count; i++)
+				finally
 				{
-					var movedItem = movedItems[i];
-					var oldIndex = indexOf(movedItem);
-
-					if (oldIndex < 0 || oldIndex == newIndex)
-					{
-						continue; // Item removed or already at the right place, nothing to do.
-					}
-
-					var restoreSelection = that.SelectedIndex == oldIndex;
-
-					mv(oldIndex, newIndex);
-
-					if (restoreSelection)
-					{
-						// This is a workaround for https://github.com/unoplatform/uno/issues/4741
-						container.SetValue(IndexForItemContainerProperty, newIndex);
-
-						that.SelectedIndex = newIndex;
-					}
-
-					if (oldIndex > newIndex)
-					{
-						newIndex++;
-					}
+					that._isProcessingReorder = false;
 				}
 			}
 		}
@@ -363,18 +392,12 @@ namespace Windows.UI.Xaml.Controls
 			=> VirtualizingPanel?.GetLayouter().CompleteReorderingItem(draggedContainer, draggedItem);
 
 		private void CleanupReordering()
-#if __ANDROID__
 			=> VirtualizingPanel?.GetLayouter().CleanupReordering();
-#else
-		{ }
-#endif
 
 		#region Helpers
 		private static bool IsObservableCollection(object src)
-		{
-			var srcType = src.GetType();
-			return srcType.IsGenericType && srcType.GetGenericTypeDefinition() == typeof(ObservableCollection<>);
-		}
+			=> src.GetType() is { IsGenericType: true } srcType
+				&& srcType.GetGenericTypeDefinition() == typeof(ObservableCollection<>);
 
 		private static void DoMove(ItemCollection items, int oldIndex, int newIndex)
 		{
@@ -405,6 +428,20 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		private static void DoMove(IList list, int oldIndex, int newIndex)
+		{
+			var item = list[oldIndex];
+			list.RemoveAt(oldIndex);
+			if (newIndex >= list.Count)
+			{
+				list.Add(item);
+			}
+			else
+			{
+				list.Insert(newIndex, item);
+			}
+		}
+
+		private static void DoMove(ICollectionView list, int oldIndex, int newIndex)
 		{
 			var item = list[oldIndex];
 			list.RemoveAt(oldIndex);

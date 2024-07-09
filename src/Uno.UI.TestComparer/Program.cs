@@ -46,11 +46,11 @@ namespace Umbrella.UI.TestComparer
 				var pat = "";
 				var sourceBranch = "";
 				var targetBranchParam = "";
-				var artifactName = ""; 
+				var artifactName = "";
 				var artifactInnerBasePath = ""; // base path inside the artifact archive
-				var definitionName = "";		// Build.DefinitionName
-				var projectName = "";			// System.TeamProject
-				var serverUri = "";					// System.TeamFoundationCollectionUri
+				var definitionName = "";        // Build.DefinitionName
+				var projectName = "";           // System.TeamProject
+				var serverUri = "";                 // System.TeamFoundationCollectionUri
 				var currentBuild = 0;           // Build.BuildId
 
 				var githubPAT = "";
@@ -80,7 +80,7 @@ namespace Umbrella.UI.TestComparer
 
 				var list = p.Parse(args);
 
-				var targetBranch = !string.IsNullOrEmpty(targetBranchParam) && targetBranchParam != "$(System.PullRequest.TargetBranch)" ? targetBranchParam : sourceBranch;      	
+				var targetBranch = !string.IsNullOrEmpty(targetBranchParam) && targetBranchParam != "$(System.PullRequest.TargetBranch)" ? targetBranchParam : sourceBranch;
 
 				var downloader = new AzureDevopsDownloader(pat, serverUri);
 				var artifacts = await downloader.DownloadArtifacts(basePath, projectName, definitionName, artifactName, sourceBranch, targetBranch, currentBuild, runLimit);
@@ -148,7 +148,7 @@ namespace Umbrella.UI.TestComparer
 			{
 				foreach (var toplevel in Directory.GetDirectories(artifactsBasePath, "*", SearchOption.TopDirectoryOnly))
 				{
-					foreach(var platform in Directory.GetDirectories(Path.Combine(toplevel, "uitests-results\\screenshots")))
+					foreach (var platform in Directory.GetDirectories(Path.Combine(toplevel, "uitests-results\\screenshots")))
 					{
 						yield return Path.GetFileName(platform);
 					}
@@ -160,26 +160,26 @@ namespace Umbrella.UI.TestComparer
 
 		private static async Task TryPublishPRComments(List<CompareResult> results, string githubPAT, string sourceRepository, string githubPRid, int currentBuild)
 		{
-			var comment = await BuildPRComment(results, currentBuild);
+			var comment = BuildPRComment(results, currentBuild);
 
 			if (!int.TryParse(githubPRid, out _))
 			{
-				Console.WriteLine($"No valid GitHub PR Id found, no PR comment will be posted.");
-				Console.WriteLine(comment);
+				Helpers.WriteLineWithTime($"No valid GitHub PR Id found, no PR comment will be posted.");
+				Helpers.WriteLineWithTime(comment);
 				return;
 			}
 
 			if (string.IsNullOrEmpty(githubPAT.Trim()) || githubPAT.StartsWith("$("))
 			{
-				Console.WriteLine($"No GitHub PAT, no PR comment will be posted.");
-				Console.WriteLine(comment);
+				Helpers.WriteLineWithTime($"No GitHub PAT, no PR comment will be posted.");
+				Helpers.WriteLineWithTime(comment);
 				return;
 			}
 
 			await GitHubClient.PostPRCommentsAsync(githubPAT, sourceRepository, githubPRid, comment);
 		}
 
-		private static async Task<string> BuildPRComment(List<CompareResult> results, int currentBuild)
+		private static string BuildPRComment(List<CompareResult> results, int currentBuild)
 		{
 			var comment = new StringBuilder();
 			var hasErrors = results.Any(r => r.TotalTests - r.UnchangedTests != 0);
@@ -248,6 +248,10 @@ namespace Umbrella.UI.TestComparer
 
 			var success = !compareResult.Tests.Any(t => t.ResultRun.LastOrDefault()?.HasChanged ?? false);
 			var successCount = compareResult.Tests.Count(t => t.ResultRun.LastOrDefault()?.HasChanged ?? false);
+
+			// Symlinks folder
+			var symlinksBasePath = Path.GetFullPath(Path.Combine(basePath, "..", $"test-comparer-{Guid.NewGuid()}"));
+			Directory.CreateDirectory(symlinksBasePath);
 
 			var doc = new XmlDocument();
 			var rootNode = doc.CreateElement("test-run");
@@ -330,22 +334,42 @@ namespace Umbrella.UI.TestComparer
 					var attachmentsNode = doc.CreateElement("attachments");
 					testCaseNode.AppendChild(attachmentsNode);
 
-					AddAttachment(doc, attachmentsNode, lastTestRun.FilePath, "Result output");
+					AddAttachment(doc, attachmentsNode, BuildSymlink(basePath, symlinksBasePath, lastTestRun.FolderIndex, lastTestRun.FilePath), "Result output");
 
 					if (!testRunSuccess)
 					{
-						AddAttachment(doc, attachmentsNode, lastTestRun.DiffResultImage, "Image diff");
+						AddAttachment(doc, attachmentsNode, BuildSymlink(basePath, symlinksBasePath, lastTestRun.FolderIndex, lastTestRun.DiffResultImage), "Image diff");
 
 						var previousRun = run.ResultRun.ElementAtOrDefault(run.ResultRun.Count - 2);
-						AddAttachment(doc, attachmentsNode, previousRun.FilePath, "Previous result output");
+						AddAttachment(doc, attachmentsNode, BuildSymlink(basePath, symlinksBasePath, previousRun.FolderIndex, previousRun.FilePath), "Previous result output");
 					}
 				}
 			}
 
-			using (var file = XmlWriter.Create(File.OpenWrite(resultsFilePath), new XmlWriterSettings { Indent = true } ))
+			using (var file = XmlWriter.Create(File.OpenWrite(resultsFilePath), new XmlWriterSettings { Indent = true }))
 			{
 				doc.WriteTo(file);
 			}
+		}
+
+		private static string BuildSymlink(string basePath, string symlinksBasePath, int folderIndex, string originalFilePath)
+		{
+			if (!string.IsNullOrEmpty(originalFilePath))
+			{
+				var relativeSourceFilePath = Path.GetRelativePath(basePath, originalFilePath);
+				var targetLinkPath = Path.Combine(symlinksBasePath, Path.GetDirectoryName(relativeSourceFilePath), $"{folderIndex}-{Path.GetFileName(relativeSourceFilePath)}");
+
+				Directory.CreateDirectory(Path.GetDirectoryName(targetLinkPath));
+
+				if (!File.Exists(targetLinkPath))
+				{
+					File.CreateSymbolicLink(targetLinkPath, originalFilePath);
+				}
+
+				return targetLinkPath;
+			}
+
+			return null;
 		}
 
 		private static string SanitizeTestName(string testName)
@@ -358,7 +382,7 @@ namespace Umbrella.UI.TestComparer
 
 			var filePathNode = doc.CreateElement("filePath");
 			attachmentNode.AppendChild(filePathNode);
-			filePathNode.InnerText = filePath;
+			filePathNode.InnerText = @"\\?\" + filePath;
 
 			var descriptionNode = doc.CreateElement("description");
 			attachmentNode.AppendChild(descriptionNode);
@@ -456,11 +480,11 @@ namespace Umbrella.UI.TestComparer
 
 			File.WriteAllText(resultsFilePath, sb.ToString());
 
-			Console.WriteLine($"{platform}: {result.UnchangedTests} samples unchanged, {result.TotalTests} files total. Changed files:");
+			Helpers.WriteLineWithTime($"{platform}: {result.UnchangedTests} samples unchanged, {result.TotalTests} files total. Changed files:");
 
 			foreach (var changedFile in changedList)
 			{
-				Console.WriteLine($"\t- {changedFile}");
+				Helpers.WriteLineWithTime($"\t- {changedFile}");
 			}
 		}
 	}

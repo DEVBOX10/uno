@@ -1,21 +1,29 @@
-#pragma warning disable 67
+﻿#pragma warning disable 67
 
 using System;
 using System.Threading.Tasks;
 
 using Uno.Client;
 using Uno.Disposables;
-using Uno.Extensions;
 using Uno.UI;
 using Windows.Foundation;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.System;
 using Uno.UI.DataBinding;
-using Windows.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Windows.UI.ViewManagement;
+using Windows.UI.Core;
+using Uno.UI.Xaml.Core;
+using WinUICoreServices = Uno.UI.Xaml.Core.CoreServices;
 
-namespace Windows.UI.Xaml.Controls
+#if HAS_UNO_WINUI
+using WindowSizeChangedEventArgs = Microsoft/* UWP don't rename */.UI.Xaml.WindowSizeChangedEventArgs;
+#else
+using WindowSizeChangedEventArgs = Windows.UI.Core.WindowSizeChangedEventArgs;
+#endif
+
+namespace Microsoft.UI.Xaml.Controls
 {
 	public partial class
 		ContentDialog : ContentControl
@@ -23,7 +31,10 @@ namespace Windows.UI.Xaml.Controls
 		internal readonly Popup _popup;
 		private TaskCompletionSource<ContentDialogResult> _tcs;
 		private readonly SerialDisposable _subscriptions = new SerialDisposable();
-		private bool _hiding = false;
+		private readonly SerialDisposable _templateSubscriptions = new SerialDisposable();
+
+		private bool _hiding;
+		private bool _templateApplied;
 
 		private Border m_tpBackgroundElementPart;
 		private Border m_tpButton1HostPart;
@@ -57,10 +68,21 @@ namespace Windows.UI.Xaml.Controls
 			{
 				if (thisRef.Target is ContentDialog that)
 				{
+					that.SetDialogFocus();
+
 					that.Opened?.Invoke(that, new ContentDialogOpenedEventArgs());
 					that.UpdateVisualState();
 				}
 			};
+
+			_popup.Closed += (s, e) =>
+			{
+				if (thisRef.Target is ContentDialog that)
+				{
+					that.Hide();
+				}
+			};
+
 			this.KeyDown += OnPopupKeyDown;
 			var inputPane = InputPane.GetForCurrentView();
 			inputPane.Showing += (o, e) =>
@@ -80,11 +102,63 @@ namespace Windows.UI.Xaml.Controls
 
 			Loaded += (s, e) => RegisterEvents();
 			Unloaded += (s, e) => UnregisterEvents();
-
 			DefaultStyleKey = typeof(ContentDialog);
 		}
 
-		private void OnPopupKeyDown(object sender, KeyRoutedEventArgs e)
+		private void XamlRootChanged(object sender, XamlRootChangedEventArgs e) =>
+			UpdateSizeProperties();
+
+		private void UpdateSizeProperties()
+		{
+			if (!_templateApplied)
+			{
+				return;
+			}
+
+			UpdateVisualState();
+
+			if (m_placementMode != PlacementMode.InPlace)
+			{
+				SizeAndPositionContentInPopup();
+			}
+		}
+
+		private void SetDialogFocus()
+		{
+			bool focusSet = false;
+
+			var focusManager = VisualTree.GetFocusManagerForElement(this);
+
+			if (m_tpContentPart is not null)
+			{
+				if (focusManager.GetFirstFocusableElement(m_tpContentPart) is UIElement focusableElement)
+				{
+					focusSet = focusableElement.Focus(FocusState.Programmatic);
+				}
+			}
+
+			if (!focusSet)
+			{
+				ButtonBase button = DefaultButton switch
+				{
+					ContentDialogButton.Primary => m_tpPrimaryButtonPart,
+					ContentDialogButton.Secondary => m_tpSecondaryButtonPart,
+					ContentDialogButton.Close => m_tpCloseButtonPart,
+					_ => null,
+				};
+				focusSet = button?.Focus(FocusState.Programmatic) ?? false;
+			}
+
+			if (!focusSet && m_tpCommandSpacePart is not null)
+			{
+				if (focusManager.GetFirstFocusableElement(m_tpCommandSpacePart) is UIElement focusableCommandElement)
+				{
+					focusableCommandElement.Focus(FocusState.Programmatic);
+				}
+			}
+		}
+
+		private protected virtual void OnPopupKeyDown(object sender, KeyRoutedEventArgs e)
 		{
 			switch (e.Key)
 			{
@@ -117,7 +191,7 @@ namespace Windows.UI.Xaml.Controls
 
 		public void Hide()
 		{
-			if (_hiding)
+			if (_hiding || !m_isShowing)
 			{
 				return;
 			}
@@ -125,7 +199,7 @@ namespace Windows.UI.Xaml.Controls
 			Hide(ContentDialogResult.None);
 		}
 
-		private bool Hide(ContentDialogResult result)
+		internal bool Hide(ContentDialogResult result)
 		{
 			void Complete(ContentDialogClosingEventArgs args)
 			{
@@ -136,7 +210,11 @@ namespace Windows.UI.Xaml.Controls
 					_popup.Child = null;
 					UpdateVisualState();
 					Closed?.Invoke(this, new ContentDialogClosedEventArgs(result));
-					_tcs.SetResult(result);
+
+					// Make sure all clean-up is done before returning result,
+					// to prevent problems when the dialog is reopened synchronously
+					(var tcs, _tcs) = (_tcs, null);
+					DispatcherQueue.TryEnqueue(() => tcs?.TrySetResult(result));
 				}
 				_hiding = false;
 			}
@@ -144,22 +222,16 @@ namespace Windows.UI.Xaml.Controls
 
 			Closing?.Invoke(this, closingArgs);
 
-			if (!closingArgs.IsDeferred)
-			{
-				Complete(closingArgs);
-			}
-			else
-			{
-				closingArgs.EventRaiseCompleted();
-			}
+			var completedSynchronously = closingArgs.DeferralManager.EventRaiseCompleted();
 
-			return !closingArgs.Cancel;
+			return completedSynchronously && !closingArgs.Cancel;
 		}
 
 		protected override void OnApplyTemplate()
 		{
 			base.OnApplyTemplate();
-
+			_templateSubscriptions.Disposable = null;
+			CompositeDisposable subscriptions = new CompositeDisposable();
 			GetTemplateParts();
 
 			m_dialogMinHeight = ResourceResolver.ResolveTopLevelResourceDouble("ContentDialogMinHeight");
@@ -181,7 +253,20 @@ namespace Windows.UI.Xaml.Controls
 			//	// Update which command button has the default button visualization.
 			//	return UpdateVisualState();
 			//}));
+
+			m_tpBackgroundElementPart.SizeChanged += BackgroundElementSizeChanged;
+			subscriptions.Add(() =>
+			{
+				m_tpBackgroundElementPart.SizeChanged -= BackgroundElementSizeChanged;
+			});
+
+			_templateSubscriptions.Disposable = subscriptions;
+			_templateApplied = true;
 		}
+
+		// Uno specific: Ensure we respond to window sizing
+		private void BackgroundElementSizeChanged(object sender, SizeChangedEventArgs args) =>
+			UpdateSizeProperties();
 
 		void GetTemplateParts()
 		{
@@ -212,6 +297,14 @@ namespace Windows.UI.Xaml.Controls
 					throw new InvalidOperationException("A ContentDialog is already opened.");
 				}
 
+#if !HAS_UNO_WINUI
+				if (XamlRoot is null &&
+					WinUICoreServices.Instance.InitializationType != InitializationType.IslandsOnly)
+				{
+					XamlRoot = WinUICoreServices.Instance.MainRootVisual?.XamlRoot;
+				}
+#endif
+
 				// TODO: support in-place
 				m_placementMode = PlacementMode.EntireControlInPopup;
 
@@ -230,7 +323,18 @@ namespace Windows.UI.Xaml.Controls
 
 				_tcs = new TaskCompletionSource<ContentDialogResult>();
 
-				return await _tcs.Task;
+				using (ct.Register(() =>
+				{
+					_tcs.TrySetCanceled();
+					Hide();
+				}
+#if !__WASM__ // WASM lacks threading support
+					, useSynchronizationContext: true
+#endif
+					))
+				{
+					return await _tcs.Task;
+				}
 			});
 
 		public event TypedEventHandler<ContentDialog, ContentDialogClosedEventArgs> Closed;
@@ -251,6 +355,7 @@ namespace Windows.UI.Xaml.Controls
 		private void UnregisterEvents()
 		{
 			_subscriptions.Disposable = null;
+			_templateSubscriptions.Disposable = null;
 		}
 
 		private void RegisterEvents()
@@ -289,7 +394,55 @@ namespace Windows.UI.Xaml.Controls
 				});
 			}
 
+			var xamlRoot = XamlRoot;
+			xamlRoot.Changed += XamlRootChanged;
+			d.Add(() =>
+			{
+				xamlRoot.Changed -= XamlRootChanged;
+			});
+
+			// Here we are relying on the BackRequested event to be able to close the ContentDialog on back button pressed.
+			// This diverges from Windows behaviour as they do not allow BackRequested to be raised if the back button was pressed
+			// while a ContentDialog was open.
+			if (SystemNavigationManager.GetForCurrentView() is { } navManager)
+			{
+				navManager.BackRequested += OnBackRequested;
+
+				d.Add(() =>
+				{
+					navManager.BackRequested -= OnBackRequested;
+				});
+			}
+
+
+			d.Add(_popup.PopupPanel.RegisterDisposablePropertyChangedCallback(VisibilityProperty, OnPopupPanelVisibilityChanged));
+
 			_subscriptions.Disposable = d;
+		}
+
+		private void OnPopupPanelVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+		{
+			if (_popup.PopupPanel.Visibility == Visibility.Visible)
+			{
+				SetDialogFocus();
+			}
+		}
+
+		private void OnBackRequested(object sender, BackRequestedEventArgs e)
+		{
+			// Match Windows behavior:
+			// If we have a clickable close button, then invoke it, otherwise just
+			// return a result of None.
+			if (m_tpCloseButtonPart is { IsEnabled: true } closeButton)
+			{
+				closeButton.RaiseClick();
+			}
+			else
+			{
+				Hide();
+			}
+
+			e.Handled = true;
 		}
 
 		private void OnCloseButtonClicked(object sender, RoutedEventArgs e)

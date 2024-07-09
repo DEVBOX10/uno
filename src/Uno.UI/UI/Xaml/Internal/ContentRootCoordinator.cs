@@ -7,7 +7,7 @@
 using System;
 using System.Collections.Generic;
 using Windows.UI;
-using Windows.UI.Xaml;
+using Microsoft.UI.Xaml;
 
 namespace Uno.UI.Xaml.Core
 {
@@ -15,15 +15,22 @@ namespace Uno.UI.Xaml.Core
 	{
 		private readonly CoreServices _coreServices;
 		private readonly List<ContentRoot> _contentRoots = new List<ContentRoot>();
+		private ContentRoot? _coreWindowContentRoot;
 
 		public ContentRootCoordinator(CoreServices coreServices)
 		{
 			_coreServices = coreServices ?? throw new ArgumentNullException(nameof(coreServices));
 		}
 
-		public IReadOnlyList<ContentRoot> ContentRoots => _contentRoots;
+		// The type is not IReadOnlyList or any kind of base class or interface intentionally.
+		// We want enumerating ContentRoots to not box enumerators.
+		public List<ContentRoot> ContentRoots => _contentRoots;
 
-		public ContentRoot? CoreWindowContentRoot { get; set; }
+		public ContentRoot? CoreWindowContentRoot
+		{
+			get => _coreWindowContentRoot;
+			set => _coreWindowContentRoot = value;
+		}
 
 		public ContentRoot CreateContentRoot(ContentRootType type, Color backgroundColor, UIElement? rootElement)
 		{

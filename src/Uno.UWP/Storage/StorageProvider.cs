@@ -7,7 +7,9 @@ namespace Windows.Storage
 {
 	public partial class StorageProvider
 	{
-		private static readonly Lazy<ResourceLoader> _resourceLoader = new Lazy<ResourceLoader>(() => ResourceLoader.GetForViewIndependentUse());
+		private const string StorageProviderResourcesViewName = "Uno.UI/Resources";
+
+		private static readonly Lazy<ResourceLoader> _resourceLoader = new Lazy<ResourceLoader>(() => ResourceLoader.GetForViewIndependentUse(StorageProviderResourcesViewName));
 
 		private readonly string _displayNameResourceKey;
 
@@ -19,6 +21,6 @@ namespace Windows.Storage
 
 		public string Id { get; }
 
-		public string DisplayName => _resourceLoader.Value.GetString(_displayNameResourceKey);
+		public string? DisplayName => _resourceLoader.Value.GetString(_displayNameResourceKey);
 	}
 }

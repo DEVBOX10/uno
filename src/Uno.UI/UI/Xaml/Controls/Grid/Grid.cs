@@ -1,20 +1,20 @@
-// Copyright (c) Microsoft Corporation. All rights reserved.
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using Microsoft.UI.Xaml.Controls;
+using Microsoft/* UWP don't rename */.UI.Xaml.Controls;
 using Uno.Extensions;
 using XSIZEF = Windows.Foundation.Size;
 using Xuint = System.Int32;
 using XFLOAT = System.Double;
 using XRECTF = Windows.Foundation.Rect;
-using PropertyChangedParams = Windows.UI.Xaml.DependencyPropertyChangedEventArgs;
-using CDOCollection = Windows.UI.Xaml.Controls.DefinitionCollectionBase;
+using PropertyChangedParams = Microsoft.UI.Xaml.DependencyPropertyChangedEventArgs;
+using CDOCollection = Microsoft.UI.Xaml.Controls.DefinitionCollectionBase;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	partial class Grid
 	{
@@ -194,7 +194,7 @@ namespace Windows.UI.Xaml.Controls
 			//for (auto & cdo : definitions)
 			var itemsEnumerator = definitions.GetItems().GetEnumerator();
 
-			while(itemsEnumerator.MoveNext())
+			while (itemsEnumerator.MoveNext())
 			{
 				var def = itemsEnumerator.Current;
 
@@ -378,7 +378,7 @@ namespace Windows.UI.Xaml.Controls
 				if (!ignoreColumnDesiredSize)
 				{
 					Xuint columnSpan = GetColumnSpanAdjusted(pChild);
-					//pChild.EnsureLayoutStorage();
+					pChild.EnsureLayoutStorage();
 					if (columnSpan == 1)
 					{
 						DefinitionBase pChildColumn = GetColumnNoRef(pChild);
@@ -398,7 +398,7 @@ namespace Windows.UI.Xaml.Controls
 				if (!forceRowToInfinity)
 				{
 					Xuint rowSpan = GetRowSpanAdjusted(pChild);
-					//pChild.EnsureLayoutStorage();
+					pChild.EnsureLayoutStorage();
 					if (rowSpan == 1)
 					{
 						DefinitionBase pChildRow = GetRowNoRef(pChild);
@@ -420,7 +420,7 @@ namespace Windows.UI.Xaml.Controls
 			} while (cellsHead < cellCount);
 
 			//Go through the spanned rows/columns allocating sizes.
-			foreach(ref var entry in spanStore.Memory.Span)
+			foreach (ref var entry in spanStore.Memory.Span)
 			{
 				if (entry.m_isColumnDefinition)
 				{
@@ -444,6 +444,9 @@ namespace Windows.UI.Xaml.Controls
 
 			// Cleanup
 			// return hr;
+
+			// Return allocated memory to the pool
+			spanStore.Dispose();
 		}
 
 		// Measure a child of the Grid by taking in consideration the properties of
@@ -475,7 +478,7 @@ namespace Windows.UI.Xaml.Controls
 			}
 
 			if (forceRowToInfinity
-			    || (CellCache.IsAuto(rowHeightTypes) && !CellCache.IsStar(rowHeightTypes)))
+				|| (CellCache.IsAuto(rowHeightTypes) && !CellCache.IsStar(rowHeightTypes)))
 			{
 				// If this cell belongs to at least one Auto row and not a single Star
 				// row, then it should be measured freely to git its content. In other
@@ -506,11 +509,11 @@ namespace Windows.UI.Xaml.Controls
 			bool isColumnDefinition)
 		{
 			var spanStoreVector = spanStore;
-			// If an entry already exists with the same row/column index and span, 
+			// If an entry already exists with the same row/column index and span,
 			// then update the desired size stored in the entry.
 			//var it = std.find_if(
 			//		spanStoreVector.begin(),
-			//		spanStoreVector.end(), 
+			//		spanStoreVector.end(),
 			//	[isColumnDefinition, spanStart, spanCount](SpanStoreEntry & entry)
 			//{
 			//	return entry.m_isColumnDefinition == isColumnDefinition && entry.m_spanStart == spanStart && entry.m_spanCount == spanCount;
@@ -528,7 +531,7 @@ namespace Windows.UI.Xaml.Controls
 			{
 				SpanStoreEntry last = default;
 				if (spanStoreVector.LastOrDefault(ref last) && Unsafe.AsPointer(ref last) == Unsafe.AsPointer(ref it))
-					//if (it != spanStoreVector.LastOrDefault())
+				//if (it != spanStoreVector.LastOrDefault())
 				{
 					if ((it).m_desiredSize < desiredSize)
 					{
@@ -599,9 +602,9 @@ namespace Windows.UI.Xaml.Controls
 				// Sanity check: effectiveMinSize must always be the smallest value, maxSize
 				// must be the largest one, and the preferredSize should fall in between.
 				ASSERT(effectiveMinSize <= preferredSize
-				       && preferredSize <= maxSize
-				       && rangeMinSize <= rangePreferredSize
-				       && rangePreferredSize <= rangeMaxSize);
+					   && preferredSize <= maxSize
+					   && rangeMinSize <= rangePreferredSize
+					   && rangePreferredSize <= rangeMaxSize);
 
 				def.SetSizeCache(maxSize);
 				maxMaxSize = Math.Max(maxMaxSize, maxSize);
@@ -727,9 +730,9 @@ namespace Windows.UI.Xaml.Controls
 					XFLOAT sizeToDistribute = requestedSize - rangeMaxSize;
 
 					ASSERT(totalRemainingSize.IsFinite()
-					       && totalRemainingSize > 0
-					       && sizeToDistribute.IsFinite()
-					       && sizeToDistribute > 0);
+						   && totalRemainingSize > 0
+						   && sizeToDistribute.IsFinite()
+						   && sizeToDistribute > 0);
 
 					for (int i = 0; i < spanCount; i++)
 					{
@@ -977,7 +980,7 @@ namespace Windows.UI.Xaml.Controls
 				else
 				{
 					resolvedSize = Math.Max(availableSize - totalStarResolvedSize, 0.0f) *
-					               (starValue / ppStarDefinitions[i].GetSizeCache());
+								   (starValue / ppStarDefinitions[i].GetSizeCache());
 					resolvedSize = Math.Max(ppStarDefinitions[i].GetEffectiveMinSize(),
 						Math.Min(resolvedSize, ppStarDefinitions[i].GetUserMaxSize()));
 				}
@@ -1035,24 +1038,14 @@ namespace Windows.UI.Xaml.Controls
 			//	UnlockDefinitions();
 			//});
 
-#if !HAS_EXPENSIVE_TRYFINALLY // Try/finally incurs a very large performance hit in mono-wasm - https://github.com/dotnet/runtime/issues/50783
 			try
 			{
-#endif
-				var result = InnerMeasureOverride(availableSize);
-
-#if HAS_EXPENSIVE_TRYFINALLY // Try/finally incurs a very large performance hit in mono-wasm - https://github.com/dotnet/runtime/issues/50783
-				UnlockDefinitions();
-#endif
-
-				return result;
-#if !HAS_EXPENSIVE_TRYFINALLY // Try/finally incurs a very large performance hit in mono-wasm - https://github.com/dotnet/runtime/issues/50783
+				return InnerMeasureOverride(availableSize);
 			}
 			finally
 			{
 				UnlockDefinitions();
 			}
-#endif
 		}
 
 		/// <remarks>
@@ -1090,10 +1083,9 @@ namespace Windows.UI.Xaml.Controls
 
 						//currentChild.Measure(innerAvailableSize);
 						this.MeasureElement(currentChild, innerAvailableSize);
-						//currentChild.EnsureLayoutStorage();
+						currentChild.EnsureLayoutStorage();
 
-						//XSIZEF childDesiredSize = currentChild.GetLayoutStorage().m_desiredSize;
-						XSIZEF childDesiredSize = currentChild.DesiredSize;
+						XSIZEF childDesiredSize = currentChild.m_desiredSize;
 						desiredSize.Width = Math.Max(desiredSize.Width, childDesiredSize.Width);
 						desiredSize.Height = Math.Max(desiredSize.Height, childDesiredSize.Height);
 					}
@@ -1324,6 +1316,9 @@ namespace Windows.UI.Xaml.Controls
 
 				desiredSize.Width = GetDesiredInnerSize(m_pColumns) + combinedColumnSpacing;
 				desiredSize.Height = GetDesiredInnerSize(m_pRows) + combinedRowSpacing;
+
+				// Return memory to the array pool
+				cellCacheVector.Dispose();
 			}
 
 			desiredSize.Width += combinedThickness.Width;
@@ -1345,20 +1340,9 @@ namespace Windows.UI.Xaml.Controls
 			// Locking the row and columns definitions to prevent changes by user code
 			// during the arrange pass.
 			LockDefinitions();
-#if !HAS_EXPENSIVE_TRYFINALLY
 			try
 			{
-#endif
-				var result = InnerArrangeOverride(finalSize);
-
-#if HAS_EXPENSIVE_TRYFINALLY
-				m_ppTempDefinitions = null;
-				m_cTempDefinitions = 0;
-				UnlockDefinitions();
-#endif
-				return result;
-
-#if !HAS_EXPENSIVE_TRYFINALLY
+				return InnerArrangeOverride(finalSize);
 			}
 			finally
 			{
@@ -1366,7 +1350,6 @@ namespace Windows.UI.Xaml.Controls
 				m_cTempDefinitions = 0;
 				UnlockDefinitions();
 			}
-#endif
 		}
 
 		/// <remarks>
@@ -1393,9 +1376,8 @@ namespace Windows.UI.Xaml.Controls
 						var currentChild = childrenEnumerator.Current;
 						ASSERT(currentChild is { });
 
-						//currentChild.EnsureLayoutStorage();
-						//XSIZEF childDesiredSize = currentChild.GetLayoutStorage().m_desiredSize;
-						XSIZEF childDesiredSize = currentChild.DesiredSize;
+						currentChild.EnsureLayoutStorage();
+						XSIZEF childDesiredSize = currentChild.m_desiredSize;
 						innerRect.Width = Math.Max(innerRect.Width, childDesiredSize.Width);
 						innerRect.Height = Math.Max(innerRect.Height, childDesiredSize.Height);
 						//currentChild.Arrange(innerRect);
@@ -1556,7 +1538,7 @@ namespace Windows.UI.Xaml.Controls
 				for (Xuint i = 0; i < definitions.Count; i++)
 				{
 					XFLOAT finalSize2 = m_ppTempDefinitions[i].GetMeasureArrangeSize() +
-					                   (sizeToDistribute / (definitions.Count - i));
+									   (sizeToDistribute / (definitions.Count - i));
 
 					finalSize2 = Math.Max(finalSize2, m_ppTempDefinitions[i].GetEffectiveMinSize());
 					finalSize2 = Math.Min(finalSize2, m_ppTempDefinitions[i].GetMeasureArrangeSize());
@@ -1705,7 +1687,7 @@ namespace Windows.UI.Xaml.Controls
 				for (j = i; j > 0; j--)
 				{
 					if ((pTemp.GetMeasureArrangeSize() - pTemp.GetEffectiveMinSize())
-					    >= (ppDefinitions[j - 1].GetMeasureArrangeSize() - ppDefinitions[j - 1].GetEffectiveMinSize()))
+						>= (ppDefinitions[j - 1].GetMeasureArrangeSize() - ppDefinitions[j - 1].GetEffectiveMinSize()))
 					{
 						break;
 					}
@@ -1837,7 +1819,7 @@ namespace Windows.UI.Xaml.Controls
 		bool IsWithoutRowAndColumnDefinitions()
 		{
 			return (m_pRowDefinitions == null || m_pRowDefinitions.Count == 0) &&
-			       (m_pColumnDefinitions == null || m_pColumnDefinitions.Count == 0);
+				   (m_pColumnDefinitions == null || m_pColumnDefinitions.Count == 0);
 		}
 	}
 }

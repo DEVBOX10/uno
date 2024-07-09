@@ -1,13 +1,13 @@
-using System;
+﻿using System;
 using Uno.UI.Samples.Controls;
 
 using Windows.Foundation;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace SamplesApp.Windows_UI_Xaml_Shapes.PathTestsControl
 {
-	[SampleControlInfo("PathTestsControl", "PathBindingOnData", description: "Path with Data property bound to string")]
+	[SampleControlInfo("Path", "PathBindingOnData", description: "Path with Data property bound to string")]
 	public sealed partial class PathBindingOnData : UserControl
 	{
 		private static readonly Random Random = new Random(1204);

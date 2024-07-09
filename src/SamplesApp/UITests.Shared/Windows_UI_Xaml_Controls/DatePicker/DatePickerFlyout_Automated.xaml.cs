@@ -1,10 +1,10 @@
 ﻿using System;
 using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace UITests.Shared.Windows_UI_Xaml_Controls.DatePicker
 {
-	[Sample("Date Picking", IgnoreInSnapshotTests = true)]
+	[Sample("Pickers", IgnoreInSnapshotTests = true)]
 	public sealed partial class DatePickerFlyout_Automated : UserControl
 	{
 		public DatePickerFlyout_Automated()

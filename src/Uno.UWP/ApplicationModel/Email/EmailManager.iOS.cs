@@ -1,14 +1,16 @@
-#if __IOS__
 using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Windows.Foundation;
-using MessageUI;
 using UIKit;
 using System.Net;
 using System.Collections.Generic;
 using Foundation;
 using Windows.System;
+
+#if !__MACCATALYST__ // catalyst https://github.com/xamarin/xamarin-macios/issues/13935
+using MessageUI;
+#endif
 
 namespace Windows.ApplicationModel.Email
 {
@@ -20,18 +22,21 @@ namespace Windows.ApplicationModel.Email
 			{
 				throw new ArgumentNullException(nameof(message));
 			}
-			
+
+#if !__MACCATALYST__ // catalyst https://github.com/xamarin/xamarin-macios/issues/13935
 			if (MFMailComposeViewController.CanSendMail)
 			{
 				await ComposeEmailWithMFAsync(message);
 			}
 			else
+#endif
 			{
 				//fallback when user hasn't set up e-mail account yet
 				await ComposeEmailWithMailtoUriAsync(message);
-			}			
+			}
 		}
 
+#if !__MACCATALYST__
 		private static async Task ComposeEmailWithMFAsync(EmailMessage message)
 		{
 			if (UIApplication.SharedApplication.KeyWindow?.RootViewController == null)
@@ -71,7 +76,7 @@ namespace Windows.ApplicationModel.Email
 
 			await UIApplication.SharedApplication.KeyWindow?.RootViewController.PresentViewControllerAsync(controller, true);
 			await controller.DismissViewControllerAsync(true);
-		}		
+		}
+#endif
 	}
 }
-#endif

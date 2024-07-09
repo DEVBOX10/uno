@@ -1,296 +1,105 @@
 ﻿#nullable enable
 
 using System;
-using System.ComponentModel;
-using System.Linq;
-using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
+using System.Threading.Tasks;
 using System.Windows.Threading;
-using SkiaSharp;
-using Uno.Extensions.Storage.Pickers;
-using Uno.Foundation.Extensibility;
-using Uno.Helpers.Theming;
-using Uno.UI.Runtime.Skia.Wpf;
-using Uno.UI.Runtime.Skia.Wpf.WPF.Extensions.Helper.Theming;
-using Uno.UI.Runtime.Skia.WPF.Extensions.UI.Xaml.Controls;
-using Uno.UI.Xaml;
-using Uno.UI.Xaml.Controls.Extensions;
-using Uno.UI.Xaml.Core;
-using Windows.Graphics.Display;
-using Windows.System;
-using Windows.Networking.Connectivity;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Input;
-using WinUI = Windows.UI.Xaml;
-using Uno.UI.Xaml.Controls.Extensions;
-using Uno.UI.Runtime.Skia.WPF.Extensions.UI.Xaml.Controls;
-using Uno.Extensions.System;
-using Uno.Extensions.Networking.Connectivity;
+using Uno.UI.Runtime.Skia.Wpf.Extensions;
+using Uno.UI.Runtime.Skia.Wpf.Extensions.UI.Xaml.Controls;
+using Uno.UI.Runtime.Skia.Wpf.Hosting;
+using Uno.UI.Runtime.Skia.Wpf.UI.Controls;
+using Uno.UI.Xaml.Controls;
+using WinUI = Microsoft.UI.Xaml;
+using WinUIApplication = Microsoft.UI.Xaml.Application;
 using WpfApplication = System.Windows.Application;
-using WpfCanvas = System.Windows.Controls.Canvas;
-using WpfControl = System.Windows.Controls.Control;
-using WpfFrameworkPropertyMetadata = System.Windows.FrameworkPropertyMetadata;
-using Windows.UI.ViewManagement;
-using Uno.UI.Xaml;
-using Uno.UI.Runtime.Skia.Wpf;
-using Uno.ApplicationModel.DataTransfer;
-using Uno.Extensions.ApplicationModel.DataTransfer;
-using Windows.System.Profile.Internal;
-using Uno.Extensions.System.Profile;
 
-namespace Uno.UI.Skia.Platform
+namespace Uno.UI.Runtime.Skia.Wpf;
+
+public class WpfHost : SkiaHost, IWpfApplicationHost
 {
-	[TemplatePart(Name = NativeOverlayLayerPart, Type = typeof(WpfCanvas))]
-	public class WpfHost : WpfControl, WinUI.ISkiaHost
+	private readonly Dispatcher _dispatcher;
+	private readonly Func<WinUIApplication> _appBuilder;
+	private readonly WpfApplication? _wpfApp;
+
+	[ThreadStatic] private static WpfHost? _current;
+
+	private bool _ignorePixelScaling;
+
+	static WpfHost()
+		=> WpfExtensionsRegistrar.Register();
+
+	public WpfHost(Dispatcher dispatcher, Func<WinUIApplication> appBuilder)
 	{
-		private const string NativeOverlayLayerPart = "NativeOverlayLayer";
+		_current = this;
+		_dispatcher = dispatcher;
+		_appBuilder = appBuilder;
+	}
 
-		private readonly bool designMode;
+	internal WpfHost(Func<WinUIApplication> appBuilder, Func<WpfApplication>? wpfAppBuilder)
+	{
+		_wpfApp = wpfAppBuilder?.Invoke() ?? new WpfApplication();
 
-		[ThreadStatic] private static WpfHost _current;
+		_current = this;
+		_dispatcher = _wpfApp.Dispatcher;
+		_appBuilder = appBuilder;
+	}
 
-		private WpfCanvas? _nativeOverlayLayer = null;
-		private WriteableBitmap bitmap;
-		private bool ignorePixelScaling;
-		private FocusManager? _focusManager;
+	internal static WpfHost? Current => _current;
 
-		private double _dpiScaleX;
-		private double _dpiScaleY;
+	/// <summary>
+	/// Gets or sets the current Skia Render surface type.
+	/// </summary>
+	/// <remarks>If <c>null</c>, the host will try to determine the most compatible mode.</remarks>
+	public RenderSurfaceType? RenderSurfaceType { get; set; }
 
-		static WpfHost()
+	public bool IgnorePixelScaling
+	{
+		get => _ignorePixelScaling;
+		set
 		{
-			DefaultStyleKeyProperty.OverrideMetadata(typeof(WpfHost), new WpfFrameworkPropertyMetadata(typeof(WpfHost)));
-
-			ApiExtensibility.Register(typeof(Windows.UI.Core.ICoreWindowExtension), o => new WpfCoreWindowExtension(o));
-			ApiExtensibility.Register<Windows.UI.Xaml.Application>(typeof(IApplicationExtension), o => new WpfApplicationExtension(o));
-			ApiExtensibility.Register(typeof(Windows.UI.ViewManagement.IApplicationViewExtension), o => new WpfApplicationViewExtension(o));
-			ApiExtensibility.Register(typeof(ISystemThemeHelperExtension), o => new WpfSystemThemeHelperExtension(o));
-			ApiExtensibility.Register(typeof(IDisplayInformationExtension), o => new WpfDisplayInformationExtension(o));
-			ApiExtensibility.Register(typeof(Windows.ApplicationModel.DataTransfer.DragDrop.Core.IDragDropExtension), o => new WpfDragDropExtension(o));
-			ApiExtensibility.Register(typeof(IFileOpenPickerExtension), o => new FileOpenPickerExtension(o));
-			ApiExtensibility.Register(typeof(IFileSavePickerExtension), o => new FileSavePickerExtension(o));
-			ApiExtensibility.Register(typeof(IConnectionProfileExtension), o => new WindowsConnectionProfileExtension(o));
-			ApiExtensibility.Register<TextBoxView>(typeof(ITextBoxViewExtension), o => new TextBoxViewExtension(o));
-			ApiExtensibility.Register(typeof(ILauncherExtension), o => new LauncherExtension(o));
-			ApiExtensibility.Register(typeof(IClipboardExtension), o => new ClipboardExtensions(o));
-			ApiExtensibility.Register(typeof(IAnalyticsInfoExtension), o => new AnalyticsInfoExtension());
-		}
-
-		public static WpfHost Current => _current;
-
-		internal WpfCanvas? NativeOverlayLayer => _nativeOverlayLayer;
-
-		/// <summary>
-		/// Creates a WpfHost element to host a Uno-Skia into a WPF application.
-		/// </summary>
-		/// <remarks>
-		/// If args are omitted, those from Environment.GetCommandLineArgs() will be used.
-		/// </remarks>
-		public WpfHost(global::System.Windows.Threading.Dispatcher dispatcher, Func<WinUI.Application> appBuilder, string[] args = null)
-		{
-			_current = this;
-
-			args ??= Environment
-				.GetCommandLineArgs()
-				.Skip(1)
-				.ToArray();
-
-			designMode = DesignerProperties.GetIsInDesignMode(this);
-
-			void CreateApp(WinUI.ApplicationInitializationCallbackParams _)
+			_ignorePixelScaling = value;
+			if (WpfApplication.Current.MainWindow is UnoWpfWindow window)
 			{
-				var app = appBuilder();
-				app.Host = this;
-			}
-
-			bool EnqueueNative(DispatcherQueuePriority priority, DispatcherQueueHandler callback)
-			{
-				if (priority == DispatcherQueuePriority.Normal)
-				{
-					dispatcher.BeginInvoke(callback);
-				}
-				else
-				{
-					var p = priority switch
-					{
-						DispatcherQueuePriority.Low => DispatcherPriority.Background,
-						DispatcherQueuePriority.High => DispatcherPriority.Send, // This one is higher than normal
-						_ => DispatcherPriority.Normal
-					};
-					dispatcher.BeginInvoke(p, callback);
-				}
-
-				return true;
-			}
-
-			Windows.UI.Core.CoreDispatcher.DispatchOverride = d => dispatcher.BeginInvoke(d);
-			Windows.UI.Core.CoreDispatcher.HasThreadAccessOverride = dispatcher.CheckAccess;
-
-			var dpi = VisualTreeHelper.GetDpi(WpfApplication.Current.MainWindow);
-			_dpiScaleX = dpi.DpiScaleX;
-			_dpiScaleY = dpi.DpiScaleY;
-
-			WinUI.Application.Start(CreateApp, args);
-
-			WinUI.Window.InvalidateRender += () =>
-			{
-				InvalidateOverlays();
-				InvalidateVisual();
-			};
-
-			WpfApplication.Current.Activated += Current_Activated;
-			WpfApplication.Current.Deactivated += Current_Deactivated;
-			WpfApplication.Current.MainWindow.StateChanged += MainWindow_StateChanged;
-			WpfApplication.Current.MainWindow.DpiChanged += MainWindow_DpiChanged;
-
-			Windows.Foundation.Size preferredWindowSize = ApplicationView.PreferredLaunchViewSize;
-			if (preferredWindowSize != Windows.Foundation.Size.Empty)
-			{
-				WpfApplication.Current.MainWindow.Width = (int)preferredWindowSize.Width;
-				WpfApplication.Current.MainWindow.Height = (int)preferredWindowSize.Height;
-			}
-
-			SizeChanged += WpfHost_SizeChanged;
-			Loaded += WpfHost_Loaded;
-		}
-
-		private void MainWindow_DpiChanged(object sender, DpiChangedEventArgs e)
-		{
-			_dpiScaleX = e.NewDpi.DpiScaleX;
-			_dpiScaleY = e.NewDpi.DpiScaleY;
-		}
-
-		public override void OnApplyTemplate()
-		{
-			base.OnApplyTemplate();
-
-			_nativeOverlayLayer = GetTemplateChild(NativeOverlayLayerPart) as WpfCanvas;
-		}
-
-		private void MainWindow_StateChanged(object? sender, EventArgs e)
-		{
-			var wpfWindow = WpfApplication.Current.MainWindow;
-			var winUIWindow = WinUI.Window.Current;
-			var isVisible = wpfWindow.WindowState != WindowState.Minimized;
-			winUIWindow.OnVisibilityChanged(isVisible);
-		}
-
-		private void Current_Deactivated(object? sender, EventArgs e)
-		{
-			var winUIWindow = WinUI.Window.Current;
-			winUIWindow?.OnActivated(Windows.UI.Core.CoreWindowActivationState.Deactivated);
-
-			var application = WinUI.Application.Current;
-			application?.OnEnteredBackground();
-		}
-
-		private void Current_Activated(object? sender, EventArgs e)
-		{
-			var application = WinUI.Application.Current;
-			application?.OnLeavingBackground();
-
-			var winUIWindow = WinUI.Window.Current;
-			winUIWindow?.OnActivated(Windows.UI.Core.CoreWindowActivationState.CodeActivated);
-		}
-
-		private void WpfHost_Loaded(object sender, RoutedEventArgs e)
-		{
-			WinUI.Window.Current.OnNativeSizeChanged(new Windows.Foundation.Size(ActualWidth, ActualHeight));
-		}
-
-		private void WpfHost_SizeChanged(object sender, SizeChangedEventArgs e)
-		{
-			WinUI.Window.Current.OnNativeSizeChanged(
-				new Windows.Foundation.Size(
-					e.NewSize.Width,
-					e.NewSize.Height
-				)
-			);
-		}
-
-		public SKSize CanvasSize => bitmap == null ? SKSize.Empty : new SKSize(bitmap.PixelWidth, bitmap.PixelHeight);
-
-		public bool IgnorePixelScaling
-		{
-			get => ignorePixelScaling;
-			set
-			{
-				ignorePixelScaling = value;
-				InvalidateVisual();
-			}
-		}
-
-		protected override void OnRender(DrawingContext drawingContext)
-		{
-			base.OnRender(drawingContext);
-
-			if (designMode)
-			{
-				return;
-			}
-
-			if (ActualWidth == 0
-				|| ActualHeight == 0
-				|| double.IsNaN(ActualWidth)
-				|| double.IsNaN(ActualHeight)
-				|| double.IsInfinity(ActualWidth)
-				|| double.IsInfinity(ActualHeight)
-				|| Visibility != Visibility.Visible)
-			{
-				return;
-			}
-
-
-			int width, height;
-			
-			double dpiScaleX = _dpiScaleX;
-			double dpiScaleY = _dpiScaleY;
-			if (IgnorePixelScaling)
-			{
-				width = (int)ActualWidth;
-				height = (int)ActualHeight;
-			}
-			else
-			{
-				var matrix = PresentationSource.FromVisual(this).CompositionTarget.TransformToDevice;
-				dpiScaleX = matrix.M11;
-				dpiScaleY = matrix.M22;
-				width = (int)(ActualWidth * dpiScaleX);
-				height = (int)(ActualHeight * dpiScaleY);
-			}
-
-			var info = new SKImageInfo(width, height, SKImageInfo.PlatformColorType, SKAlphaType.Premul);
-
-			// reset the bitmap if the size has changed
-			if (bitmap == null || info.Width != bitmap.PixelWidth || info.Height != bitmap.PixelHeight)
-			{
-				bitmap = new WriteableBitmap(width, height, 96 * dpiScaleX, 96 * dpiScaleY, PixelFormats.Pbgra32, null);
-			}
-
-			// draw on the bitmap
-			bitmap.Lock();
-			using (var surface = SKSurface.Create(info, bitmap.BackBuffer, bitmap.BackBufferStride))
-			{
-				surface.Canvas.Clear(SKColors.White);
-				surface.Canvas.SetMatrix(SKMatrix.CreateScale((float)dpiScaleX, (float)dpiScaleY));
-				WinUI.Window.Current.Compositor.Render(surface, info);
-			}
-
-			// draw the bitmap to the screen
-			bitmap.AddDirtyRect(new Int32Rect(0, 0, width, height));
-			bitmap.Unlock();
-			drawingContext.DrawImage(bitmap, new Rect(0, 0, ActualWidth, ActualHeight));
-		}
-
-		private void InvalidateOverlays()
-		{
-			_focusManager ??= VisualTree.GetFocusManagerForElement(Windows.UI.Xaml.Window.Current?.RootElement);
-			_focusManager?.FocusRectManager?.RedrawFocusVisual();
-			if (_focusManager?.FocusedElement is TextBox textBox)
-			{
-				textBox.TextBoxView?.Extension?.InvalidateLayout();
+				window.InvalidateVisual();
 			}
 		}
 	}
+
+	protected override void Initialize()
+	{
+		InitializeDispatcher();
+	}
+
+	protected override Task RunLoop()
+	{
+		// App needs to be created after the native overlay layer is properly initialized
+		// otherwise the initially focused input element would cause exception.
+		StartApp();
+
+		_wpfApp?.Run();
+
+		return Task.CompletedTask;
+	}
+
+	private void InitializeDispatcher()
+	{
+		Windows.UI.Core.CoreDispatcher.DispatchOverride = (d, p) => _dispatcher.BeginInvoke(d, p == Uno.UI.Dispatching.NativeDispatcherPriority.Idle ? DispatcherPriority.SystemIdle : DispatcherPriority.Normal);
+		Windows.UI.Core.CoreDispatcher.HasThreadAccessOverride = _dispatcher.CheckAccess;
+	}
+
+	private void StartApp()
+	{
+		void CreateApp(WinUI.ApplicationInitializationCallbackParams _)
+		{
+			var app = _appBuilder();
+			app.Host = this;
+		}
+
+		WinUIApplication.StartWithArguments(CreateApp);
+	}
+
+	public override string ToString() =>
+		"If you are seeing this, make sure to follow the \"Migrating WpfHost\" section of Migrating from " +
+		"previous releases article in the Uno Platform documentation at " +
+		"https://aka.platform.uno/uno5-wpfhost-migration. " +
+		"WpfHost is used at the application level instead of window level starting Uno Platform 5.0.";
 }

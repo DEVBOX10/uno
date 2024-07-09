@@ -1,13 +1,15 @@
-﻿using System;
-using Windows.Foundation;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Automation.Peers;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Shapes;
+﻿#nullable enable
 
-namespace Microsoft.UI.Xaml.Controls
+using System;
+using Windows.Foundation;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
+
+namespace Microsoft/* UWP don't rename */.UI.Xaml.Controls
 {
 	public partial class ProgressBar : RangeBase
 	{
@@ -19,7 +21,7 @@ namespace Microsoft.UI.Xaml.Controls
 		private const string s_DeterminateStateName = "Determinate";
 		private const string s_UpdatingStateName = "Updating";
 
-		public static DependencyProperty IsIndeterminateProperty { get ; } = DependencyProperty.Register(
+		public static DependencyProperty IsIndeterminateProperty { get; } = DependencyProperty.Register(
 			nameof(IsIndeterminate), typeof(bool), typeof(ProgressBar), new FrameworkPropertyMetadata(false, OnIsIndeterminateChanged));
 
 		public bool IsIndeterminate
@@ -28,7 +30,7 @@ namespace Microsoft.UI.Xaml.Controls
 			set => SetValue(IsIndeterminateProperty, value);
 		}
 
-		public static DependencyProperty ShowErrorProperty { get ; } = DependencyProperty.Register(
+		public static DependencyProperty ShowErrorProperty { get; } = DependencyProperty.Register(
 			nameof(ShowError), typeof(bool), typeof(ProgressBar), new FrameworkPropertyMetadata(false, OnShowErrorChanged));
 
 		public bool ShowError
@@ -37,7 +39,7 @@ namespace Microsoft.UI.Xaml.Controls
 			set => SetValue(ShowErrorProperty, value);
 		}
 
-		public static DependencyProperty ShowPausedProperty { get ; } = DependencyProperty.Register(
+		public static DependencyProperty ShowPausedProperty { get; } = DependencyProperty.Register(
 			nameof(ShowPaused), typeof(bool), typeof(ProgressBar), new FrameworkPropertyMetadata(false, OnShowPausedChanged));
 
 		public bool ShowPaused
@@ -46,7 +48,7 @@ namespace Microsoft.UI.Xaml.Controls
 			set => SetValue(ShowPausedProperty, value);
 		}
 
-		public static DependencyProperty TemplateSettingsProperty { get ; } = DependencyProperty.Register(
+		public static DependencyProperty TemplateSettingsProperty { get; } = DependencyProperty.Register(
 			nameof(TemplateSettings), typeof(ProgressBarTemplateSettings), typeof(ProgressBar), new FrameworkPropertyMetadata(default(ProgressBarTemplateSettings)));
 
 		public ProgressBarTemplateSettings TemplateSettings
@@ -55,10 +57,11 @@ namespace Microsoft.UI.Xaml.Controls
 			set => SetValue(TemplateSettingsProperty, value);
 		}
 
-		private Grid m_layoutRoot;
-		private Rectangle m_determinateProgressBarIndicator;
-		private Rectangle m_indeterminateProgressBarIndicator;
-		private Rectangle m_indeterminateProgressBarIndicator2;
+		private Grid? m_layoutRoot;
+		private Rectangle? m_determinateProgressBarIndicator;
+		private Rectangle? m_indeterminateProgressBarIndicator;
+		private Rectangle? m_indeterminateProgressBarIndicator2;
+		private Size? m_previousMeasuredWidths;
 
 		public ProgressBar()
 		{
@@ -66,7 +69,18 @@ namespace Microsoft.UI.Xaml.Controls
 
 			SizeChanged += (snd, evt) => OnSizeChange();
 
+#if !UNO_HAS_ENHANCED_LIFECYCLE
+			// Uno-specific: TODO: Investigate why we need this. It's a quite very old workaround from 2020
+			// https://github.com/unoplatform/uno/commit/641bbc9483f33c64d5eddc474f069c07b79039ba
+			// So, maybe it's no longer needed.
+			// For now, we're sure it's no longer needed with enhanced lifecycle (actually, it's problematic if it exists there)
+			// Note: LayoutUpdated event isn't really tied to a specific element. It really means that some element in the visual tree had a layout update.
+			// So, this event subscription is wrong because it will cause the ProgressBar to transition to Updating visual state then back
+			// to a state based on its properties (e.g, Indeterminate) every time any element in the visual tree has a layout update.
+			// So it will cause some bad flickers in ProgressBar, and will also get us into a cycle in case there is a listener
+			// to CurrentStateChanged event where the listener does something that updates the layout.
 			LayoutUpdated += (snd, evt) => OnSizeChange();
+#endif
 
 			RegisterPropertyChangedCallback(ValueProperty, OnRangeBasePropertyChanged);
 			RegisterPropertyChangedCallback(MinimumProperty, OnRangeBasePropertyChanged);
@@ -94,7 +108,15 @@ namespace Microsoft.UI.Xaml.Controls
 
 		private void OnSizeChange()
 		{
-			SetProgressBarIndicatorWidth();
+#if __ANDROID__ // Uno workaround for #12312: SetProgressBarIndicatorWidth raises LayoutUpdated, and they many loops to stabilize
+			if (m_layoutRoot is not null &&
+				m_determinateProgressBarIndicator is not null &&
+				m_previousMeasuredWidths != new Size(m_layoutRoot.ActualWidth, m_determinateProgressBarIndicator.ActualWidth))
+#endif
+			{
+				SetProgressBarIndicatorWidth();
+			}
+
 			UpdateWidthBasedTemplateSettings();
 		}
 
@@ -167,6 +189,7 @@ namespace Microsoft.UI.Xaml.Controls
 			var templateSettings = TemplateSettings;
 
 			var progressBar = m_layoutRoot;
+			m_previousMeasuredWidths = new Size(double.NaN, double.NaN);
 
 			if (progressBar != null)
 			{
@@ -178,6 +201,8 @@ namespace Microsoft.UI.Xaml.Controls
 					var maximum = Maximum;
 					var minimum = Minimum;
 					var padding = Padding;
+
+					m_previousMeasuredWidths = new Size(progressBarWidth, prevIndicatorWidth);
 
 					// Adds "Updating" state in between to trigger RepositionThemeAnimation Visual Transition
 					// in ProgressBar.xaml when reverting back to previous state

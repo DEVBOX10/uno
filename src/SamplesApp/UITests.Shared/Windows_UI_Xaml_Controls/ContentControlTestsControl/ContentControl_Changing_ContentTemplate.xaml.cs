@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -7,17 +7,17 @@ using Uno.UI.Samples.Controls;
 
 using Windows.Foundation;
 using Windows.Foundation.Collections;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Navigation;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Navigation;
 
 namespace Uno.UI.Samples.Content.UITests.ContentControlTestsControl
 {
-	[SampleControlInfo("ContentControlTestsControl", "ContentControl_Changing_ContentTemplate", description: "ContentControl where ContentTemplate can be toggled between non-null and null. Content view should be visible when null.")]
+	[SampleControlInfo("ContentControl", "ContentControl_Changing_ContentTemplate", description: "ContentControl where ContentTemplate can be toggled between non-null and null. Content view should be visible when null.")]
 	public sealed partial class ContentControl_Changing_ContentTemplate : UserControl
 	{
 		public ContentControl_Changing_ContentTemplate()

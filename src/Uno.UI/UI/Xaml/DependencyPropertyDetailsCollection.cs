@@ -1,29 +1,18 @@
 ﻿#nullable enable
 
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Runtime.CompilerServices;
+using Microsoft.UI.Xaml.Data;
 using Uno.Buffers;
-using Uno.Extensions;
 using Uno.UI.DataBinding;
-using Windows.UI.Xaml.Data;
 
-namespace Windows.UI.Xaml
+namespace Microsoft.UI.Xaml
 {
 	/// <summary>
 	/// A <see cref="DependencyPropertyDetails"/> collection
 	/// </summary>
-	/// <remarks>
-	/// This implementation uses an O(1) lookup for the dependency properties of a DependencyObject. This assumes that
-	/// <see cref="DependencyProperty.GetPropertiesForType"/> returns an ordered list, and creates an array based on
-	/// the min and max UniqueIDs found in the object's properties.
-	///
-	/// This approach can cost more in storage for some types, if the array is mostly empty.
-	/// </remarks>
 	partial class DependencyPropertyDetailsCollection : IDisposable
 	{
-		private static readonly DependencyPropertyDetails?[] Empty = new DependencyPropertyDetails?[0];
-
 		private readonly Type _ownerType;
 		private readonly ManagedWeakReference _ownerReference;
 		private object? _hardOwnerReference;
@@ -33,13 +22,15 @@ namespace Windows.UI.Xaml
 		private DependencyPropertyDetails? _dataContextPropertyDetails;
 		private DependencyPropertyDetails? _templatedParentPropertyDetails;
 
-		private readonly static ArrayPool<DependencyPropertyDetails?> _pool = ArrayPool<DependencyPropertyDetails?>.Create(500, 100);
+		private readonly static ArrayPool<short> _offsetsPool = ArrayPool<short>.Shared;
+		private readonly static LinearArrayPool<DependencyPropertyDetails?> _pool = LinearArrayPool<DependencyPropertyDetails?>.CreateAutomaticallyManaged(BucketSize, 16);
 
-		private DependencyPropertyDetails?[]? _entries;
-		private int _entriesLength;
-		private int _minId;
-		private int _maxId;
-		private List<DependencyObjectStore.DefaultValueProvider>? _defaultValueProviders = null;
+		private static readonly DependencyPropertyDetails?[] _empty = Array.Empty<DependencyPropertyDetails?>();
+
+		private DependencyPropertyDetails?[] _entries;
+		private short[]? _entryOffsets;
+
+		private const int BucketSize = 16;
 
 		private object? Owner => _hardOwnerReference ?? _ownerReference.Target;
 
@@ -54,50 +45,69 @@ namespace Windows.UI.Xaml
 
 			_dataContextProperty = dataContextProperty;
 			_templatedParentProperty = templatedParentProperty;
+
+			_entries = _empty;
 		}
 
-		private DependencyPropertyDetails?[] Entries
+		internal void CloneToForHotReload(DependencyPropertyDetailsCollection other, DependencyObjectStore store, DependencyObjectStore otherStore)
 		{
-			get
+			for (int i = 0; i < _entries.Length; i++)
 			{
-				EnsureEntriesInitialized();
-				return _entries!;
-			}
-		}
-
-		private void EnsureEntriesInitialized()
-		{
-			if (_entries == null)
-			{
-				var propertiesForType = DependencyProperty.GetPropertiesForType(_ownerType);
-
-				if (propertiesForType.Length != 0)
+				if (_entries[i] is { Property: { } oldDP } oldDetails)
 				{
-					_minId = propertiesForType[0].UniqueId;
-					_maxId = propertiesForType[propertiesForType.Length - 1].UniqueId;
+					var newDP = DependencyProperty.GetProperty(oldDP.OwnerType, oldDP.Name);
+					if (newDP is null)
+					{
+						continue;
+					}
 
-					var entriesLength = _maxId - _minId + 1;
-					var entries = _pool.Rent(entriesLength);
+					if (other.GetPropertyDetails(newDP) is { } newDetails)
+					{
+						oldDetails.CloneToForHotReload(newDetails);
 
-					// Entries are pre-sorted by the DependencyProperty.GetPropertiesForType method
-					AssignEntries(entries, entriesLength);
+						// This may not work well for x:Bind, we will investigate proper support for x:Bind.
+						// Though, anything will be done now for x:Bind will need to be re-worked if we refactored
+						// x:Bind to be fully compiled, as in WinUI.
+						if (oldDetails.GetBinding() is { ParentBinding: { } binding })
+						{
+							var newBinding = new Binding(binding.Path, binding.Converter, binding.ConverterParameter);
+							var newSource = binding.Source;
+							if (newSource is IDependencyObjectStoreProvider { Store: { } oldStore } && oldStore == store)
+							{
+								newSource = otherStore.ActualInstance;
+							}
 
-				}
-				else
-				{
-					_entries = Empty;
+							newBinding.Source = newSource;
+							newBinding.Mode = binding.Mode;
+							newBinding.TargetNullValue = binding.TargetNullValue;
+							newBinding.ElementName = binding.ElementName;
+							newBinding.FallbackValue = binding.FallbackValue;
+							if (binding.RelativeSource is { } relativeSource)
+							{
+								newBinding.RelativeSource = new RelativeSource(relativeSource.Mode);
+							}
+
+							otherStore.SetBinding(newDP, newBinding);
+						}
+					}
 				}
 			}
 		}
 
 		public void Dispose()
 		{
-			for (var i = 0; i < _entriesLength; i++)
+			var entries = _entries;
+
+			var entriesLength = entries.Length;
+
+			for (var i = 0; i < entriesLength; i++)
 			{
-				Entries![i]?.Dispose();
+				entries[i]?.Dispose();
 			}
 
-			ReturnEntriesToPool();
+			ReturnEntriesAndOffsetsToPools();
+
+			_entries = null!;
 		}
 
 		public DependencyPropertyDetails DataContextPropertyDetails
@@ -119,27 +129,79 @@ namespace Windows.UI.Xaml
 		/// </summary>
 		/// <param name="property">A dependency property</param>
 		/// <returns>The details of the property if it exists, otherwise null.</returns>
-		public DependencyPropertyDetails FindPropertyDetails(DependencyProperty property)
-			=> TryGetPropertyDetails(property, forceCreate: false)!;
+		public DependencyPropertyDetails? FindPropertyDetails(DependencyProperty property)
+			=> TryGetPropertyDetails(property, forceCreate: false);
 
 		private DependencyPropertyDetails? TryGetPropertyDetails(DependencyProperty property, bool forceCreate)
 		{
-			EnsureEntriesInitialized();
-
-			var propertyId = property.UniqueId;
-
-			var entryIndex = propertyId - _minId;
-
-			// https://stackoverflow.com/a/17095534/26346
-			var isInRange = (uint)entryIndex <= (_maxId - _minId);
-
-			if (isInRange)
+			if (_entries is null)
 			{
-				ref var propertyEntry = ref Entries![entryIndex];
+				return null;
+			}
 
-				if (forceCreate && propertyEntry == null)
+			if (forceCreate)
+			{
+				// Since BucketSize is a power of 2 we can shift and mask to divide and modulo respectively
+				// Both operations(div/mod) are still expensive on modern hardware (~20+ cycles)
+				// This is not a concern for RyuJIT or LLVM backends as they will emit optimized code for it.
+				// The main concern is the Mono interpreter which may or may not do so.
+				// See: libdivide and fastmod projects
+				var bucketIndex = property.UniqueId >> 4;
+				var bucketRemainder = property.UniqueId & 15;
+
+				var entryOffsets = _entryOffsets;
+
+				// Offsets have not been initialized or need to be resized
+				if (entryOffsets == null || bucketIndex >= entryOffsets.Length)
 				{
-					propertyEntry = new DependencyPropertyDetails(property, _ownerType);
+					// Rent the next multiple of BucketSize available : 0 -> 16, 16 -> 32, 32 -> 64 ...
+					var newOffsets = _offsetsPool.Rent((bucketIndex * BucketSize) + 1);
+
+					// Since newOffsets is an Int16 array we can memset it with 0xFFs, 0xFFFF is -1, regardless of endianness
+					// This avoids the slow path in Span<T>.Fill()
+					Unsafe.InitBlockUnaligned(ref Unsafe.As<short, byte>(ref newOffsets[0]), 0xFF, (uint)newOffsets.Length * 2);
+
+					if (entryOffsets != null)
+					{
+						entryOffsets.AsSpan().CopyTo(newOffsets);
+
+						_offsetsPool.Return(entryOffsets);
+					}
+
+					_entryOffsets = entryOffsets = newOffsets;
+				}
+
+				var entries = _entries;
+
+				var offset = entryOffsets[bucketIndex];
+
+				// Offset -1 represents an unallocated bucket, -1 was chosen because 0 is a valid offset
+				// We need to resize the entries array to fit a new bucket
+				if (offset == -1)
+				{
+					entryOffsets[bucketIndex] = offset = (short)entries.Length;
+
+					var newEntries = _pool.Rent(entries.Length + BucketSize);
+
+					if (entries != _empty)
+					{
+						entries.AsSpan().CopyTo(newEntries);
+
+						_pool.Return(entries, clearArray: true);
+					}
+
+					_entries = entries = newEntries;
+				}
+
+				// Avoid using ref here, as TryResolveDefaultValueFromProviders execution could execute code which
+				// could cause the entries array to be expanded by bucket size and to be reallocated, which would
+				// cause the reference to be invalidated. Example of this is a child property which calls child.SetParent(this).
+				// Even though the _entries size may change, the offset and bucketRemainder will still be valid.
+				var propertyEntry = entries[offset + bucketRemainder];
+				if (propertyEntry is null)
+				{
+					propertyEntry = new DependencyPropertyDetails(property, _ownerType, property == _dataContextProperty || property == _templatedParentProperty);
+					_entries[offset + bucketRemainder] = propertyEntry;
 
 					if (TryResolveDefaultValueFromProviders(property, out var value))
 					{
@@ -151,107 +213,51 @@ namespace Windows.UI.Xaml
 			}
 			else
 			{
-				if (forceCreate)
+				if (_entries != _empty)
 				{
-					int newEntriesSize;
-					DependencyPropertyDetails?[] newEntries;
+					// See above
+					var bucketIndex = property.UniqueId >> 4;
 
-					if (entryIndex < 0)
+					if (bucketIndex < _entryOffsets!.Length)
 					{
-						newEntriesSize = _maxId - propertyId + 1;
-						newEntries = _pool.Rent(newEntriesSize);
-						Array.Copy(Entries, 0, newEntries, _minId - propertyId, _entriesLength);
+						var offset = _entryOffsets[bucketIndex];
 
-						_minId = propertyId;
-
-						AssignEntries(newEntries, newEntriesSize);
+						return offset != -1 ? _entries[offset + (property.UniqueId & 15)] : null;
 					}
-					else
-					{
-						newEntriesSize = propertyId - _minId + 1;
-
-						newEntries = _pool.Rent(newEntriesSize);
-						Array.Copy(Entries, 0, newEntries, 0, _entriesLength);
-
-						AssignEntries(newEntries, newEntriesSize);
-					}
-
-					ref var propertyEntry = ref Entries![property.UniqueId - _minId];
-					propertyEntry = new DependencyPropertyDetails(property, _ownerType);
-					if (TryResolveDefaultValueFromProviders(property, out var value))
-					{
-						propertyEntry.SetValue(value, DependencyPropertyValuePrecedences.DefaultValue);
-					}
-
-					return propertyEntry;
 				}
-				else
-				{
-					return null;
-				}
+
+				return null;
 			}
 		}
 
 		private bool TryResolveDefaultValueFromProviders(DependencyProperty property, out object? value)
 		{
-			if (_defaultValueProviders != null)
+			// Replicate the WinUI behavior of DependencyObject::GetDefaultValue2 specifically for UIElement.
+			if (Owner is UIElement uiElement)
 			{
-				for (int i = _defaultValueProviders.Count - 1; i >= 0; i--)
-				{
-					var provider = _defaultValueProviders[i];
-					if (provider.Invoke(property, out var resolvedValue))
-					{
-						value = resolvedValue;
-						return true;
-					}
-				}
+				return uiElement.GetDefaultValue2(property, out value);
 			}
+
 			value = null;
 			return false;
 		}
 
-		private void AssignEntries(DependencyPropertyDetails?[] newEntries, int newSize)
+		private void ReturnEntriesAndOffsetsToPools()
 		{
-			ReturnEntriesToPool();
-
-			_entries = newEntries;
-			_entriesLength = newEntries.Length;
-
-			// Array size returned by Rend may be larger than the requested size
-			// Adjust the max to that new value.
-			_maxId = _entriesLength + _minId - 1;
-		}
-
-		private void ReturnEntriesToPool()
-		{
-			if (_entries != null)
+			if (_entries != _empty)
 			{
 				_pool.Return(_entries, clearArray: true);
 			}
-		}
 
-		internal DependencyPropertyDetails?[] GetAllDetails() => Entries;
-
-		/// <summary>
-		/// Adds a default value provider.
-		/// </summary>
-		/// <param name="provider">Default value provider.</param>
-		/// <remarks>
-		/// Providers which are registered later have higher priority.
-		/// E.g. when both a derived and base class register their own default
-		/// value provider in the constructor for the same property, the derived
-		/// class value is used.
-		/// </remarks>
-		public void RegisterDefaultValueProvider(DependencyObjectStore.DefaultValueProvider provider)
-		{
-			if (provider == null)
+			if (_entryOffsets != null)
 			{
-				throw new ArgumentNullException(nameof(provider));
+				_offsetsPool.Return(_entryOffsets);
 			}
-
-			_defaultValueProviders ??= new List<DependencyObjectStore.DefaultValueProvider>(2);
-			_defaultValueProviders.Add(provider);
 		}
+
+		internal DependencyPropertyDetails?[] GetAllDetails()
+			// If _entries is null, it means we were already disposed. Gracefully return empty so that the caller doesn't have anything to do.
+			=> _entries ?? _empty;
 
 		internal void TryEnableHardReferences()
 		{

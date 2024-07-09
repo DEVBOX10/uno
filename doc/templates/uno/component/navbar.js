@@ -1,12 +1,78 @@
 /**
- * Changes the logo on resize
+ * Load the navbar from the uno website
  */
+function initializeNavbar() {
+
+    const navbar = document.querySelector("header > .navbar");
+    if (document.body.classList.contains("front-page")) {
+        let last_known_scroll_position = 0;
+        let ticking = false;
+
+        function doSomething(scroll_pos) {
+            if (scroll_pos >= 100) navbar.classList.add("scrolled");
+            else navbar.classList.remove("scrolled");
+        }
+
+        window.addEventListener("scroll", function () {
+            last_known_scroll_position = window.scrollY;
+
+            if (!ticking) {
+                window.requestAnimationFrame(function () {
+                    doSomething(last_known_scroll_position);
+                    ticking = false;
+                });
+
+                ticking = true;
+            }
+        });
+    }
+
+    const unoMenuReq = new XMLHttpRequest();
+    const unoMenuEndpoint = "https://platform.uno/wp-json/wp/v2/menu";
+    const $navbar = document.getElementById("navbar");
+    let wordpressMenuHasLoaded = false;
+
+    unoMenuReq.open("get", unoMenuEndpoint, true);
+
+    if (typeof navbar !== "undefined") {
+        unoMenuReq.onload = function () {
+            if (unoMenuReq.status === 200 && unoMenuReq.responseText) {
+                $navbar.innerHTML = JSON.parse(
+                    unoMenuReq.responseText
+                );
+                wordpressMenuHasLoaded = true;
+                $(document).trigger("wordpressMenuHasLoaded");
+            }
+        };
+        unoMenuReq.onerror = function (e) {
+        };
+        unoMenuReq.send();
+    }
+
+    $(document).ajaxComplete(function (event, xhr, settings) {
+        const docFxNavbarHasLoaded = settings.url === "toc.html";
+
+        if (docFxNavbarHasLoaded && wordpressMenuHasLoaded) {
+            const $docfxNavbar = $navbar.getElementsByClassName("navbar-nav");
+            $docfxNavbar[0].className += " hidden";
+
+        }
+    });
+}
+
+/**
+ * Changes the logo on resize
+*/
+
 function updateLogo() {
     const curWidth = window.innerWidth;
-    if (curWidth < 980) {
-        $('#logo').attr('src', '../images/UnoLogoSmall.png');
+    const headerLogo = document.getElementById('logo');
+    if (curWidth < 1024) {
+        const mobileLogo = new URL('UnoLogoSmall.png', headerLogo.src).href;
+        headerLogo.src = mobileLogo;
     } else {
-        $('#logo').attr('src', '../images/uno-logo.svg');
+        const deskLogo = new URL('uno-logo.svg', headerLogo.src).href;
+        headerLogo.src = deskLogo;
     }
 }
 
@@ -15,6 +81,7 @@ function updateLogoOnResize() {
         updateLogo();
     });
 }
+
 
 // Update href in navbar
 function renderNavbar() {

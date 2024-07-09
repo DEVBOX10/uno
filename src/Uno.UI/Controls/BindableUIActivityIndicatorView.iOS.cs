@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Text;
 using Foundation;
 using UIKit;
-using Windows.UI.Xaml;
+using Microsoft.UI.Xaml;
 using CoreGraphics;
+using ObjCRuntime;
 
 namespace Uno.UI.Views.Controls
 {
@@ -33,7 +34,7 @@ namespace Uno.UI.Views.Controls
 			InitializeBinder();
 		}
 
-		public BindableUIActivityIndicatorView(IntPtr handle)
+		public BindableUIActivityIndicatorView(NativeHandle handle)
 			: base(handle)
 		{
 			InitializeBinder();

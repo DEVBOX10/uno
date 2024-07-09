@@ -1,18 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
-using Uno.Disposables;
 using System.Text;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Markup;
+using Microsoft.UI.Xaml.Media;
+using Uno.Disposables;
 using Uno.Extensions;
-using Windows.Foundation;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Markup;
 using Uno.UI.DataBinding;
-using Windows.UI.Xaml.Input;
+using Windows.Foundation;
+using Windows.UI.Core;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
-	[ContentProperty(Name = "Content")]
+	[ContentProperty(Name = nameof(Content))]
 	public partial class SplitView : Control
 	{
 		public event TypedEventHandler<SplitView, object> PaneClosed;
@@ -28,9 +29,11 @@ namespace Windows.UI.Xaml.Controls
 		public SplitView()
 		{
 			DefaultStyleKey = typeof(SplitView);
+
+			TemplateSettings = new SplitViewTemplateSettings(this);
 		}
 
-#if XAMARIN_IOS
+#if __IOS__
 		public override void LayoutSubviews()
 		{
 			base.LayoutSubviews();
@@ -47,12 +50,13 @@ namespace Windows.UI.Xaml.Controls
 			set { this.SetValue(CompactPaneLengthProperty, value); }
 		}
 
-		public static DependencyProperty CompactPaneLengthProperty { get ; } =
+		public static DependencyProperty CompactPaneLengthProperty { get; } =
 			DependencyProperty.Register(
 				"CompactPaneLength",
 				typeof(double), typeof(SplitView),
 				new FrameworkPropertyMetadata(
-					(double)48,
+					defaultValue: (double)48,
+					options: FrameworkPropertyMetadataOptions.AffectsMeasure,
 					(s, e) => ((SplitView)s)?.OnCompactPaneLengthChanged(e)
 				)
 			);
@@ -72,13 +76,14 @@ namespace Windows.UI.Xaml.Controls
 			set { this.SetValue(ContentProperty, value); }
 		}
 
-		public static DependencyProperty ContentProperty { get ; } =
+		public static DependencyProperty ContentProperty { get; } =
 			DependencyProperty.Register(
 				"Content",
 				typeof(UIElement),
 				typeof(SplitView),
 				new FrameworkPropertyMetadata(
-					null,
+					defaultValue: null,
+					options: FrameworkPropertyMetadataOptions.AffectsMeasure,
 					(s, e) => ((SplitView)s)?.OnContentChanged(e)
 				)
 			);
@@ -98,13 +103,14 @@ namespace Windows.UI.Xaml.Controls
 			set { this.SetValue(PaneProperty, value); }
 		}
 
-		public static DependencyProperty PaneProperty { get ; } =
+		public static DependencyProperty PaneProperty { get; } =
 			DependencyProperty.Register(
 				"Pane",
 				typeof(UIElement),
 				typeof(SplitView),
 				new FrameworkPropertyMetadata(
-					null,
+					defaultValue: null,
+					options: FrameworkPropertyMetadataOptions.AffectsMeasure,
 					(s, e) => ((SplitView)s)?.OnPaneChanged(e)
 				)
 			);
@@ -123,13 +129,14 @@ namespace Windows.UI.Xaml.Controls
 			set { this.SetValue(DisplayModeProperty, value); }
 		}
 
-		public static DependencyProperty DisplayModeProperty { get ; } =
+		public static DependencyProperty DisplayModeProperty { get; } =
 			DependencyProperty.Register(
 				"DisplayMode",
 				typeof(SplitViewDisplayMode),
 				typeof(SplitView),
 				new FrameworkPropertyMetadata(
-					SplitViewDisplayMode.Overlay,
+					defaultValue: SplitViewDisplayMode.Overlay,
+					options: FrameworkPropertyMetadataOptions.AffectsMeasure,
 					(s, e) => ((SplitView)s)?.OnDisplayModeChanged(e)
 				)
 			);
@@ -150,13 +157,14 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		//There is an error in the MSDN docs saying that the default value for IsPaneOpen is true, it is actually false
-		public static DependencyProperty IsPaneOpenProperty { get ; } =
+		public static DependencyProperty IsPaneOpenProperty { get; } =
 			DependencyProperty.Register(
 				"IsPaneOpen",
 				typeof(bool),
 				typeof(SplitView),
 				new FrameworkPropertyMetadata(
 					false,
+
 					(s, e) => ((SplitView)s)?.OnIsPaneOpenChanged(e)
 				)
 			);
@@ -176,13 +184,14 @@ namespace Windows.UI.Xaml.Controls
 			set { this.SetValue(OpenPaneLengthProperty, value); }
 		}
 
-		public static DependencyProperty OpenPaneLengthProperty { get ; } =
+		public static DependencyProperty OpenPaneLengthProperty { get; } =
 			DependencyProperty.Register(
 				"OpenPaneLength",
 				typeof(double),
 				typeof(SplitView),
 				new FrameworkPropertyMetadata(
-					(double)320,
+					defaultValue: (double)320,
+					options: FrameworkPropertyMetadataOptions.AffectsMeasure,
 					(s, e) => ((SplitView)s)?.OnOpenPaneLengthChanged(e)
 				)
 			);
@@ -202,7 +211,7 @@ namespace Windows.UI.Xaml.Controls
 			set { this.SetValue(PaneBackgroundProperty, value); }
 		}
 
-		public static DependencyProperty PaneBackgroundProperty { get ; } =
+		public static DependencyProperty PaneBackgroundProperty { get; } =
 			DependencyProperty.Register(
 				"PaneBackground",
 				typeof(Brush),
@@ -227,7 +236,7 @@ namespace Windows.UI.Xaml.Controls
 			set { this.SetValue(PanePlacementProperty, value); }
 		}
 
-		public static DependencyProperty PanePlacementProperty { get ; } =
+		public static DependencyProperty PanePlacementProperty { get; } =
 			DependencyProperty.Register(
 				"PanePlacement",
 				typeof(SplitViewPanePlacement),
@@ -253,13 +262,13 @@ namespace Windows.UI.Xaml.Controls
 			private set { this.SetValue(TemplateSettingsProperty, value); }
 		}
 
-		public static DependencyProperty TemplateSettingsProperty { get ; } =
+		public static DependencyProperty TemplateSettingsProperty { get; } =
 			DependencyProperty.Register(
 				"TemplateSettings",
 				typeof(SplitViewTemplateSettings),
 				typeof(SplitView),
 				new FrameworkPropertyMetadata(
-					new SplitViewTemplateSettings(null),
+					null,
 					(s, e) => ((SplitView)s)?.OnTemplateSettingsPropertyChanged(e)
 				)
 			);
@@ -269,6 +278,8 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		#endregion
+
+		protected override Size MeasureOverride(Size availableSize) => base.MeasureOverride(availableSize);
 
 		protected override void OnApplyTemplate()
 		{
@@ -358,7 +369,10 @@ namespace Windows.UI.Xaml.Controls
 
 		private void UpdateTemplateSettings()
 		{
-			this.TemplateSettings = new SplitViewTemplateSettings(this);
+			var templateSettings = TemplateSettings;
+
+			templateSettings.OpenPaneLength = OpenPaneLength;
+			templateSettings.CompactPaneLength = CompactPaneLength;
 		}
 
 		/// <summary>
@@ -411,8 +425,8 @@ namespace Windows.UI.Xaml.Controls
 			}
 			_needsVisualStateUpdate = true;
 
-			Dispatcher.RunAsync(
-				Windows.UI.Core.CoreDispatcherPriority.Normal,
+			_ = Dispatcher.RunAsync(
+				CoreDispatcherPriority.Normal,
 				() =>
 				{
 					UpdateVisualStates(true);

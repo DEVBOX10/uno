@@ -4,9 +4,10 @@ using Gtk;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Uno.UI.Runtime.Skia;
+using Uno.UI.Runtime.Skia.Gtk;
 using Windows.Storage;
 using Windows.Storage.Pickers;
+using Uno.UI.Helpers;
 
 namespace Uno.Extensions.Storage.Pickers
 {
@@ -27,9 +28,9 @@ namespace Uno.Extensions.Storage.Pickers
 				commitText = _picker.CommitButtonText;
 			}
 
-			FileChooserDialog dialog = new FileChooserDialog(
+			using FileChooserDialog dialog = new FileChooserDialog(
 				"Select Folder",
-				GtkHost.Window,
+				GtkHost.Current!.InitialWindow,
 				FileChooserAction.SelectFolder,
 				"Cancel", ResponseType.Cancel,
 				commitText, ResponseType.Accept);
@@ -43,13 +44,12 @@ namespace Uno.Extensions.Storage.Pickers
 
 			dialog.SetCurrentFolder(PickerHelpers.GetInitialDirectory(_picker.SuggestedStartLocation));
 
-			StorageFolder folder = null;
+			StorageFolder? folder = null;
 			if (dialog.Run() == (int)ResponseType.Accept)
 			{
 				folder = await StorageFolder.GetFolderFromPathAsync(dialog.Filename);
 			}
 
-			dialog.Destroy();
 			return folder;
 		}
 	}

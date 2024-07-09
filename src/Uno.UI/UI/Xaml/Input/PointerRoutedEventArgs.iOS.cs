@@ -13,7 +13,7 @@ using Windows.UI.Input;
 using Windows.Devices.Input;
 #endif
 
-namespace Windows.UI.Xaml.Input
+namespace Microsoft.UI.Xaml.Input
 {
 	partial class PointerRoutedEventArgs
 	{
@@ -42,7 +42,7 @@ namespace Windows.UI.Xaml.Input
 			_properties = previous._properties;
 		}
 
-		internal PointerRoutedEventArgs(uint pointerId, UITouch nativeTouch, UIEvent nativeEvent, UIElement receiver) : this()
+		internal PointerRoutedEventArgs(uint pointerId, UITouch nativeTouch, UIEvent nativeEvent, UIElement originalSource) : this()
 		{
 			_nativeTouch = nativeTouch;
 			_nativeEvent = nativeEvent;
@@ -55,7 +55,7 @@ namespace Windows.UI.Xaml.Input
 			FrameId = ToFrameId(_nativeTouch.Timestamp);
 			Pointer = new Pointer(pointerId, deviceType, isInContact, isInRange: true);
 			KeyModifiers = VirtualKeyModifiers.None;
-			OriginalSource = FindOriginalSource(_nativeTouch) ?? receiver;
+			OriginalSource = originalSource;
 
 			_properties = GetProperties(); // Make sure to capture the properties state so we can re-use them in "mixed" ctor
 		}
@@ -63,7 +63,7 @@ namespace Windows.UI.Xaml.Input
 		public PointerPoint GetCurrentPoint(UIElement relativeTo)
 		{
 			var timestamp = ToTimeStamp(_nativeTouch.Timestamp);
-			var device = Windows.Devices.Input.PointerDevice.For((Windows.Devices.Input.PointerDeviceType)Pointer.PointerDeviceType);
+			var device = global::Windows.Devices.Input.PointerDevice.For((global::Windows.Devices.Input.PointerDeviceType)Pointer.PointerDeviceType);
 			var rawPosition = (Point)_nativeTouch.GetPreciseLocation(null);
 			var position = relativeTo == null
 				? rawPosition
@@ -74,7 +74,7 @@ namespace Windows.UI.Xaml.Input
 
 		private PointerDeviceType GetPointerDeviceType(UITouchType touchType) =>
 			touchType switch
-			{				
+			{
 				UITouchType.Stylus => PointerDeviceType.Pen,
 				UITouchType.IndirectPointer => PointerDeviceType.Mouse,
 				UITouchType.Indirect => PointerDeviceType.Mouse,
@@ -82,12 +82,18 @@ namespace Windows.UI.Xaml.Input
 			};
 
 		private PointerPointProperties GetProperties()
-			=> new PointerPointProperties()
+			=> new()
 			{
 				IsPrimary = true,
 				IsInRange = Pointer.IsInRange,
 				IsLeftButtonPressed = Pointer.IsInContact,
-				Pressure = (float)(_nativeTouch.Force / _nativeTouch.MaximumPossibleForce)
+				Pressure = (float)(_nativeTouch.Force / _nativeTouch.MaximumPossibleForce),
+				PointerUpdateKind = _nativeTouch.Phase switch
+				{
+					UITouchPhase.Began => PointerUpdateKind.LeftButtonPressed,
+					UITouchPhase.Ended => PointerUpdateKind.LeftButtonReleased,
+					_ => PointerUpdateKind.Other
+				}
 			};
 
 		#region Misc static helpers
@@ -95,34 +101,23 @@ namespace Windows.UI.Xaml.Input
 
 		private static ulong ToTimeStamp(double timestamp)
 		{
-			if (!_bootTime.HasValue)
-			{
-				_bootTime = DateTime.UtcNow.Ticks - (long)(TimeSpan.TicksPerSecond * new NSProcessInfo().SystemUptime);
-			}
+			_bootTime ??= DateTime.UtcNow.Ticks - (long)(TimeSpan.TicksPerSecond * new NSProcessInfo().SystemUptime);
 
 			return (ulong)_bootTime.Value + (ulong)(TimeSpan.TicksPerSecond * timestamp);
 		}
 
+		private static double? _firstTimestamp;
+
 		private static uint ToFrameId(double timestamp)
 		{
-			// The precision of the frameId is 10 frame per ms ... which should be enough
-			return (uint)(timestamp * 1000.0 * 10.0);
-		}
+			_firstTimestamp ??= timestamp;
 
-		private static UIElement FindOriginalSource(UITouch touch)
-		{
-			var view = touch.View;
-			while (view != null)
-			{
-				if (view is UIElement elt)
-				{
-					return elt;
-				}
+			var relativeTimestamp = timestamp - _firstTimestamp;
+			var frameId = relativeTimestamp * 120.0; // we allow a precision of 120Hz (8.333 ms per frame)
 
-				view = view.Superview;
-			}
-
-			return null;
+			// When we cast, we are not overflowing but instead capping to uint.MaxValue.
+			// We use modulo to make sure to reset to 0 in that case (1.13 years of app run-time, but we prefer to be safe).
+			return (uint)(frameId % uint.MaxValue);
 		}
 		#endregion
 	}

@@ -1,9 +1,9 @@
-using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml.Controls;
+﻿using Uno.UI.Samples.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace SamplesApp.Windows_UI_Xaml_Shapes.PathTestsControl
 {
-	[SampleControlInfo("PathTestsControl", "FixedWidth")]
+	[SampleControlInfo("Path", "FixedWidth")]
 	public sealed partial class FixedWidth : UserControl
 	{
 		public FixedWidth()

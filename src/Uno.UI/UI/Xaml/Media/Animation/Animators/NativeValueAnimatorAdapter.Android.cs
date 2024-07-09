@@ -6,10 +6,10 @@ using Android.Views.Animations;
 using Uno.Extensions;
 using Uno.Foundation.Logging;
 
-namespace Windows.UI.Xaml.Media.Animation
+namespace Microsoft.UI.Xaml.Media.Animation
 {
-    internal sealed class NativeValueAnimatorAdapter : IValueAnimator
-    {
+	internal sealed class NativeValueAnimatorAdapter : IValueAnimator
+	{
 		private readonly Dictionary<EventHandler, EventHandler<ValueAnimator.AnimatorUpdateEventArgs>> _updateHandlers = new Dictionary<EventHandler, EventHandler<ValueAnimator.AnimatorUpdateEventArgs>>();
 		private readonly Dictionary<EventHandler, EventHandler<Animator.AnimationPauseEventArgs>> _pauseHandlers = new Dictionary<EventHandler, EventHandler<Animator.AnimationPauseEventArgs>>();
 		private readonly Dictionary<EventHandler, EventHandler> _endHandlers = new Dictionary<EventHandler, EventHandler>();
@@ -38,7 +38,12 @@ namespace Windows.UI.Xaml.Media.Animation
 		}
 
 		/// <inheritdoc />
-		public void Dispose() => _adaptee.Dispose();
+		public void Dispose()
+		{
+			// We should never explicitly call Dispose() on native objects (i.e. do NOT invoke _adaptee.Dispose(); here!)
+			// For backward compatibility where Dispose() was not invoked, we are not doing anything here,
+			// but we should most probably Cancel the _adaptee.
+		}
 
 		/// <inheritdoc />
 		public event EventHandler Update
@@ -109,7 +114,8 @@ namespace Windows.UI.Xaml.Media.Animation
 		{
 			add
 			{
-				EventHandler handler = (snd, e) => {
+				EventHandler handler = (snd, e) =>
+				{
 					try
 					{
 						value(this, e);
@@ -140,7 +146,8 @@ namespace Windows.UI.Xaml.Media.Animation
 		{
 			add
 			{
-				EventHandler handler = (snd, e) => {
+				EventHandler handler = (snd, e) =>
+				{
 					try
 					{
 						value(this, e);
@@ -180,7 +187,7 @@ namespace Windows.UI.Xaml.Media.Animation
 		{
 			get => _adaptee.CurrentPlayTime;
 			set => _adaptee.CurrentPlayTime = value;
-		} 
+		}
 
 		/// <inheritdoc />
 		public bool IsRunning => _adaptee.IsRunning;
@@ -205,13 +212,11 @@ namespace Windows.UI.Xaml.Media.Animation
 		/// <inheritdoc />
 		public void Pause()
 		{
-#if __ANDROID_19__
 			if (Android.OS.Build.VERSION.SdkInt >= Android.OS.BuildVersionCodes.Kitkat)
 			{
 				_adaptee.Pause();
 			}
 			else
-#endif
 			{
 				_adaptee.Cancel();
 			}
@@ -220,13 +225,11 @@ namespace Windows.UI.Xaml.Media.Animation
 		/// <inheritdoc />
 		public void Resume()
 		{
-#if __ANDROID_19__
 			if (Android.OS.Build.VERSION.SdkInt >= Android.OS.BuildVersionCodes.Kitkat)
 			{
 				_adaptee.Resume();
 			}
 			else
-#endif
 			{
 				_adaptee.Start();
 			}

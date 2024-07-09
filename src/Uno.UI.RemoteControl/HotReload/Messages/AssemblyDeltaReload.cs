@@ -1,4 +1,6 @@
-﻿using Newtonsoft.Json;
+﻿using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
+using Newtonsoft.Json;
 
 namespace Uno.UI.RemoteControl.HotReload.Messages
 {
@@ -7,24 +9,38 @@ namespace Uno.UI.RemoteControl.HotReload.Messages
 		public const string Name = nameof(AssemblyDeltaReload);
 
 		[JsonProperty]
-		public string FilePath { get; set; }
+		public ImmutableHashSet<string> FilePaths { get; set; } = [];
 
 		[JsonProperty]
-		public string ModuleId { get; set; }
+		public string? ModuleId { get; set; }
 
 		[JsonProperty]
-		public string ILDelta { get; set; }
+		public string? ILDelta { get; set; }
 
 		[JsonProperty]
-		public string MetadataDelta { get; set; }
+		public string? MetadataDelta { get; set; }
 
 		[JsonProperty]
-		public string PdbDelta { get; set; }
+		public string? PdbDelta { get; set; }
+
+		[JsonProperty]
+		public string? UpdatedTypes { get; set; }
 
 		[JsonIgnore]
-		public string Scope => HotReloadConstants.ScopeName;
+		public string Scope => WellKnownScopes.HotReload;
 
 		[JsonIgnore]
 		string IMessage.Name => Name;
+
+		[MemberNotNullWhen(true, nameof(UpdatedTypes), nameof(MetadataDelta), nameof(ILDelta), nameof(PdbDelta), nameof(ModuleId))]
+		public bool IsValid()
+		{
+			return FilePaths is { IsEmpty: false }
+				&& UpdatedTypes is not null
+				&& MetadataDelta is not null
+				&& ILDelta is not null
+				&& PdbDelta is not null
+				&& ModuleId is not null;
+		}
 	}
 }

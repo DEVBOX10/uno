@@ -7,7 +7,7 @@ using Uno.UITest.Helpers.Queries;
 namespace SamplesApp.UITests.Microsoft_UI_Xaml_Controls.NumberBoxTests
 {
 	public partial class NumberBoxTests
-    {
+	{
 		[Test]
 		[AutoRetry]
 		public void NumberBox_Header()
@@ -26,9 +26,28 @@ namespace SamplesApp.UITests.Microsoft_UI_Xaml_Controls.NumberBoxTests
 		{
 			Run("UITests.Microsoft_UI_Xaml_Controls.NumberBoxTests.NumberBox_Description", skipInitialScreenshot: true);
 
-			var numberBox = _app.WaitForElement("DescriptionNumberBox")[0];
+			var numberBoxRect = ToPhysicalRect(_app.WaitForElement("DescriptionNumberBox")[0].Rect);
 			using var screenshot = TakeScreenshot("NumberBox Description", new ScreenshotOptions() { IgnoreInSnapshotCompare = true });
-			ImageAssert.HasColorAt(screenshot, numberBox.Rect.X + numberBox.Rect.Width / 2, numberBox.Rect.Y + numberBox.Rect.Height - 150, Color.Red);
+
+			ImageAssert.HasColorAt(screenshot, numberBoxRect.X + numberBoxRect.Width / 2, numberBoxRect.Y + numberBoxRect.Height - 50, Color.Red);
+		}
+
+		[Test]
+		[AutoRetry]
+		public void DecimalFormatterTest()
+		{
+			Run("UITests.Shared.Microsoft_UI_Xaml_Controls.NumberBoxTests.NumberBoxPage");
+
+			var numBox = _app.Marked("TestNumberBox");
+			Assert.AreEqual(double.NaN, numBox.GetDependencyPropertyValue<double>("Value"));
+
+			_app.FastTap("MinCheckBox");
+			_app.FastTap("MaxCheckBox");
+			_app.FastTap("CustomFormatterButton");
+			EnterTextInNumberBox(numBox, "۱٫۷");
+
+			Assert.AreEqual("۱٫۷۰", numBox.GetDependencyPropertyValue<string>("Text"));
+			Assert.AreEqual(1.7, numBox.GetDependencyPropertyValue<double>("Value"));
 		}
 	}
 }

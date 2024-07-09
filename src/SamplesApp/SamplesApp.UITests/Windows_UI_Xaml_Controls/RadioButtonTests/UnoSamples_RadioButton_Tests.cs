@@ -16,7 +16,7 @@ namespace SamplesApp.UITests.Windows_UI_Xaml_Controls.RadioButtonTests
 		[AutoRetry]
 		public void RadioButtons_Enable_Validation()
 		{
-			Run("UITests.Shared.Windows_UI_Xaml_Controls.RadioButtonTests.RadioButton_IsEnabled_Automated");
+			Run("Uno.UI.Samples.Content.UITests.ButtonTestsControl.RadioButton_IsEnabled_Automated");
 
 			_app.WaitForElement(_app.Marked("MyRadioButtonDisabler"));
 			var currentRadioButton = _app.Marked("CurrentRadioButton");
@@ -27,15 +27,15 @@ namespace SamplesApp.UITests.Windows_UI_Xaml_Controls.RadioButtonTests
 			Assert.AreEqual("None", currentRadioButton.GetDependencyPropertyValue("Text")?.ToString());
 
 			// Click on radio button 1 and verify the selection of radio button
-			myRadioButton_1.Tap();
+			myRadioButton_1.FastTap();
 			Assert.AreEqual("Radio Button 1", currentRadioButton.GetDependencyPropertyValue("Text")?.ToString());
 
 			// Click on radio button 2 and verify the selection of radio button
-			myRadioButton_2.Tap();
+			myRadioButton_2.FastTap();
 			Assert.AreEqual("Radio Button 2", currentRadioButton.GetDependencyPropertyValue("Text")?.ToString());
 
 			// Again click on radio button 1 and verify the selection of radio button
-			myRadioButton_1.Tap();
+			myRadioButton_1.FastTap();
 			Assert.AreEqual("Radio Button 1", currentRadioButton.GetDependencyPropertyValue("Text")?.ToString());
 		}
 
@@ -43,7 +43,7 @@ namespace SamplesApp.UITests.Windows_UI_Xaml_Controls.RadioButtonTests
 		[AutoRetry]
 		public void RadioButtons_Disable_Validation()
 		{
-			Run("UITests.Shared.Windows_UI_Xaml_Controls.RadioButtonTests.RadioButton_IsEnabled_Automated");
+			Run("Uno.UI.Samples.Content.UITests.ButtonTestsControl.RadioButton_IsEnabled_Automated");
 
 			var myRadioButtonDisabler = _app.Marked("MyRadioButtonDisabler");
 
@@ -56,22 +56,22 @@ namespace SamplesApp.UITests.Windows_UI_Xaml_Controls.RadioButtonTests
 			Assert.AreEqual("None", currentRadioButton.GetDependencyPropertyValue("Text")?.ToString());
 
 			// Disable radio buttons and click on radio button 1 and verify the selection of radio button
-			myRadioButtonDisabler.Tap();
-			myRadioButton_1.Tap();
+			myRadioButtonDisabler.FastTap();
+			myRadioButton_1.FastTap();
 			Assert.AreEqual("None", currentRadioButton.GetDependencyPropertyValue("Text")?.ToString());
 
 			// Click on radio button 2 and verify the selection of radio button
-			myRadioButton_2.Tap();
+			myRadioButton_2.FastTap();
 			Assert.AreEqual("None", currentRadioButton.GetDependencyPropertyValue("Text")?.ToString());
 
 			// Enable radio buttons and click on radio button 1 and verify the selection of radio button
-			myRadioButtonDisabler.Tap();
-			myRadioButton_1.Tap();
+			myRadioButtonDisabler.FastTap();
+			myRadioButton_1.FastTap();
 			Assert.AreEqual("Radio Button 1", currentRadioButton.GetDependencyPropertyValue("Text")?.ToString());
 
 			// Disable radio buttons and click on radio button 2 and verify the selection of radio button
-			myRadioButtonDisabler.Tap();
-			myRadioButton_2.Tap();
+			myRadioButtonDisabler.FastTap();
+			myRadioButton_2.FastTap();
 			Assert.AreEqual("Radio Button 1", currentRadioButton.GetDependencyPropertyValue("Text")?.ToString());
 		}
 	}

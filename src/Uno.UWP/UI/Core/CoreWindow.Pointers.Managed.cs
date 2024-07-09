@@ -2,97 +2,62 @@
 #nullable enable
 
 using System;
+using System.Runtime.CompilerServices;
 using Windows.Devices.Input;
 using Uno.Foundation;
 using Uno.Foundation.Extensibility;
 using Windows.Foundation;
+using Windows.UI.Input;
 
-namespace Windows.UI.Core
+namespace Windows.UI.Core;
+
+public partial class CoreWindow
 {
-	public partial class CoreWindow : ICoreWindowEvents
+	private IUnoCorePointerInputSource? _pointerSource;
+
+	public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerEntered;
+	public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerExited;
+	public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerMoved;
+	public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerPressed;
+	public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerReleased;
+	public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerWheelChanged;
+	internal event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerCancelled;
+
+	internal void SetPointerInputSource(IUnoCorePointerInputSource source)
 	{
-		private ICoreWindowExtension? _coreWindowExtension;
-
-		public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerEntered;
-		public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerExited;
-		public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerMoved;
-		public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerPressed;
-		public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerReleased;
-		public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerWheelChanged;
-		public event TypedEventHandler<CoreWindow, PointerEventArgs>? PointerCancelled;
-		public event TypedEventHandler<CoreWindow, KeyEventArgs>? KeyDown;
-		public event TypedEventHandler<CoreWindow, KeyEventArgs>? KeyUp;
-
-		public CoreCursor PointerCursor
+		if (_pointerSource is not null)
 		{
-			get => _coreWindowExtension?.PointerCursor ?? new CoreCursor(CoreCursorType.Arrow, 0);
-			set
-			{
-				if (_coreWindowExtension != null)
-				{
-					_coreWindowExtension.PointerCursor = value;
-				}
-			}
+			return;
 		}
 
-		partial void InitializePartial()
+		_pointerSource = source;
+		_pointerSource.PointerEntered += (_, args) => PointerEntered?.Invoke(this, args);
+		_pointerSource.PointerExited += (_, args) => PointerExited?.Invoke(this, args);
+		_pointerSource.PointerMoved += (_, args) => PointerMoved?.Invoke(this, args);
+		_pointerSource.PointerPressed += (_, args) => PointerPressed?.Invoke(this, args);
+		_pointerSource.PointerReleased += (_, args) => PointerReleased?.Invoke(this, args);
+		_pointerSource.PointerWheelChanged += (_, args) => PointerWheelChanged?.Invoke(this, args);
+		_pointerSource.PointerCancelled += (_, args) => PointerCancelled?.Invoke(this, args);
+	}
+
+	internal IUnoCorePointerInputSource? PointersSource => _pointerSource;
+
+	public CoreCursor PointerCursor
+	{
+		get => _pointerSource?.PointerCursor ?? new CoreCursor(CoreCursorType.Arrow, 0);
+		set
 		{
-			if (!ApiExtensibility.CreateInstance(this, out _coreWindowExtension))
+			if (_pointerSource is not null)
 			{
-				throw new InvalidOperationException($"Unable to find ICoreWindowExtension extension");
+				_pointerSource.PointerCursor = value;
 			}
 		}
-
-		public void SetPointerCapture()
-			=> _coreWindowExtension?.SetPointerCapture(LastPointerEvent?.Pointer ?? default);
-		internal void SetPointerCapture(PointerIdentifier pointer)
-			=> _coreWindowExtension?.SetPointerCapture(pointer);
-
-		public void ReleasePointerCapture()
-			=> _coreWindowExtension?.ReleasePointerCapture(LastPointerEvent?.Pointer ?? default);
-		internal void ReleasePointerCapture(PointerIdentifier pointer)
-			=> _coreWindowExtension?.ReleasePointerCapture(pointer);
-
-		void ICoreWindowEvents.RaisePointerEntered(PointerEventArgs args)
-			=> PointerEntered?.Invoke(this, args);
-
-		void ICoreWindowEvents.RaisePointerExited(PointerEventArgs args)
-			=> PointerExited?.Invoke(this, args);
-
-		void ICoreWindowEvents.RaisePointerMoved(PointerEventArgs args)
-			=> PointerMoved?.Invoke(this, args);
-
-		void ICoreWindowEvents.RaisePointerPressed(PointerEventArgs args)
-			=> PointerPressed?.Invoke(this, args);
-
-		void ICoreWindowEvents.RaisePointerReleased(PointerEventArgs args)
-			=> PointerReleased?.Invoke(this, args);
-
-		void ICoreWindowEvents.RaisePointerWheelChanged(PointerEventArgs args)
-			=> PointerWheelChanged?.Invoke(this, args);
-
-		public void RaisePointerCancelled(PointerEventArgs args)
-			=> PointerCancelled?.Invoke(this, args);
-
-		void ICoreWindowEvents.RaiseKeyUp(KeyEventArgs args)
-			=> KeyUp?.Invoke(this, args);
-
-		void ICoreWindowEvents.RaiseKeyDown(KeyEventArgs args)
-			=> KeyDown?.Invoke(this, args);
 	}
 
-	public interface ICoreWindowEvents
-	{
-		void RaisePointerEntered(PointerEventArgs args);
-		void RaisePointerExited(PointerEventArgs args);
-		void RaisePointerMoved(PointerEventArgs args);
-		void RaisePointerPressed(PointerEventArgs args);
-		void RaisePointerReleased(PointerEventArgs args);
-		void RaisePointerWheelChanged(PointerEventArgs args);
-		void RaisePointerCancelled(PointerEventArgs args);
+	public void SetPointerCapture()
+		=> _pointerSource?.SetPointerCapture();
 
-		void RaiseKeyUp(KeyEventArgs args);
-		void RaiseKeyDown(KeyEventArgs args);
-	}
+	public void ReleasePointerCapture()
+		=> _pointerSource?.ReleasePointerCapture();
 }
 #endif

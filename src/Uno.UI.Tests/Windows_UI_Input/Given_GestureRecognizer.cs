@@ -31,7 +31,7 @@ namespace Uno.UI.Tests.Windows_UI_Input
 		[TestMethod]
 		public void Tapped()
 		{
-			var sut = new GestureRecognizer {GestureSettings = GestureSettings.Tap };
+			var sut = new GestureRecognizer { GestureSettings = GestureSettings.Tap };
 			var taps = new List<TappedEventArgs>();
 			sut.Tapped += (snd, e) => taps.Add(e);
 
@@ -877,7 +877,7 @@ namespace Uno.UI.Tests.Windows_UI_Input
 				v => v.Starting(),
 				v => v.Started().WithCumulative(scale: 1),
 				v => v.Delta().WithDelta(scale: 3, exp: 50).WithCumulative(scale: 3, exp: 50),
-				v => v.Delta().WithDelta(scale: 5F/3F, exp: 50).WithCumulative(scale: 5, exp: 100)
+				v => v.Delta().WithDelta(scale: 5F / 3F, exp: 50).WithCumulative(scale: 5, exp: 100)
 			);
 		}
 
@@ -897,7 +897,7 @@ namespace Uno.UI.Tests.Windows_UI_Input
 				v => v.Starting(),
 				v => v.Started().WithCumulative(scale: 1),
 				v => v.Delta().WithDelta(scale: .6F, exp: -50).WithCumulative(scale: .6F, exp: -50),
-				v => v.Delta().WithDelta(scale: 2F/3F, exp: -25).WithCumulative(scale: .4F, exp: -75)
+				v => v.Delta().WithDelta(scale: 2F / 3F, exp: -25).WithCumulative(scale: .4F, exp: -75)
 			);
 		}
 
@@ -947,7 +947,7 @@ namespace Uno.UI.Tests.Windows_UI_Input
 				// 4.
 				v => v.Delta()
 					.At(125, 200)
-					.WithDelta(tX: 0, tY: 75, angle: -45, scale: 1/s, exp: -e)
+					.WithDelta(tX: 0, tY: 75, angle: -45, scale: 1 / s, exp: -e)
 					.WithCumulative(tX: 75, tY: 75, angle: -90, scale: 1, exp: 0),
 
 				// 5.
@@ -1536,6 +1536,27 @@ namespace Uno.UI.Tests.Windows_UI_Input
 		}
 
 		[TestMethod]
+		public void Drag_CompleteGesture()
+		{
+			var sut = new GestureRecognizer { GestureSettings = GestureSettings.Drag };
+			var drags = new List<DraggingEventArgs>();
+			sut.Dragging += (snd, e) => drags.Add(e);
+
+			using var _ = Touch();
+
+			sut.ProcessDownEvent(25, 25, ts: 0);
+			sut.ProcessMoveEvent(26, 26, ts: GestureRecognizer.DragWithTouchMinDelayTicks + 1);
+			var start = sut.ProcessMoveEvent(50, 50, ts: GestureRecognizer.DragWithTouchMinDelayTicks + 2);
+			var move = sut.ProcessMoveEvent(51, 51, ts: GestureRecognizer.DragWithTouchMinDelayTicks + 1);
+			var end = sut.ProcessUpEvent(52, 52, ts: GestureRecognizer.DragWithTouchMinDelayTicks + 2);
+
+			drags.Should().BeEquivalentTo(
+				Drag(start, DraggingState.Started),
+				Drag(move, DraggingState.Continuing),
+				Drag(end, DraggingState.Completed));
+		}
+
+		[TestMethod]
 		public void Drag_And_Holding_Touch()
 		{
 			var delay = (ulong)Math.Max(GestureRecognizer.DragWithTouchMinDelayTicks, GestureRecognizer.HoldMinDelayTicks);
@@ -1583,8 +1604,8 @@ namespace Uno.UI.Tests.Windows_UI_Input
 			{
 				throw new AssertionFailedException(
 					$"Not the same number of events. Expected: {expected.Length} actual: {_result.Count}"
-					+ $"\r\nExpected: \r\n\t{string.Join("\r\n\t", expected.Select((e, i) => $"[{i+1:D3}] + {e(Validator.Empty)}"))}"
-					+ $"\r\nActual: \r\n\t{string.Join("\r\n\t", _result.Select((r, i) => $"[{i+1:D3}] + {r.args.GetType().Name}"))}");
+					+ $"\r\nExpected: \r\n\t{string.Join("\r\n\t", expected.Select((e, i) => $"[{i + 1:D3}] + {e(Validator.Empty)}"))}"
+					+ $"\r\nActual: \r\n\t{string.Join("\r\n\t", _result.Select((r, i) => $"[{i + 1:D3}] + {r.args.GetType().Name}"))}");
 			}
 
 			for (var i = 0; i < expected.Length; i++)
@@ -2027,12 +2048,12 @@ namespace Uno.UI.Tests.Windows_UI_Input
 		}
 
 		public static TappedEventArgs Tap(double x, double y, uint tapCount = 1, PointerDeviceType? device = null)
-			=> new TappedEventArgs(device ?? _currentPointer.Value.device?.PointerDeviceType ?? PointerDeviceType.Touch, new Point(x, y), tapCount);
+			=> new TappedEventArgs(1, device ?? _currentPointer.Value.device?.PointerDeviceType ?? PointerDeviceType.Touch, new Point(x, y), tapCount);
 
 		public static RightTappedEventArgs RightTap(double x, double y, PointerDeviceType? device = null)
-			=> new RightTappedEventArgs(device ?? _currentPointer.Value.device?.PointerDeviceType ?? PointerDeviceType.Touch, new Point(x, y));
+			=> new RightTappedEventArgs(1, device ?? _currentPointer.Value.device?.PointerDeviceType ?? PointerDeviceType.Touch, new Point(x, y));
 
-		public static HoldingEventArgs Hold(double x, double y, HoldingState state, PointerDeviceType? device = null, uint ? ptId = null)
+		public static HoldingEventArgs Hold(double x, double y, HoldingState state, PointerDeviceType? device = null, uint? ptId = null)
 			=> new HoldingEventArgs(ptId ?? 1, device ?? _currentPointer.Value.device?.PointerDeviceType ?? PointerDeviceType.Touch, new Point(x, y), state);
 
 		public static DraggingEventArgs Drag(PointerPoint point, DraggingState state)
@@ -2044,7 +2065,7 @@ namespace Uno.UI.Tests.Windows_UI_Input
 			double y,
 			uint? id = null,
 			ulong? ts = null,
-			PointerDeviceType ? device = null,
+			PointerDeviceType? device = null,
 			bool? isInContact = true,
 			PointerPointProperties properties = null)
 		{
@@ -2070,7 +2091,7 @@ namespace Uno.UI.Tests.Windows_UI_Input
 
 		public static PointerPoint ProcessMoveEvent(this GestureRecognizer sut, PointerPoint point)
 		{
-			sut.ProcessMoveEvents(new[] {point});
+			sut.ProcessMoveEvents(new[] { point });
 			return point;
 		}
 

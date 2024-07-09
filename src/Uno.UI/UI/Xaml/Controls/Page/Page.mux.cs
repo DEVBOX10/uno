@@ -12,9 +12,9 @@ using Uno.Foundation.Logging;
 using Uno.UI.Extensions;
 using Uno.UI.Xaml.Core;
 using Uno.UI.Xaml.Input;
-using Windows.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Automation.Peers;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	public partial class Page
 	{
@@ -50,7 +50,7 @@ namespace Windows.UI.Xaml.Controls
 					focusManager.InitialFocus = true;
 
 					TrySetFocusedElement(spFirstFocusableElementDO);
-					
+
 					focusManager.InitialFocus = false;
 				}
 

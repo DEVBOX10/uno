@@ -6,27 +6,32 @@ using System.Text;
 using System.Threading;
 using Windows.ApplicationModel.Resources;
 using Windows.ApplicationModel.Resources.Core;
+using Windows.Globalization;
 
 namespace Uno.UI.RuntimeTests.Tests
 {
 	[TestClass]
 	public class Given_ResourceLoader
 	{
+		private const string DefaultLanguage = "en-US";
+
 		[TestInitialize]
 		public void Init()
 		{
-			CultureInfo.CurrentUICulture = new CultureInfo("en-US");
+			CultureInfo.CurrentUICulture = new CultureInfo(DefaultLanguage);
+			ApplicationLanguages.PrimaryLanguageOverride = DefaultLanguage;
 #if __XAMARIN__ || __WASM__
-			ResourceLoader.DefaultLanguage = "en-US";
+			ResourceLoader.DefaultLanguage = DefaultLanguage;
 #endif
 		}
 
 		[TestCleanup]
 		public void Cleanup()
 		{
-			CultureInfo.CurrentUICulture = new CultureInfo("en-US");
+			CultureInfo.CurrentUICulture = new CultureInfo(DefaultLanguage);
+			ApplicationLanguages.PrimaryLanguageOverride = DefaultLanguage;
 #if __XAMARIN__ || __WASM__
-			ResourceLoader.DefaultLanguage = "en-US";
+			ResourceLoader.DefaultLanguage = DefaultLanguage;
 #endif
 		}
 
@@ -88,6 +93,27 @@ namespace Uno.UI.RuntimeTests.Tests
 		}
 
 		[TestMethod]
+		public void When_Assembly_NamedLoader_TopLevelNamedRuntimeTests()
+		{
+			var SUT = ResourceLoader.GetForViewIndependentUse("Uno.UI.RuntimeTests/TopLevelNamedRuntimeTests");
+			Assert.AreEqual(@"en-US Value for When_xUid_Explicit in TopLevelNamedRuntimeTests", SUT.GetString("When_xUid_Explicit/Text"));
+		}
+
+		[TestMethod]
+		public void When_Assembly_NamedLoader_Resources()
+		{
+			var SUT = ResourceLoader.GetForViewIndependentUse("Uno.UI.RuntimeTests/Resources");
+			Assert.AreEqual(@"RuntimeTest Additional Resource", SUT.GetString("RuntimeTests_AdditionalResource"));
+		}
+
+		[TestMethod]
+		public void When_Assembly_NamedLoader_Resources_With_Prefix()
+		{
+			var SUT = ResourceLoader.GetForViewIndependentUse("Uno.UI.RuntimeTests/Resources");
+			Assert.AreEqual(@"en-US Value for SomePrefix/When_xUid_With_Prefix", SUT.GetString("SomePrefix/When_xUid_With_Prefix/Text"));
+		}
+
+		[TestMethod]
 		public void When_UnnamedLoader_UnknownResource()
 		{
 			var SUT = ResourceLoader.GetForViewIndependentUse();
@@ -95,7 +121,7 @@ namespace Uno.UI.RuntimeTests.Tests
 		}
 
 		[TestMethod]
-		public void When_NnamedLoader_UnknownResource()
+		public void When_NamedLoader_UnknownResource()
 		{
 			var SUT = ResourceLoader.GetForViewIndependentUse("Test01");
 			Assert.AreEqual(@"", SUT.GetString("Given_ResourceLoader/INVALID_RESOURCE_NAME"));
@@ -105,11 +131,11 @@ namespace Uno.UI.RuntimeTests.Tests
 		public void When_LocalizedResource()
 		{
 			var SUT = ResourceLoader.GetForViewIndependentUse();
-			var languages = new[] {"fr-CA", "fr", "en-US", "en", "sr"};
+			var languages = new[] { "fr-CA", "fr", "en-US", "en", "sr" };
 
 			foreach (var language in languages)
 			{
-				CultureInfo.CurrentUICulture = new CultureInfo(language);
+				ApplicationLanguages.PrimaryLanguageOverride = language;
 				Assert.AreEqual($@"Text in '{language}'", SUT.GetString("Given_ResourceLoader/When_LocalizedResource"));
 			}
 		}
@@ -119,7 +145,7 @@ namespace Uno.UI.RuntimeTests.Tests
 		{
 			var SUT = ResourceLoader.GetForViewIndependentUse();
 
-			CultureInfo.CurrentUICulture = new CultureInfo("fr-FR");
+			ApplicationLanguages.PrimaryLanguageOverride = "fr-FR";
 			Assert.AreEqual(@"Text in 'fr'", SUT.GetString("Given_ResourceLoader/When_LocalizedResource"));
 		}
 
@@ -128,16 +154,19 @@ namespace Uno.UI.RuntimeTests.Tests
 		{
 			var SUT = ResourceLoader.GetForViewIndependentUse();
 
-			CultureInfo.CurrentUICulture = new CultureInfo("es");
+			ApplicationLanguages.PrimaryLanguageOverride = "es";
 			Assert.AreEqual(@"Text in 'es-MX'", SUT.GetString("Given_ResourceLoader/When_LocalizedResource"));
 		}
 
 		[TestMethod]
+#if __IOS__
+		[Ignore("Unstable test due to device language settings: NSLocale.PreferredLanguages can be 'en' or 'en-US'.")]
+#endif
 		public void When_MissingLocalizedResource_FallbackOnDefault()
 		{
 			var SUT = ResourceLoader.GetForViewIndependentUse();
 
-			CultureInfo.CurrentUICulture = new CultureInfo("de-DE");
+			ApplicationLanguages.PrimaryLanguageOverride = "de-DE";
 			Assert.AreEqual(@"Text in 'en-US'", SUT.GetString("Given_ResourceLoader/When_LocalizedResource"));
 		}
 
@@ -153,6 +182,5 @@ namespace Uno.UI.RuntimeTests.Tests
 			Assert.AreEqual(@"", SUT.GetString("/this-does-not-exist"));
 			Assert.AreEqual(@"", SUT.GetString("//this-does-not-exist"));
 		}
-
 	}
 }

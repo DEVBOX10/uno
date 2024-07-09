@@ -37,7 +37,7 @@ GitHub supports [Markdown](https://help.github.com/articles/github-flavored-mark
 
 ### Request a feature
 
-If you need a [UWP feature](https://docs.microsoft.com/en-us/uwp/api/) or [WinUI feature](https://docs.microsoft.com/en-us/uwp/api/microsoft.ui.xaml.controls) that Uno doesn't support yet, you should [submit a feature request](https://github.com/unoplatform/uno/issues/new?labels=kind%2Fenhancement%2C+triage%2Funtriaged&template=enhancement.md). Check [existing issues first](https://github.com/unoplatform/uno/issues?q=is%3Aissue+is%3Aopen+label%3Akind%2Fenhancement) in case the same feature request already exists (in which case you can upvote the existing issue).
+If you need a [UWP feature](https://learn.microsoft.com/uwp/api/) or [WinUI feature](https://learn.microsoft.com/uwp/api/microsoft.ui.xaml.controls) that Uno doesn't support yet, you should [submit a feature request](https://github.com/unoplatform/uno/issues/new?labels=kind%2Fenhancement%2C+triage%2Funtriaged&template=enhancement.md). Check [existing issues first](https://github.com/unoplatform/uno/issues?q=is%3Aissue+is%3Aopen+label%3Akind%2Fenhancement) in case the same feature request already exists (in which case you can upvote the existing issue).
 
 To help us understand and prioritize your idea, please provide as much detail about your scenario and why the feature or enhancement would be useful.
 
@@ -45,11 +45,11 @@ Wherever we possible we prefer to implement UWP/WinUI APIs for maximum cross-pla
 
 ### Ask (and answer) questions
 
-If you have a question, be sure first to check out our [documentation](https://platform.uno/docs/articles/intro.html). But if you are still stuck, you'll have a better chance of getting help on [StackOverflow](https://stackoverflow.com/questions/tagged/uno-platform) and we'll do our best to answer it. Questions asked there should be tagged with `uno-platform.`
+If you have a question, be sure first to check out our [documentation](https://platform.uno/docs/articles/intro.html). But if you are still stuck, please visit [GitHub Discussions](https://github.com/unoplatform/uno/discussions) where our engineering team and community will be able to help you.
 
-If you've already done some Uno development, maybe there's a StackOverflow question you can answer, giving another user the benefit of your experience.
+If you've already done some Uno development, maybe there's a GitHub discussion question you can answer, giving another user the benefit of your experience.
 
-For a more direct conversation, [visit our Discord Channel #uno-platform](https://discord.gg/eBHZSKG).
+For a more direct conversation, [visit our Discord Server](https://platform.uno/discord).
 
 ## Contributing code and content
 

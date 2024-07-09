@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Linq;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Uno.UI.Samples.Controls;
 
 namespace UITests.Windows_UI_Input.GestureRecognizerTests
 {
-	[Sample("Gesture recognizer")]
+	[Sample("Gesture Recognizer")]
 	public sealed partial class Manipulation_WithNestedElement : Page
 	{
 		public Manipulation_WithNestedElement()

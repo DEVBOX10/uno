@@ -1,121 +1,70 @@
-# Welcome to Uno Platform!
+---
+uid: Uno.GetStarted.Wizard
+---
 
-## Please read important installation information below.
+<!-- markdownlint-disable MD026 -->
+# Done! Important next steps:
 
-Congratulations, you've just created a new project using the [Uno Platform](https://platform.uno/) project templates!
+Create a simple cross-platform Counter application.
 
-* You can give the [Single Page app getting started guide](https://platform.uno/docs/articles/getting-started-tutorial-1.html) a try
-* Next you can try our [Bug Tracker sample walk-through](https://platform.uno/docs/articles/getting-started-tutorial-2.html)
-* More advanced examples in our [Uno.Samples repository](https://github.com/unoplatform/uno.samples)
-* Fork a fully-fledged [Ch9 application and source code ](https://platform.uno/code-samples/#ch9)
-* You can find detailed documentation on Uno topics [on our web site](https://platform.uno/docs/articles/intro.html).
-* Run the [uno-check CLI tool](uno-check.md) to ensure your dev environment is set up correctly
+Choose one of the 4 variants of the Counter tutorial, combining markup language (XAML or C# Markup) and presentation framework (MVVM or MVUX).
 
-## Common Issues
-The Uno Platform features and support is constantly evolving, but you may encounter some of the  issues below while building your application.
+<!-- markdownlint-disable MD001 -->
 
-#### The XAML editor shows `The type 'page' does not support direct content` message
-XAML Intellisense [is not working properly](https://developercommunity.visualstudio.com/content/problem/587980/xaml-intellisense-does-not-use-contentpropertyattr.html) in Visual Studio when the active project is not the UWP one. 
+<br/>
 
-To work around this issue, close all XAML editors, open a C# file and select 'UWP' in the top left drop-down list of the text editor sector. Once selected, re-open the XAML file.
+<div class="row">
 
-#### `InitializeComponent` or `x:Name` variable is not available in code-behind
-Visual Studio [does not refresh the intellisense cache](https://developercommunity.visualstudio.com/content/problem/588021/the-compile-itemgroup-intellisense-cache-is-not-re.html) properly, causing variables to be incorrectly defined.
+<div class="col-md-6 col-xs-12 ">
+<a href="getting-started/counterapp/get-started-counter-xaml-mvux.md">
+<div class="alert alert-info alert-hover">
 
-To fix this issue, build your project once, close the solution and reopen it.
+#### XAML + MVUX
 
-It is also important to note that Uno uses a multi-project structure, for which each project has to be build individually for errors to disapear from the **Error List** window (notice the **Project** column values).
+Use XAML for layout and MVUX for state management
 
-In order to clear the **Error List** window, build the whole solution completely once. Thereafter, build a specific project and prefer the use of the **Output** tool window (in the menu **View** -> **Output**), taking build messages by order of appearance.
+</div>
+</a>
+</div>
 
-#### Event handler cannot be added automatically
+<div class="col-md-6 col-xs-12 ">
+<a href="getting-started/counterapp/get-started-counter-xaml-mvvm.md">
+<div class="alert alert-info alert-hover">
 
-Event handlers [cannot be automatically](https://github.com/unoplatform/uno/issues/1348#issuecomment-520300471) added using the XAML editor. 
+#### XAML + MVVM
 
-A workaround is to use the [`x:Bind` to events feature](features/windows-ui-xaml-xbind.md#examples). This feature allows to use a simpler syntax like `<Button Click="{x:Bind MyClick}" />` and declare a simple method `private void MyClick() { }` in the code-behind.
+Use XAML for layout and MVVM for state management
 
-#### Build error `Failed to generate AOT layout`
+</div>
+</a>
+</div>
 
-When building for WebAssembly with AOT mode enabled, the following error may appear:
-```
-Failed to generate AOT layout (More details are available in diagnostics mode or using the MSBuild /bl switch)
-```
+<div class="col-md-6 col-xs-12 ">
+<a href="getting-started/counterapp/get-started-counter-csharp-mvux.md">
+<div class="alert alert-info alert-hover">
 
-To troubleshoot this error, you can change the text output log level:
-  - Go to **Tools**, **Options**, **Projects and Solution**, then **Build and Run**
-  - Set **MSBuild project build output verbosity** to **Normal** or **Detailed**
-  - Build your project again and take a look at the additional output next to the `Failed to generate AOT layout` error
+#### C# Markup + MVUX
 
-You can get additional build [troubleshooting information here](uno-builds-troubleshooting.md).
+Use C# Markup for layout and MVUX for state management
 
-#### Runtime error `No parameterless constructor defined for XXXX`
-This error is generally caused by some missing [IL Linker](https://github.com/mono/linker/tree/master/docs) configuration on WebAssembly. You may need to add some of your application assemblies in the LinkerConfig.xml file of your project. You can find [additional information in the documentation](features/using-il-linker-webassembly.md).
+</div>
+</a>
+</div>
 
-Similar error messages using various libraries:
-- `Don't know how to detect when XXX is activated/deactivated, you may need to implement IActivationForViewFetcher` (ReactiveUI)
+<div class="col-md-6 col-xs-12 ">
+<a href="getting-started/counterapp/get-started-counter-csharp-mvvm.md">
+<div class="alert alert-info alert-hover">
 
-#### WebAssembly: Access to fetch at 'https://XXXX' from origin 'http://XXXX' has been blocked by CORS policy
+#### C# Markup + MVVM
 
-This is a security restriction from the JavaScript `fetch` API, where the endpoint you're calling needs to provide [CORS headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) to work properly.
+Use C# Markup for layout and MVVM for state management
 
-If you control the API, you'll need to use the features from your framework to enable CORS, and if you don't you'll need to ask the maintainers of the endpoint to enable CORS.
+</div>
+</a>
+</div>
 
-To test if CORS is really the issue, you can use [CORS Anywhere](https://cors-anywhere.herokuapp.com/) to proxy the queries.
+</div>
 
-#### The path may be too long
-The project may fail to build if the path of any file in the project is [too long](https://docs.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation).
+<br/>
 
-To work around this issue, either:
-- Move the project to a shorter root path, or
-- Enable Long Path support in Windows 10 by executing this:
-```
-reg ADD HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem /v LongPathsEnabled /t REG_DWORD /d 1
-```
-
-#### "Missing value for TargetPlatformWinMDLocation property" when adding a project reference
-This issue is caused by [VS 2019 support for SDK-Style projects](https://developercommunity.visualstudio.com/content/problem/1170010/missing-value-for-targetplatformwinmdlocation-prop.html).
-
-To add a reference change the list of `<TargetFramework>` to place `netstandard2.0` at the first position, in the project you are trying to adding the reference to.
-
-#### Build fails with `error : Error reading response`
-In general, this error happens when the XAML parser detects a syntax error. Fixing the error generally fixes the build.
-
-This error may happen occasionally without any explicit error message, rebuilding the project may fix the issue.
-
-#### System.DllNotFoundException: Gtk: libgtk-3-0.dll
-
-When running the Skia.GTK project head, the following error may happen:
-
-```
-Unhandled exception. System.TypeInitializationException: The type initializer for 'Gtk.Application' threw an exception.
----> System.DllNotFoundException: Gtk: libgtk-3-0.dll, libgtk-3.so.0, libgtk-3.0.dylib, gtk-3.dll
-```
-
-On Windows, you will need to install the [GTK+3 runtime](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases). **Make sure to restart Visual Studio** for the changes to be used by Visual Studio.
-On Linux, you'll need to follow the [Uno Platform](get-started-with-linux.md#setting-up-for-linux) setup instructions.
-On macOS, you'll need to follow the [Uno Platform](get-started-vsmac.md) setup instructions.
-
-#### Abnormally long build times with using WebAssembly and WSL
-When building an application that uses native dependencies (such as Skia, SQLite) or using PG-AOT/AOT, using WSL 2 may cause abnormally long build times.
-
-You can migrate your WSL v2 installation into a v1, by [visiting this document](get-started-with-linux.md).
-
-#### Abnormally long build times when using Roslyn analyzers
-It is a good practice to use Roslyn analyzers to validate your code during compilation, but some generators may have difficulty handling the source generated by the Uno Platform (one notable example is [GCop](https://github.com/Geeksltd/GCop)). You may need to disable those for Uno projects or get an update from the analyzer's vendor.
-
-#### XAML Hot Reload troubleshooting
-
-The XAML Hot reload provides a Visual Studio for Windows output window name "Uno Platform" with diagnotics messages. You can find additional information there in case XAML Hot Reload does not work properly.
-
-Some common troubleshooting steps:
-- Make sure to rebuild your application if the XAML changes are not applied
-- Ensure that the Uno.UI.RemoteControl package has the same version as the Uno.UI package (Similar step is valid for Uno.WinUI packages)
-
-More troubleshooting information is available [in this section](features/working-with-xaml-hot-reload.md).
-
-##### WebAssembly: Hot Reload fails to start with Mixed Content: The page at XXX was loaded over HTTPS, but attempted to connect to the insecure WebSocket endpoint
-
-This issue is caused by visual studio enforcing https connections for local content. You can work around this by either:
-- Removing the https endpoint in the `Properties/launchSettings.json` file
-- Unchecking the `Use SSL` option in the project's Debug launch profiles
-- Selecting the project name instead of IISExpress in the toolbar debug icon drop down list
+[!include[getting-help](includes/getting-help.md)]

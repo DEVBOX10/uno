@@ -6,18 +6,14 @@ using System.Windows.Input;
 
 using Uno.Extensions;
 using Uno.UI.DataBinding;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Data;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Data;
 using Uno.Client;
 using CoreGraphics;
+using ObjCRuntime;
 
-#if XAMARIN_IOS_UNIFIED
 using Foundation;
 using UIKit;
-#elif XAMARIN_IOS
-using MonoTouch.Foundation;
-using MonoTouch.UIKit;
-#endif
 
 namespace Uno.UI.Controls
 {
@@ -27,7 +23,7 @@ namespace Uno.UI.Controls
 		private static readonly TimeSpan _defaultTextChangedMinDelay = TimeSpan.FromMilliseconds(250);
 		private const bool _defaultIsAutoLostFocusEnabled = true;
 
-		private readonly SerialDisposable _textChangedSubscription = new SerialDisposable();
+		//private readonly SerialDisposable _textChangedSubscription = new SerialDisposable();
 
 		private ICommand _submitCommand;
 		private TimeSpan _textUpdateMinDelay = _defaultTextChangedMinDelay;
@@ -56,7 +52,7 @@ namespace Uno.UI.Controls
 			Initialize();
 		}
 
-		public BindableSearchBar(IntPtr handle)
+		public BindableSearchBar(NativeHandle handle)
 			: base(handle)
 		{
 			Initialize();
@@ -174,7 +170,7 @@ namespace Uno.UI.Controls
 					SetBindingValue(value);
 				}
 			}
-		} 
+		}
 		#endregion
 
 		private void UpdateTextChangedSubscription()
@@ -184,7 +180,7 @@ namespace Uno.UI.Controls
 			//		h => TextChanged += h,
 			//		h => TextChanged -= h,
 			//		this,
-			//		FrameworkElementExtensions.UiEventSubscriptionsOptions.Default) 
+			//		FrameworkElementExtensions.UiEventSubscriptionsOptions.Default)
 			//	.Throttle(TextUpdateMinDelay, this.GetDispatcherScheduler())
 			//	.Subscribe(
 			//		args =>

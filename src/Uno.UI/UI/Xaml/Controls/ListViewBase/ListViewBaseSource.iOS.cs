@@ -1,3 +1,4 @@
+﻿//#define USE_CUSTOM_LAYOUT_ATTRIBUTES (cf. VirtualizingPanelLayout.iOS.cs for more info)
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -5,7 +6,7 @@ using System.Linq;
 using System.Windows.Input;
 using Uno.Extensions;
 using Uno.UI.Views.Controls;
-using Windows.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Data;
 using Uno.UI.Converters;
 using Uno.Client;
 using System.Threading.Tasks;
@@ -16,33 +17,25 @@ using System.Globalization;
 using Uno.Disposables;
 using Uno.Extensions.Specialized;
 using Windows.Foundation;
-using Windows.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Uno.UI;
 using Uno.Foundation.Logging;
 using Uno.UI.Extensions;
+using ObjCRuntime;
 
 using Uno.UI.UI.Xaml.Controls.Layouter;
 
-#if NET6_0_OR_GREATER
-using ObjCRuntime;
-#endif
-
-#if XAMARIN_IOS_UNIFIED
 using Foundation;
 using UIKit;
 using CoreGraphics;
-#elif XAMARIN_IOS
-using MonoTouch.Foundation;
-using MonoTouch.UIKit;
-using MonoTouch.CoreGraphics;
-using CGRect = System.Drawing.RectangleF;
-using nfloat = System.Single;
-using CGPoint = System.Drawing.PointF;
-using nint = System.Int32;
-using CGSize = System.Drawing.SizeF;
+
+#if USE_CUSTOM_LAYOUT_ATTRIBUTES
+using _LayoutAttributes = Microsoft.UI.Xaml.Controls.UnoUICollectionViewLayoutAttributes;
+#else
+using _LayoutAttributes = UIKit.UICollectionViewLayoutAttributes;
 #endif
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	[Bindable]
 	public partial class ListViewBaseSource : UICollectionViewSource
@@ -121,21 +114,42 @@ namespace Windows.UI.Xaml.Controls
 
 		public override nint GetItemsCount(UICollectionView collectionView, nint section)
 		{
-			int count;
-			if (Owner.XamlParent.IsGrouping)
+			try
 			{
-				count = GetGroupedItemsCount(section);
+				if (Owner?.XamlParent is { } parent)
+				{
+					int count;
+
+					if (parent.IsGrouping)
+					{
+						count = GetGroupedItemsCount(section);
+					}
+					else
+					{
+						count = GetUngroupedItemsCount(section);
+					}
+
+					if (this.Log().IsEnabled(Uno.Foundation.Logging.LogLevel.Debug))
+					{
+						this.Log().Debug($"Count requested for section {section}, returning {count}");
+					}
+
+					return count;
+				}
+				else
+				{
+					if (this.Log().IsEnabled(Uno.Foundation.Logging.LogLevel.Warning))
+					{
+						this.Log().Debug($"Failed to find parent for ListViewBaseSource (Collected instance?)");
+					}
+				}
 			}
-			else
+			catch (Exception e)
 			{
-				count = GetUngroupedItemsCount(section);
+				Application.Current.RaiseRecoverableUnhandledException(e);
 			}
 
-			if (this.Log().IsEnabled(Uno.Foundation.Logging.LogLevel.Debug))
-			{
-				this.Log().Debug($"Count requested for section {section}, returning {count}");
-			}
-			return count;
+			return 0;
 		}
 
 		private int GetUngroupedItemsCount(nint section)
@@ -166,12 +180,22 @@ namespace Windows.UI.Xaml.Controls
 
 		public override void CellDisplayingEnded(UICollectionView collectionView, UICollectionViewCell cell, NSIndexPath indexPath)
 		{
-			var key = cell as ListViewBaseInternalContainer;
-
-			if (_onRecycled.TryGetValue(key, out var actions))
+			if (cell is ListViewBaseInternalContainer key)
 			{
-				foreach (var a in actions) { a(); }
-				_onRecycled.Remove(key);
+				key.IsDisplayed = false;
+
+				// Reset the parent that may have been set by
+				// GetBindableSupplementaryView for header and footer content
+				if (key.ElementKind == NativeListViewBase.ListViewFooterElementKindNS || key.ElementKind == NativeListViewBase.ListViewHeaderElementKindNS)
+				{
+					key.Content.SetParent(null);
+				}
+
+				if (_onRecycled.TryGetValue(key, out var actions))
+				{
+					foreach (var a in actions) { a(); }
+					_onRecycled.Remove(key);
+				}
 			}
 
 			if (this.Log().IsEnabled(LogLevel.Debug))
@@ -243,14 +267,30 @@ namespace Windows.UI.Xaml.Controls
 						this.Log().Debug($"Reusing view at indexPath={indexPath}, previously bound to {selectorItem.DataContext}.");
 					}
 
+					// When reusing the cell there are situation when the parent is detached from the cell.
+					// https://github.com/unoplatform/uno/issues/13199
+					if (selectorItem.GetParent() is null)
+					{
+						selectorItem.SetParent(Owner.XamlParent);
+					}
+
 					Owner?.XamlParent?.PrepareContainerForIndex(selectorItem, index);
 
 					// Normally this happens when the SelectorItem.Content is set, but there's an edge case where after a refresh, a
 					// container can be dequeued which happens to have had exactly the same DataContext as the new item.
 					cell.ClearMeasuredSize();
+
+					// Ensure ClippedFrame from a previous recycled item doesn't persist which can happen in some cases,
+					// and cause it to be clipped when either axis was smaller.
+					if (cell.Content is { } contentControl)
+					{
+						contentControl.ClippedFrame = null;
+					}
 				}
 
 				Owner?.XamlParent?.TryLoadMoreItems(index);
+
+				cell.IsDisplayed = true;
 
 				return cell;
 			}
@@ -372,6 +412,8 @@ namespace Windows.UI.Xaml.Controls
 				reuseIdentifier,
 				indexPath);
 
+			supplementaryView.ElementKind = elementKind;
+
 			using (supplementaryView.InterceptSetNeedsLayout())
 			{
 				if (supplementaryView.Content == null)
@@ -383,8 +425,28 @@ namespace Windows.UI.Xaml.Controls
 					supplementaryView.Content = content
 						.Binding("Content", "");
 				}
+
 				supplementaryView.Content.ContentTemplate = template;
-				supplementaryView.Content.DataContext = context;
+
+				if (elementKind == NativeListViewBase.ListViewFooterElementKindNS || elementKind == NativeListViewBase.ListViewHeaderElementKindNS)
+				{
+					supplementaryView.Content.SetParent(Owner.XamlParent);
+
+					if (context is not null)
+					{
+						supplementaryView.Content.Content = context;
+					}
+
+					// We need to reset the DataContext as it may have been forced to null as a local value
+					// during ItemsControl.CleanUpContainer
+					// See https://github.com/unoplatform/uno/blob/54041db0bd6d5049d8efab90b097eaca936bfca1/src/Uno.UI/UI/Xaml/Controls/ItemsControl/ItemsControl.cs#L1200
+					supplementaryView.Content.ClearValue(ContentControl.DataContextProperty);
+				}
+				else
+				{
+					supplementaryView.Content.DataContext = context;
+				}
+
 				if (style != null)
 				{
 					supplementaryView.Content.Style = style;
@@ -598,7 +660,7 @@ namespace Windows.UI.Xaml.Controls
 				{
 					container.Style = style;
 				}
-				
+
 				if (!container.IsContainerFromTemplateRoot)
 				{
 					container.ContentTemplate = dataTemplate;
@@ -669,7 +731,7 @@ namespace Windows.UI.Xaml.Controls
 		/// Used by the Xamarin Runtime to materialize native 
 		/// objects that may have been collected in the managed world.
 		/// </remarks>
-		public ListViewBaseInternalContainer(IntPtr handle) : base(handle) { }
+		public ListViewBaseInternalContainer(NativeHandle handle) : base(handle) { }
 
 		public ListViewBaseInternalContainer()
 		{
@@ -680,7 +742,7 @@ namespace Windows.UI.Xaml.Controls
 		private CGSize? _measuredContentSize;
 		private readonly SerialDisposable _contentChangedDisposable = new SerialDisposable();
 		private bool _needsLayout = true;
-		private bool _interceptSetNeedsLayout = false;
+		private bool _interceptSetNeedsLayout;
 
 		private WeakReference<NativeListViewBase> _ownerRef;
 		public NativeListViewBase Owner
@@ -695,9 +757,16 @@ namespace Windows.UI.Xaml.Controls
 			}
 		}
 
+		/// <summary>
+		/// Indicates if the cell is currently displayed in the collection.
+		/// </summary>
+		internal bool IsDisplayed { get; set; }
+
 		private Orientation ScrollOrientation => Owner.NativeLayout.ScrollOrientation;
 		private bool SupportsDynamicItemSizes => Owner.NativeLayout.SupportsDynamicItemSizes;
 		private ILayouter Layouter => Owner.NativeLayout.Layouter;
+
+		internal string ElementKind { get; set; }
 
 		protected override void Dispose(bool disposing)
 		{
@@ -705,7 +774,7 @@ namespace Windows.UI.Xaml.Controls
 			{
 				GC.ReRegisterForFinalize(this);
 
-				CoreDispatcher.Main.RunIdleAsync(_ => Dispose());
+				_ = CoreDispatcher.Main.RunIdleAsync(_ => Dispose());
 			}
 			else
 			{
@@ -750,11 +819,37 @@ namespace Windows.UI.Xaml.Controls
 
 		public override CGRect Frame
 		{
-			get => base.Frame;
+			get
+			{
+				try
+				{
+					return base.Frame;
+				}
+				catch
+				{
+					Console.WriteLine("ListViewBaseInternalContainer get failed");
+					return CGRect.Empty;
+				}
+			}
+
 			set
 			{
+				if (this is null)
+				{
+					// Don't fail on null instance from native call
+					return;
+				}
+
 				base.Frame = value;
-				UpdateContentViewFrame();
+
+				try
+				{
+					UpdateContentViewFrame();
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine("ListViewBaseInternalContainer set failed: " + ex);
+				}
 			}
 		}
 
@@ -763,14 +858,27 @@ namespace Windows.UI.Xaml.Controls
 			get => base.Bounds;
 			set
 			{
-				if (_measuredContentSize.HasValue)
+				if (this is null)
 				{
-					// At some points, eg during a collection change, iOS seems to apply an outdated size even after we've updated the 
-					// LayoutAttributes. Keep the good size.
-					SetExtent(ref value, _measuredContentSize.Value);
+					// Don't fail on null instance from native call
+					return;
 				}
-				base.Bounds = value;
-				UpdateContentViewFrame();
+
+				try
+				{
+					if (_measuredContentSize.HasValue)
+					{
+						// At some points, eg during a collection change, iOS seems to apply an outdated size even after we've updated the 
+						// LayoutAttributes. Keep the good size.
+						SetExtent(ref value, _measuredContentSize.Value);
+					}
+					base.Bounds = value;
+					UpdateContentViewFrame();
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine("ListViewBaseInternalContainer.Bounds set failed: " + ex);
+				}
 			}
 		}
 
@@ -816,9 +924,9 @@ namespace Windows.UI.Xaml.Controls
 		/// </summary>
 		internal void ClearMeasuredSize() => _measuredContentSize = null;
 
-		public override UICollectionViewLayoutAttributes PreferredLayoutAttributesFittingAttributes(UICollectionViewLayoutAttributes layoutAttributes)
+		public override UICollectionViewLayoutAttributes PreferredLayoutAttributesFittingAttributes(UICollectionViewLayoutAttributes nativeLayoutAttributes)
 		{
-			if (!(((object)layoutAttributes) is UICollectionViewLayoutAttributes))
+			if (((object)nativeLayoutAttributes) is not _LayoutAttributes layoutAttributes)
 			{
 				// This case happens for a yet unknown GC issue, where the layoutAttribute instance passed the current
 				// method maps to another object. The repro steps are not clear, and it may be related to ListView/GridView
@@ -890,6 +998,7 @@ namespace Windows.UI.Xaml.Controls
 							//to use stale layoutAttributes for deciding if items should be visible, leading to them popping out of view mid-viewport.
 							Owner?.NativeLayout?.RefreshLayout();
 						}
+
 						layoutAttributes.Frame = frame;
 						if (sizesAreDifferent)
 						{

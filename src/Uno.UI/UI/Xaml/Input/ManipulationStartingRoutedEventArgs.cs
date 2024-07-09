@@ -1,4 +1,4 @@
-using Windows.Devices.Input;
+﻿using Windows.Devices.Input;
 using Uno.UI.Xaml.Input;
 
 #if HAS_UNO_WINUI
@@ -8,7 +8,7 @@ using Windows.UI.Input;
 #endif
 
 
-namespace Windows.UI.Xaml.Input
+namespace Microsoft.UI.Xaml.Input
 {
 	public partial class ManipulationStartingRoutedEventArgs : RoutedEventArgs, IHandleableRoutedEventArgs
 	{
@@ -17,8 +17,8 @@ namespace Windows.UI.Xaml.Input
 
 		public ManipulationStartingRoutedEventArgs() { }
 
-		internal ManipulationStartingRoutedEventArgs(UIElement container, ManipulationStartingEventArgs args)
-			: base(container)
+		internal ManipulationStartingRoutedEventArgs(UIElement source, UIElement container, ManipulationStartingEventArgs args)
+			: base(source)
 		{
 			Container = container;
 

@@ -10,9 +10,9 @@ using Uno.Foundation.Logging;
 using Uno.Diagnostics.Eventing;
 using Uno.UI.DataBinding;
 
-namespace Windows.UI.Xaml
+namespace Microsoft.UI.Xaml
 {
-	public static class DependencyObjectExtensions
+	public static partial class DependencyObjectExtensions
 	{
 		private static ConditionalWeakTable<object, AttachedDependencyObject> _objectData
 			= new ConditionalWeakTable<object, AttachedDependencyObject>();
@@ -122,9 +122,32 @@ namespace Windows.UI.Xaml
 		/// <summary>
 		/// Set the parent of the specified dependency object
 		/// </summary>
+		/// <remarks>
+		/// This method will create a weak attached DependencyObjectStore if the object is
+		/// not an <see cref="IDependencyObjectStoreProvider"/>
+		/// </remarks>
 		internal static void SetParent(this object dependencyObject, object parent)
+			=> GetStore(dependencyObject).Parent = parent;
+
+		/// <summary>
+		/// Set the parent of the specified dependency object
+		/// </summary>
+		internal static void SetParent(this IDependencyObjectStoreProvider storeProvider, object parent)
+			=> storeProvider.Store.Parent = parent;
+
+		/// <summary>
+		/// Tries to set the parent of the specified dependency object
+		/// </summary>
+		/// <returns>true if the parent could be set, otherwise false</returns>
+		internal static bool TrySetParent(this object dependencyObject, object parent)
 		{
-			GetStore(dependencyObject).Parent = parent;
+			if (dependencyObject is IDependencyObjectStoreProvider provider)
+			{
+				SetParent(provider, parent);
+				return true;
+			}
+
+			return false;
 		}
 
 		internal static void SetLogicalParent(this FrameworkElement element, DependencyObject logicalParent)
@@ -218,12 +241,6 @@ namespace Windows.UI.Xaml
 			return GetStore(instance).GetValue(property, precedence, true);
 		}
 
-
-		internal static void PropagateInheritedProperties(this DependencyObject instance)
-		{
-			GetStore(instance).PropagateInheritedProperties();
-		}
-
 		/// <summary>
 		/// Get the value for the specified dependency property on the specific instance at 
 		/// the highest precedence level under the specified one.
@@ -250,8 +267,7 @@ namespace Windows.UI.Xaml
 		{
 			var propertyDetails = GetStore(instance).GetPropertyDetails(property).ToList();
 
-			return Enum.GetValues(typeof(DependencyPropertyValuePrecedences))
-				.Cast<DependencyPropertyValuePrecedences>()
+			return Enum.GetValues<DependencyPropertyValuePrecedences>()
 				.Select(precedence => (propertyDetails[(int)precedence], precedence))
 				.ToArray();
 		}
@@ -356,7 +372,7 @@ namespace Windows.UI.Xaml
 				return Disposable.Empty;
 			}
 
-			return properties
+			var disposables = properties
 				.Where(Enumerable.Any)
 				.GroupBy(Enumerable.First, propertyPath => propertyPath.Skip(1).ToArray())
 				.Where(Enumerable.Any)
@@ -384,8 +400,8 @@ namespace Windows.UI.Xaml
 					});
 
 					return new CompositeDisposable(disposable, childDisposable);
-				})
-				.Apply(disposables => new CompositeDisposable(disposables));
+				});
+			return new CompositeDisposable(disposables);
 		}
 
 		/// <summary>
@@ -399,6 +415,16 @@ namespace Windows.UI.Xaml
 		{
 			return GetStore(instance).RegisterParentChangedCallback(key, handler);
 		}
+
+		/// <summary>
+		/// Registers to parent changes.
+		/// </summary>
+		/// <param name="instance">The target dependency object</param>
+		/// <param name="key">A key to be passed to the callback parameter.</param>
+		/// <param name="handler">A callback to be called</param>
+		/// <returns>A disposable that cancels the subscription.</returns>
+		internal static void RegisterParentChangedCallbackStrong(this DependencyObject instance, object key, ParentChangedCallback handler)
+			=> GetStore(instance).RegisterParentChangedCallbackStrong(key, handler);
 
 		/// <summary>
 		/// Determines if the specified dependency property is set.
@@ -426,6 +452,24 @@ namespace Windows.UI.Xaml
 			return GetStore(dependencyObject).GetCurrentHighestValuePrecedence(property);
 		}
 
+		internal static DependencyPropertyValuePrecedences GetBaseValueSource(this DependencyObject dependencyObject, DependencyProperty property)
+		{
+			var precedence = dependencyObject.GetCurrentHighestValuePrecedence(property);
+			// TODO: Bring this closer to CFrameworkElement::IsPropertySetByStyle from WinUI.
+			if (precedence is DependencyPropertyValuePrecedences.DefaultStyle or DependencyPropertyValuePrecedences.ImplicitStyle or DependencyPropertyValuePrecedences.ExplicitStyle)
+			{
+				return DependencyPropertyValuePrecedences.ExplicitStyle;
+			}
+			else if (precedence == DependencyPropertyValuePrecedences.DefaultValue)
+			{
+				return DependencyPropertyValuePrecedences.DefaultValue;
+			}
+			else
+			{
+				return DependencyPropertyValuePrecedences.Local;
+			}
+		}
+
 		internal static void InvalidateMeasure(this DependencyObject d)
 		{
 			var uielement = d as UIElement ?? d.GetParents().OfType<UIElement>().FirstOrDefault();
@@ -437,15 +481,6 @@ namespace Windows.UI.Xaml
 			var uielement = d as UIElement ?? d.GetParents().OfType<UIElement>().FirstOrDefault();
 			uielement?.InvalidateArrange();
 		}
-
-		internal static void InvalidateRender(this DependencyObject d)
-		{
-			var uielement = d as UIElement ?? d.GetParents().OfType<UIElement>().FirstOrDefault();
-			uielement?.InvalidateRender();
-		}
-
-		internal static void RegisterDefaultValueProvider(this IDependencyObjectStoreProvider storeProvider, DependencyObjectStore.DefaultValueProvider provider)
-			=> storeProvider.Store.RegisterDefaultValueProvider(provider);
 
 		/// <summary>
 		/// See <see cref="DependencyObjectStore.RegisterPropertyChangedCallbackStrong(ExplicitPropertyChangedCallback)"/> for more details

@@ -5,12 +5,16 @@
 #nullable enable
 
 using System;
+using DirectUI;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 using Uno.UI.Extensions;
 using Uno.UI.Xaml.Core;
 using Uno.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
+using Windows.System;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	public partial class Control
 	{
@@ -42,7 +46,14 @@ namespace Windows.UI.Xaml.Controls
 		/// </summary>
 		internal UIElement? FocusTargetDescendant => FindFocusTargetDescendant(this); //TODO Uno: This should be set internally when the template is applied.
 
-		private UIElement? FindFocusTargetDescendant(DependencyObject? root)
+		private UIElement? FindFocusTargetDescendant(
+#if __CROSSRUNTIME__
+			// Uno docs: Intentionally passing UIElement as GetChildren(UIElement) is more performant than GetChildren(DependencyObject).
+			UIElement? root
+#else
+			DependencyObject? root
+#endif
+			)
 		{
 			if (root == null)
 			{
@@ -147,6 +158,35 @@ namespace Windows.UI.Xaml.Controls
 			}
 		}
 
+		protected override void OnApplyTemplate()
+		{
+			base.OnApplyTemplate();
+
+			var spFocusVisualWhiteDO = GetTemplateChild("FocusVisualWhite");
+			var spFocusVisualBlackDO = GetTemplateChild("FocusVisualBlack");
+			if (spFocusVisualWhiteDO is Rectangle spFocusVisualWhiteDORect && spFocusVisualBlackDO is Rectangle spFocusVisualBlackDORect)
+			{
+				LayoutRoundRectangleStrokeThickness(spFocusVisualWhiteDORect);
+				LayoutRoundRectangleStrokeThickness(spFocusVisualBlackDORect);
+			}
+		}
+
+		private protected void LayoutRoundRectangleStrokeThickness(Rectangle pRectangle)
+		{
+			bool roundStrokeThickness = false;
+			double strokeThickness = 0.0f;
+			float strokeThicknessFloat = 0.0f;
+
+			roundStrokeThickness = pRectangle.UseLayoutRounding;
+			if (roundStrokeThickness)
+			{
+				strokeThickness = pRectangle.StrokeThickness;
+				strokeThicknessFloat = (float)strokeThickness;
+				strokeThicknessFloat = (float)LayoutRound(strokeThicknessFloat);
+				pRectangle.StrokeThickness = strokeThicknessFloat;
+			}
+		}
+
 		internal override bool IsFocusableForFocusEngagement() =>
 			IsFocusEngagementEnabled && LastInputGamepad();
 
@@ -155,5 +195,35 @@ namespace Windows.UI.Xaml.Controls
 			var contentRoot = VisualTree.GetContentRootForElement(this);
 			return contentRoot?.InputManager.LastInputDeviceType == InputDeviceType.GamepadOrRemote;
 		}
+
+		private static void ProcessAcceleratorsIfApplicable(KeyRoutedEventArgs spArgsAsKEA, Control pSenderAsControl)
+		{
+			VirtualKey originalKey = spArgsAsKEA.OriginalKey;
+			VirtualKeyModifiers keyModifiers = GetKeyboardModifiers();
+
+			if (KeyboardAcceleratorUtility.IsKeyValidForAccelerators(originalKey, KeyboardAcceleratorUtility.MapVirtualKeyModifiersToIntegersModifiers(keyModifiers)))
+			{
+				KeyboardAcceleratorUtility.ProcessKeyboardAccelerators(
+					originalKey,
+					keyModifiers,
+					VisualTree.GetContentRootForElement(pSenderAsControl)!.GetAllLiveKeyboardAccelerators(),
+					pSenderAsControl,
+					out var handled,
+					out var handledShouldNotImpedeTextInput,
+					null,
+					false);
+
+				if (handled)
+				{
+					spArgsAsKEA.Handled = true;
+				}
+				if (handledShouldNotImpedeTextInput)
+				{
+					spArgsAsKEA.HandledShouldNotImpedeTextInput = true;
+				}
+			}
+		}
+
+		private protected static VirtualKeyModifiers GetKeyboardModifiers() => CoreImports.Input_GetKeyboardModifiers();
 	}
 }

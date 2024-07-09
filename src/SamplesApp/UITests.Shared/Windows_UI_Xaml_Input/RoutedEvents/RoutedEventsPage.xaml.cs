@@ -1,10 +1,10 @@
 ﻿using System;
 using Uno.UI.Samples.Controls;
 using Windows.UI;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 
 namespace SamplesApp.Samples.RoutedEvents
 {
@@ -45,8 +45,8 @@ namespace SamplesApp.Samples.RoutedEvents
 				//evt.Handled = false;
 			}
 
-			grid.AddHandler(TappedEvent, (TappedEventHandler) TapHandler, false);
-			grid.AddHandler(TappedEvent, (TappedEventHandler) TapHandler2, true);
+			grid.AddHandler(TappedEvent, (TappedEventHandler)TapHandler, false);
+			grid.AddHandler(TappedEvent, (TappedEventHandler)TapHandler2, true);
 
 			string GetPosition(TappedRoutedEventArgs evt)
 			{
@@ -61,7 +61,7 @@ namespace SamplesApp.Samples.RoutedEvents
 				textBlock.Text += $".e({GetPosition(evt)})";
 			}
 
-			grid.AddHandler(DoubleTappedEvent, (DoubleTappedEventHandler) DoubleTappedHandler, true);
+			grid.AddHandler(DoubleTappedEvent, (DoubleTappedEventHandler)DoubleTappedHandler, true);
 
 			void DoubleTappedHandler(object sender, DoubleTappedRoutedEventArgs e)
 			{
@@ -92,7 +92,7 @@ namespace SamplesApp.Samples.RoutedEvents
 			};
 
 			grid.BorderBrush = white;
-			grid.BorderThickness = ThicknessHelper.FromUniformLength(3.5);
+			grid.BorderThickness = new Thickness(3.5);
 
 			grid.GotFocus += (s, e) => textBlock.Text += ".F";
 			grid.LostFocus += (s, e) => textBlock.Text += ".f";
@@ -100,7 +100,7 @@ namespace SamplesApp.Samples.RoutedEvents
 			grid.KeyDown += (s, e) =>
 			{
 				textBlock.Text += ".K";
-				if (e.Key == Windows.System.VirtualKey.E)
+				if (e.Key == global::Windows.System.VirtualKey.E)
 				{
 					e.Handled = true;
 				}
@@ -109,7 +109,7 @@ namespace SamplesApp.Samples.RoutedEvents
 			grid.KeyUp += (s, e) =>
 			{
 				textBlock.Text += ".k";
-				if (e.Key == Windows.System.VirtualKey.E)
+				if (e.Key == global::Windows.System.VirtualKey.E)
 				{
 					e.Handled = true;
 				}
@@ -119,7 +119,7 @@ namespace SamplesApp.Samples.RoutedEvents
 		protected override void OnTapped(TappedRoutedEventArgs e)
 		{
 			base.OnTapped(e);
-#if !WINDOWS_UWP
+#if !WINAPPSDK
 			Console.WriteLine("Tapped!");
 #endif
 		}

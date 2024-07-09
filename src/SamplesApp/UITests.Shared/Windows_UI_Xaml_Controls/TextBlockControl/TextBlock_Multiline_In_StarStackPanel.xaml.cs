@@ -1,10 +1,10 @@
-using Uno.UI.Samples.Controls;
+﻿using Uno.UI.Samples.Controls;
 using Uno.UI.Samples.Presentation.SamplePages;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Uno.UI.Samples.Content.UITests.TextBlockControl
 {
-	[SampleControlInfo("TextBlockControl",
+	[SampleControlInfo("TextBlock",
 		"TextBlock_Multiline_In_StarStackPanel",
 		typeof(TextBlockViewModel),
 		description: "A multiline textblock that contains data-bound runs that should wrap properly.",

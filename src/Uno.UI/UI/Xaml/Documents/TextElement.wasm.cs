@@ -1,9 +1,14 @@
-﻿namespace Windows.UI.Xaml.Documents
+﻿using Uno.UI;
+using Uno.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+
+namespace Microsoft.UI.Xaml.Documents
 {
 	partial class TextElement
 	{
 		protected TextElement(string htmlTag = "span") : base(htmlTag)
 		{
+			SetDefaultForeground(ForegroundProperty);
 		}
 
 		partial void OnFontFamilyChangedPartial()
@@ -14,6 +19,11 @@
 		partial void OnFontStyleChangedPartial()
 		{
 			this.SetFontStyle(ReadLocalValue(FontStyleProperty));
+		}
+
+		partial void OnFontStretchChangedPartial()
+		{
+			this.SetFontStretch(ReadLocalValue(FontStretchProperty));
 		}
 
 		partial void OnFontSizeChangedPartial()
@@ -44,6 +54,19 @@
 		partial void OnTextDecorationsChangedPartial()
 		{
 			this.SetTextDecorations(ReadLocalValue(TextDecorationsProperty));
+		}
+
+		partial void OnNameChangedPartial(string newValue)
+		{
+			if (FrameworkElementHelper.IsUiAutomationMappingEnabled)
+			{
+				AutomationProperties.SetAutomationId(this, newValue);
+			}
+
+			if (FeatureConfiguration.UIElement.AssignDOMXamlName)
+			{
+				WindowManagerInterop.SetName(HtmlId, newValue);
+			}
 		}
 	}
 }

@@ -1,51 +1,56 @@
-﻿<Project Sdk="MSBuild.Sdk.Extras">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFrameworks>net47;netcoreapp3.1</TargetFrameworks>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFrameworks>$(NetPrevious);$(NetCurrent)</TargetFrameworks>
+	</PropertyGroup>
 
-	<Import Project="../netcore-build-windows.props" />
-	
+	<Import Project="../targetframework-override.props" />
+
 	<PropertyGroup>
 		<GeneratePackageOnBuild Condition="'$(Configuration)'=='Release'">true</GeneratePackageOnBuild>
-		<Authors>nventive</Authors>
+		<authors>Uno Platform</authors>
 		<PackageProjectUrl>https://github.com/unoplatform/uno</PackageProjectUrl>
-		<PackageIconUrl>https://nv-assets.azurewebsites.net/logos/uno.png</PackageIconUrl>
 		<PackageIcon>uno.png</PackageIcon>
 		<RepositoryUrl>https://github.com/unoplatform/uno</RepositoryUrl>
 		<Description>This package provides the platform support for Skia in Uno Platform projects.</Description>
-		<Copyright>Copyright (C) 2015-2020 nventive inc. - all rights reserved</Copyright>
+		<Copyright>Copyright (C) 2015-$([System.DateTime]::Now.ToString(`yyyy`)) Uno Platform Inc. - all rights reserved</Copyright>
 
 		<PackageId Condition="'$(UNO_UWP_BUILD)'!='true'">Uno.WinUI.Runtime.Skia.Wpf</PackageId>
-	
-		<UseCommonOverridePackage>true</UseCommonOverridePackage>
-		<UseWPF Condition="'$(TargetFramework)'=='netcoreapp3.1' or '$(TargetFramework)'=='net5.0-windows'">true</UseWPF>
 
-		<!-- 9.0 to work around a VS 2019 build issue -->
-		<LangVersion>9.0</LangVersion>
-	</PropertyGroup>
-	
+		<UseCommonOverridePackage>true</UseCommonOverridePackage>
+
+		<!-- Ignore NU5104 for net7.0 System.Drawing.Common -->
+		<NoWarn>$(NoWarn);NU5104</NoWarn>
+	</PropertyGroup>	
+
 	<ItemGroup>
-		<None Include="..\Common\uno.png" Pack="true" PackagePath="\" />
+		<!--
+		This allows for building the library with a dependency to WPF while not
+		building with net8-windows.
+		-->
+		<FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF"/>
 	</ItemGroup>
 
-	<Import Project="..\Uno.CrossTargetting.props" />
+	<ItemGroup>
+		<None Include="..\Common\uno.png" Pack="true" PackagePath="\" Visible="false" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="SkiaSharp.Views.WPF" />
+		<PackageReference Include="SkiaSharp.Harfbuzz" />
+
+		<!-- 
+			Required to ensure that this reference is latest and not 
+			transitively flowing through SkiaSharp's dependencies
+		 -->
+		<PackageReference Include="Microsoft.Win32.SystemEvents" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<Reference Include="PresentationFramework" />
-		<Reference Include="PresentationCore" />
-		<Reference Include="WindowsBase" />
-		<Reference Include="System.Xaml" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <ProjectReference Include="..\Uno.Foundation\Uno.Foundation.Skia.csproj" TreatAsPackageReference="false" PrivateAssets="all" />
-	  <ProjectReference Include="..\Uno.UI\Uno.UI.Skia.csproj" />
-	  <ProjectReference Include="..\Uno.UWP\Uno.Skia.csproj" TreatAsPackageReference="false" PrivateAssets="all" />
+		<ProjectReference Include="..\Uno.Foundation\Uno.Foundation.Skia.csproj" TreatAsPackageReference="false" PrivateAssets="all" />
+		<ProjectReference Include="..\Uno.UI.Runtime.Skia\Uno.UI.Runtime.Skia.csproj" />
+		<ProjectReference Include="..\Uno.UI\Uno.UI.Skia.csproj" />
+		<ProjectReference Include="..\Uno.UWP\Uno.Skia.csproj" TreatAsPackageReference="false" PrivateAssets="all" />
 	</ItemGroup>
 
 	<ItemGroup>

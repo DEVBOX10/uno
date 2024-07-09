@@ -4,28 +4,21 @@ trigger:
       - master
       - release/beta/*
       - release/stable/*
+      - feature/*
+      - legacy/*
 
-pr:
+pr: 
   branches:
     include:
       - master
       - release/beta/*
       - release/stable/*
+      - feature/*
+      - legacy/*
 
-  paths:
-    include:
-    - '/'
-    exclude:
-    - .dependabot/
-    - .github/
-    - .editorconfig
-    - '*.md'
-    - .all-contributorsrc
-      
 variables:
-  windowsHostedVMImage: 'windows-2019'
+  windowsScaledPool: 'Windows2022-20240421'
+  linuxVMImage: 'ubuntu-latest'
 
-jobs:
-- template: build/ci/.azure-devops-docs.yml
-  parameters:
-    vmImage: '$(windowsHostedVMImage)'
+stages:
+- template: build/ci/.azure-devops-stages-docs.yml

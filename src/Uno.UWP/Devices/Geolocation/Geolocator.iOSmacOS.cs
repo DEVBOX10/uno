@@ -1,16 +1,13 @@
-#if __IOS__ || __MACOS__
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
+using Windows.Foundation;
 using System.Threading.Tasks;
 using CoreLocation;
 using Foundation;
 using Uno.Extensions;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
-using Windows.Foundation.Metadata;
 using Windows.UI.Core;
+using Uno.UI.Dispatching;
 
 namespace Windows.Devices.Geolocation
 {
@@ -18,48 +15,53 @@ namespace Windows.Devices.Geolocation
 	{
 		private CLLocationManager _locationManager;
 
-		public Geolocator()
+		partial void PlatformInitialize()
 		{
-			_locationManager = new CLLocationManager
+			if (NativeDispatcher.Main.HasThreadAccess)
 			{
-				DesiredAccuracy = DesiredAccuracy == PositionAccuracy.Default ? 10 : 1,
-			};
+				_locationManager = new CLLocationManager
+				{
+					DesiredAccuracy = DesiredAccuracy == PositionAccuracy.Default ? 10 : 1,
+				};
 
-			_locationManager.LocationsUpdated += _locationManager_LocationsUpdated;
+				_locationManager.LocationsUpdated += _locationManager_LocationsUpdated;
 
-			_locationManager.StartUpdatingLocation();
+				_locationManager.StartUpdatingLocation();
+			}
+			else
+			{
+				NativeDispatcher.Main.Enqueue(PlatformInitialize, NativeDispatcherPriority.Normal);
+			}
 		}
 
 		private void _locationManager_LocationsUpdated(object sender, CLLocationsUpdatedEventArgs e)
 		{
-			BroadcastStatus(PositionStatus.Ready);
-			this._positionChanged?.Invoke(this, new PositionChangedEventArgs(ToGeoposition(e.Locations.Last())));
+			BroadcastStatusChanged(PositionStatus.Ready);
+			_positionChangedWrapper.Event?.Invoke(this, new PositionChangedEventArgs(ToGeoposition(e.Locations.Last())));
 		}
 
 		partial void StartPositionChanged()
 		{
-			BroadcastStatus(PositionStatus.Initializing);
+			BroadcastStatusChanged(PositionStatus.Initializing);
 		}
 
-#if __IOS__
-		public Task<Geoposition> GetGeopositionAsync() => GetGeopositionInternalAsync(); //will be removed with #2240
-#else
+		internal CLLocationManager LocationManager => _locationManager;
+
 		public IAsyncOperation<Geoposition> GetGeopositionAsync() => GetGeopositionInternalAsync().AsAsyncOperation();
-#endif
 
 		public Task<Geoposition> GetGeopositionInternalAsync()
 
 		{
 			if (CoreDispatcher.Main.HasThreadAccess)
 			{
-				BroadcastStatus(PositionStatus.Initializing);
+				BroadcastStatusChanged(PositionStatus.Initializing);
 				var location = _locationManager.Location;
 				if (location == null)
 				{
 					throw new InvalidOperationException("Could not obtain the location. Please make sure that NSLocationWhenInUseUsageDescription and NSLocationUsageDescription are set in info.plist.");
 				}
 
-				BroadcastStatus(PositionStatus.Ready);
+				BroadcastStatusChanged(PositionStatus.Ready);
 
 				return Task.FromResult(ToGeoposition(location));
 			}
@@ -93,22 +95,14 @@ namespace Windows.Devices.Geolocation
 				)
 			);
 
-#if __IOS__
-		public async Task<Geoposition> GetGeopositionAsync(TimeSpan maximumAge, TimeSpan timeout) //will be removed with #2240
-			=> await GetGeopositionAsync();
-#else
 		public IAsyncOperation<Geoposition> GetGeopositionAsync(TimeSpan maximumAge, TimeSpan timeout)
 			=> GetGeopositionAsync();
-#endif
 
 
 		private static List<CLLocationManager> _requestManagers = new List<CLLocationManager>();
 
-#if __IOS__
-		public static Task<GeolocationAccessStatus> RequestAccessAsync() => RequestAccessInternalAsync(); //will be removed with #2240
-#else
 		public static IAsyncOperation<GeolocationAccessStatus> RequestAccessAsync() => RequestAccessInternalAsync().AsAsyncOperation();
-#endif
+
 		private static async Task<GeolocationAccessStatus> RequestAccessInternalAsync()
 
 		{
@@ -181,10 +175,6 @@ namespace Windows.Devices.Geolocation
 			}
 		}
 
-		public static async Task<IList<Geoposition>> GetGeopositionHistoryAsync(DateTime startTime) { return new List<Geoposition>(); }
-
-		public static async Task<IList<Geoposition>> GetGeopositionHistoryAsync(DateTime startTime, TimeSpan duration) { return new List<Geoposition>(); }
-
 		private static GeolocationAccessStatus TranslateStatus(CLAuthorizationStatus status)
 		{
 			switch (status)
@@ -205,7 +195,7 @@ namespace Windows.Devices.Geolocation
 					return GeolocationAccessStatus.Denied;
 			}
 		}
-		
+
 #if __IOS__
 		private class CLLocationManagerDelegate : NSObject, ICLLocationManagerDelegate
 		{
@@ -220,4 +210,3 @@ namespace Windows.Devices.Geolocation
 #endif
 	}
 }
-#endif

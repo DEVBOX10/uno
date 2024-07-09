@@ -1,9 +1,9 @@
 ﻿using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace UITests.Windows_UI_Xaml.UIElementTests
 {
-	[Sample("UIElement", "GH Bugs")]
+	[Sample("UIElement")]
 	public sealed partial class UIElement_Layout_Bug2879 : Page
 	{
 		public UIElement_Layout_Bug2879()

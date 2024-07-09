@@ -1,5 +1,5 @@
 // ******************************************************************
-// Copyright � 2015-2018 nventive inc. All rights reserved.
+// Copyright � 2015-2018 Uno Platform Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,44 +15,47 @@
 //
 // ******************************************************************
 using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Text;
 
 namespace Uno.Extensions
 {
-    internal static class IndentedStringBuilderExtensions
-    {
-		public static void AppendLine(this IIndentedStringBuilder builder, IFormatProvider formatProvider, string pattern, params object[] replacements)
+	internal static class IndentedStringBuilderExtensions
+	{
+		public static void AppendLineIndented(this IIndentedStringBuilder builder, string pattern)
 		{
-			builder.AppendFormat(formatProvider, pattern, replacements);
+			builder.AppendIndented(pattern);
 			builder.AppendLine();
 		}
 
-		public static void AppendLine(this IIndentedStringBuilder builder, IFormatProvider formatProvider, int indentLevel, string pattern, params object[] replacements)
+		public static void AppendLineInvariantIndented(this IIndentedStringBuilder builder, string pattern, params object[] replacements)
 		{
-			builder.AppendFormat(formatProvider, pattern.Indent(indentLevel), replacements);
+			builder.AppendFormatIndented(CultureInfo.InvariantCulture, pattern, replacements);
 			builder.AppendLine();
 		}
 
-		public static void AppendLineInvariant(this IIndentedStringBuilder builder, string pattern, params object[] replacements)
+		public static IDisposable Indent(this IIndentedStringBuilder builder, string opening, string closing = null)
 		{
-			builder.AppendLine(CultureInfo.InvariantCulture, pattern, replacements);
-		}
+			builder.AppendLineIndented(opening);
+			var block = builder.Indent();
 
-		public static void AppendLineInvariant(this IIndentedStringBuilder builder, int indentLevel, string pattern, params object[] replacements)
-		{
-			builder.AppendLine(CultureInfo.InvariantCulture, indentLevel, pattern, replacements);
-		}
-
-		public static void AppendFormatInvariant(this IIndentedStringBuilder builder, string pattern, params object[] replacements)
-		{
-			builder.AppendFormat(CultureInfo.InvariantCulture, pattern, replacements);
+			return new DisposableAction(() =>
+			{
+				block.Dispose();
+				if (closing != null)
+				{
+					builder.AppendLineIndented(closing);
+				}
+			});
 		}
 
 		public static IDisposable BlockInvariant(this IIndentedStringBuilder builder, string pattern, params object[] parameters)
 		{
 			return builder.Block(CultureInfo.InvariantCulture, pattern, parameters);
+		}
+
+		public static IDisposable BlockInvariant(this IIndentedStringBuilder builder, string pattern)
+		{
+			return builder.Block(CultureInfo.InvariantCulture, pattern);
 		}
 	}
 }

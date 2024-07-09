@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Diagnostics.Contracts;
 using System.Runtime.InteropServices;
 using Uno.Foundation.Interop;
 using System.Text;
@@ -200,10 +199,12 @@ namespace Uno.Foundation
 			return res != IntPtr.Zero;
 		}
 
+#pragma warning disable CA2211
 		/// <summary>
 		/// Provides an override for javascript invokes.
 		/// </summary>
 		public static Func<string, string>? InvokeJSOverride;
+#pragma warning restore CA2211
 
 		public static string InvokeJS(string str)
 		{
@@ -246,7 +247,7 @@ namespace Uno.Foundation
 			}
 		}
 
-		private static string InnerInvokeJS(String str)
+		private static string InnerInvokeJS(string str)
 		{
 			if (_logger.IsEnabled(LogLevel.Debug))
 			{
@@ -279,11 +280,17 @@ namespace Uno.Foundation
 			string command;
 			if (formattable.ArgumentCount == 0)
 			{
-				command = formattable.ToString();
+				command = formattable.ToString(CultureInfo.InvariantCulture);
 			}
 			else
 			{
-				var commandBuilder = new IndentedStringBuilder();
+				var commandBuilder =
+#if DEBUG
+					new IndentedStringBuilder();
+#else
+					new StringBuilder();
+#endif
+
 				commandBuilder.Append("(function() {");
 
 				var parameters = formattable.GetArguments();
@@ -296,15 +303,24 @@ namespace Uno.Foundation
 					{
 						if (!mappedParameters.TryGetValue(jsObject, out var parameterReference))
 						{
+							if (!jsObject.Handle.IsAlive)
+							{
+								throw new InvalidOperationException("JSObjectHandle is invalid.");
+							}
+
 							mappedParameters[jsObject] = parameterReference = $"__parameter_{i}";
-							commandBuilder.AppendLine($"var {parameterReference} = {jsObject.Handle.GetNativeInstance()};");
+							commandBuilder.AppendLine($"const {parameterReference} = {jsObject.Handle.GetNativeInstance()};");
 						}
 
 						parameters[i] = parameterReference;
 					}
 				}
 
+#if DEBUG
 				commandBuilder.AppendFormatInvariant(formattable.Format, parameters);
+#else
+				commandBuilder.AppendFormat(CultureInfo.InvariantCulture, formattable.Format, parameters);
+#endif
 				commandBuilder.Append("return \"ok\"; })();");
 
 				command = commandBuilder.ToString();
@@ -390,7 +406,6 @@ namespace Uno.Foundation
 			return listener.task;
 		}
 
-		[Pure]
 		public static string EscapeJs(string s)
 		{
 			if (s == null)
@@ -457,7 +472,7 @@ namespace Uno.Foundation
 					else
 					{
 						r.Append("\\u");
-						r.Append(((ushort)c).ToString("X4"));
+						r.Append(((ushort)c).ToString("X4", CultureInfo.InvariantCulture));
 					}
 				}
 

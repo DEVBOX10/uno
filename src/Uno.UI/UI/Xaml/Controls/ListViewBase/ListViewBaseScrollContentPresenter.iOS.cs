@@ -2,17 +2,13 @@
 using System.Collections.Generic;
 using System.Text;
 using CoreGraphics;
+using UIKit;
 using Uno.Extensions;
-
 using Uno.Foundation.Logging;
 using Windows.Foundation;
-using UIKit;
-
-#if NET6_0_OR_GREATER
 using ObjCRuntime;
-#endif
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	public sealed partial class ListViewBaseScrollContentPresenter : IScrollContentPresenter
 	{
@@ -26,14 +22,42 @@ namespace Windows.UI.Xaml.Controls
 
 		Size? IScrollContentPresenter.CustomContentExtent => NativePanel?.ContentSize;
 
-		public void SetContentOffset(CGPoint contentOffset, bool animated)
+		CGPoint IUIScrollView.ContentOffset => NativePanel?.ContentOffset ?? default(CGPoint);
+
+		nfloat IUIScrollView.ZoomScale => NativePanel?.ZoomScale ?? default(nfloat);
+
+		void IUIScrollView.ApplyZoomScale(nfloat scale, bool animated)
 		{
-			NativePanel?.SetContentOffset(contentOffset, animated);
+			if (NativePanel == null)
+			{
+				return;
+			}
+
+			if (animated)
+			{
+				NativePanel.SetZoomScale(scale, animated);
+			}
+			else
+			{
+				NativePanel.ZoomScale = scale;
+			}
 		}
 
-		public void SetZoomScale(nfloat scale, bool animated)
+		void IUIScrollView.ApplyContentOffset(CGPoint contentOffset, bool animated)
 		{
-			NativePanel?.SetZoomScale(scale, animated);
+			if (NativePanel == null)
+			{
+				return;
+			}
+
+			if (animated)
+			{
+				NativePanel.SetContentOffset(contentOffset, animated);
+			}
+			else
+			{
+				NativePanel.ContentOffset = contentOffset;
+			}
 		}
 
 		bool INativeScrollContentPresenter.Set(

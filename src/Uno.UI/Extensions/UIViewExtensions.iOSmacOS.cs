@@ -1,35 +1,25 @@
-﻿using Uno.Disposables;
-using Uno;
+﻿using Uno;
 using Uno.Extensions;
 using Uno.UI;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
-using Uno.UI.DataBinding;
 using Uno.UI.Extensions;
-using Windows.UI.Xaml;
-using System.Diagnostics.CodeAnalysis;
+using Microsoft.UI.Xaml;
 using Uno.Foundation.Logging;
-using Windows.UI.Core;
 using Uno.UI.Controls;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Media;
-
-#if NET6_0_OR_GREATER
 using ObjCRuntime;
-#endif
 
-#if XAMARIN_IOS_UNIFIED
-using Foundation;
-using UIKit;
+#if __IOS__
 using CoreGraphics;
 using _View = UIKit.UIView;
 using _Controller = UIKit.UIViewController;
 using _Responder = UIKit.UIResponder;
 using _Color = UIKit.UIColor;
 using _Event = UIKit.UIEvent;
+using System.Security.Principal;
 #elif __MACOS__
 using Foundation;
 using AppKit;
@@ -41,7 +31,7 @@ using _Color = AppKit.NSColor;
 using _Event = AppKit.NSEvent;
 #endif
 
-#if XAMARIN_IOS_UNIFIED
+#if __IOS__
 namespace UIKit
 #elif __MACOS__
 namespace AppKit
@@ -295,7 +285,21 @@ namespace AppKit
 		/// <summary>
 		/// Get the parent view in the visual tree. This may differ from the logical <see cref="FrameworkElement.Parent"/>.
 		/// </summary>
-		public static _View GetVisualTreeParent(this _View child) => child?.Superview;
+		public static _View GetVisualTreeParent(this _View child)
+		{
+			var visualParent = child?.Superview;
+
+			// In edge cases, the native Superview is null,
+			// for example for list items. For those situations
+			// we use our managed visual parent instead.
+			if (visualParent is null &&
+				child is FrameworkElement fw)
+			{
+				visualParent = fw.VisualParent;
+			}
+
+			return visualParent;
+		}
 
 		public static IEnumerable<T> FindSubviewsOfType<T>(this _View view, int maxDepth = 20) where T : class
 		{
@@ -376,7 +380,7 @@ namespace AppKit
 				// Sometimes, a view is not part of the visual tree (or doesn't have a next responder) but is part of the logical tree.
 				// Here, we substitute the view with the first logical parent that's part of the visual tree (or has a next responder).
 				view = (view as DependencyObject)
-					.GetParents()
+					?.GetParents()
 					.OfType<_View>()
 					.Where(parent => parent.NextResponder != null)
 					.FirstOrDefault();
@@ -393,6 +397,10 @@ namespace AppKit
 				else if (responder is _Controller controller)
 				{
 					return controller;
+				}
+				else
+				{
+					responder = null;
 				}
 
 			} while (responder != null);
@@ -479,17 +487,14 @@ namespace AppKit
 
 		public static void AddBorder(this _View thisButton, float borderThickness = 1, _Color borderColor = null)
 		{
+			var layer = thisButton.Layer;
 			if (borderColor != null)
 			{
-				thisButton.Layer.BorderColor = borderColor.CGColor;
+				layer.BorderColor = borderColor.CGColor;
 			}
 			if (borderThickness > 0)
 			{
-				if (Math.Abs(borderThickness - 1f) < float.Epsilon && ViewHelper.IsRetinaDisplay)
-				{
-					borderThickness = (float)ViewHelper.OnePixel;
-				}
-				thisButton.Layer.BorderWidth = borderThickness;
+				layer.BorderWidth = ViewHelper.GetConvertedPixel(borderThickness);
 			}
 		}
 
@@ -503,7 +508,7 @@ namespace AppKit
 			this _View thisView
 			, CGPoint point
 #if __IOS__
-			, _Event uievent
+				, _Event uievent
 #endif
 		)
 		{
@@ -631,7 +636,7 @@ namespace AppKit
 						.Append($"-({innerView.Frame.Width}x{innerView.Frame.Height})@({innerView.Frame.X},{innerView.Frame.Y})")
 						.Append($" ds:{desiredSize}")
 #if __IOS__
-						.Append($" {(innerView.Hidden ? "Hidden" : "Visible")}")
+							.Append($" {(innerView.Hidden ? "Hidden" : "Visible")}")
 #endif
 						.Append(fe != null ? $" HA={fe.HorizontalAlignment},VA={fe.VerticalAlignment}" : "")
 						.Append(fe != null && (!double.IsNaN(fe.Width) || !double.IsNaN(fe.Height)) ? $"FE.Width={fe.Width},FE.Height={fe.Height}" : "")
@@ -641,7 +646,7 @@ namespace AppKit
 						.Append(fe != null && fe.TryGetCornerRadius(out var cr) && cr != default ? $" CornerRadius={cr.ToStringCompact()}" : "")
 						.Append(fe != null && fe.Opacity < 1 ? $" Opacity={fe.Opacity}" : "")
 						.Append(uiElement?.Clip != null ? $" Clip={uiElement.Clip.Rect}" : "")
-						.Append(uiElement != null ? $" AvailableSize={uiElement.LastAvailableSize}" : "")
+						.Append(uiElement != null ? $" AvailableSize={uiElement.m_previousAvailableSize}" : "")
 						.Append(uiElement?.NeedsClipToSlot ?? false ? " CLIPPED_TO_SLOT" : "")
 						.Append(uiElement?.GetElementSpecificDetails())
 						.Append(uiElement?.GetElementGridOrCanvasDetails())
@@ -680,6 +685,31 @@ namespace AppKit
 #elif __MACOS__
 			view.NeedsDisplay = true;
 #endif
+		}
+
+#if __MACOS__
+		static readonly NativeHandle selSubviewsHandle = Selector.GetHandle("subviews");
+#endif
+
+		[DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSendSuper")]
+		private extern static NativeHandle NativeHandle_objc_msgSendSuper(NativeHandle receiver, IntPtr selector);
+
+		private static NativeHandle GetSubviewsHandle(this _View view)
+		{
+#if __IOS__
+			return NativeHandle_objc_msgSendSuper(view.SuperHandle, Selector.GetHandle("subviews"));
+#elif __MACOS__
+			return NativeHandle_objc_msgSendSuper(view.SuperHandle, selSubviewsHandle);
+#endif
+		}
+
+		[DllImport("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")]
+		private extern static /* CFIndex */ nint CFArrayGetCount(/* CFArrayRef */ NativeHandle theArray);
+
+		internal static nint GetSubviewsCount(this _View view)
+		{
+			var handle = view.GetSubviewsHandle();
+			return CFArrayGetCount(handle);
 		}
 	}
 }

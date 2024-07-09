@@ -2,61 +2,51 @@
 using System;
 using AppKit;
 using Windows.ApplicationModel.Activation;
-using Windows.Foundation;
-using Windows.Foundation.Metadata;
-using Windows.UI.Xaml.Controls.Primitives;
 using Windows.ApplicationModel;
-using ObjCRuntime;
-using Windows.Graphics.Display;
-using Uno.UI.Services;
+using Windows.Globalization;
 using System.Globalization;
-using Uno.Extensions;
 using Uno.Foundation.Logging;
 using System.Linq;
+using Uno.Helpers.Theming;
 
 using Selector = ObjCRuntime.Selector;
-using Windows.System.Profile;
 using Windows.UI.Core;
 using Uno.Foundation.Extensibility;
-using Uno.Helpers;
+using Uno.UI.Runtime.MacOS;
+using Uno.UI.Xaml.Controls;
 #if HAS_UNO_WINUI
-using LaunchActivatedEventArgs = Microsoft.UI.Xaml.LaunchActivatedEventArgs;
+using LaunchActivatedEventArgs = Microsoft/* UWP don't rename */.UI.Xaml.LaunchActivatedEventArgs;
 #else
 using LaunchActivatedEventArgs = Windows.ApplicationModel.Activation.LaunchActivatedEventArgs;
 #endif
 
-namespace Windows.UI.Xaml
+using NativeHandle = ObjCRuntime.NativeHandle;
+
+namespace Microsoft.UI.Xaml
 {
 	[Register("UnoAppDelegate")]
 	public partial class Application : NSApplicationDelegate
 	{
-		private readonly NSString _themeChangedNotification = new NSString("AppleInterfaceThemeChangedNotification");
-		private readonly Selector _modeSelector = new Selector("themeChanged:");
-
-		private NSUrl[] _launchUrls = null;
+		private NSUrl[] _launchUrls;
 
 		static partial void InitializePartialStatic()
 		{
-			ApiExtensibility.Register(typeof(Windows.UI.Core.ICoreWindowExtension), o => new CoreWindowExtension());
+			ApiExtensibility.Register(typeof(IUnoCorePointerInputSource), host => new MacOSPointerInputSource((Uno.UI.Controls.Window)NativeWindowWrapper.Instance.NativeWindow));
 		}
 
-		public Application()
+		partial void InitializePartial()
 		{
-			Current = this;
 			SetCurrentLanguage();
-			ResourceHelper.ResourcesService = new ResourcesService(new[] { NSBundle.MainBundle });
 
 			SubscribeBackgroundNotifications();
 		}
 
-		public Application(IntPtr handle) : base(handle)
+		public Application(NativeHandle handle) : base(handle)
 		{
 
 		}
 
 		public override bool ApplicationShouldTerminateAfterLastWindowClosed(NSApplication sender) => true;
-
-		internal bool Suspended { get; private set; }
 
 		static partial void StartPartial(ApplicationInitializationCallback callback)
 		{
@@ -87,21 +77,10 @@ namespace Windows.UI.Xaml
 			}
 			if (!handled)
 			{
-				OnLaunched(new LaunchActivatedEventArgs());
+				var argumentsString = GetCommandLineArgsWithoutExecutable();
+
+				OnLaunched(new LaunchActivatedEventArgs(ActivationKind.Launch, argumentsString));
 			}
-		}
-
-		partial void OnSuspendingPartial()
-		{
-			var operation = new SuspendingOperation(DateTime.Now.AddSeconds(30), () =>
-			{
-				Suspended = true;
-				NSApplication.SharedApplication.KeyWindow.PerformClose(null);
-			});
-
-			Suspending?.Invoke(this, new SuspendingEventArgs(operation));
-
-			operation.EventRaiseCompleted();
 		}
 
 		/// <summary>
@@ -151,23 +130,6 @@ namespace Windows.UI.Xaml
 			}
 		}
 
-		partial void ObserveSystemThemeChanges()
-		{
-			NSDistributedNotificationCenter.GetDefaultCenter().AddObserver(
-				this,
-				_modeSelector,
-				_themeChangedNotification,
-				null);
-		}
-
-		[Export("themeChanged:")]
-		public void ThemeChanged(NSObject change) => OnSystemThemeChanged();
-
-		public void Exit()
-		{
-			NSApplication.SharedApplication.Terminate(null);
-		}
-
 		private void SubscribeBackgroundNotifications()
 		{
 			NSNotificationCenter.DefaultCenter.AddObserver(NSApplication.ApplicationHiddenNotification, OnEnteredBackground);
@@ -178,26 +140,25 @@ namespace Windows.UI.Xaml
 
 		private void OnEnteredBackground(NSNotification notification)
 		{
-			Windows.UI.Xaml.Window.Current?.OnVisibilityChanged(false);
-			EnteredBackground?.Invoke(this, new EnteredBackgroundEventArgs());
+			NativeWindowWrapper.Instance?.OnNativeVisibilityChanged(false);
 
-			OnSuspending();
+			RaiseEnteredBackground(null);
 		}
 
 		private void OnLeavingBackground(NSNotification notification)
 		{
-			LeavingBackground?.Invoke(this, new LeavingBackgroundEventArgs());
-			Windows.UI.Xaml.Window.Current?.OnVisibilityChanged(true);
+			RaiseResuming();
+			RaiseLeavingBackground(() => NativeWindowWrapper.Instance.OnNativeVisibilityChanged(true));
 		}
 
 		private void OnActivated(NSNotification notification)
 		{
-			Windows.UI.Xaml.Window.Current?.OnActivated(CoreWindowActivationState.CodeActivated);
+			NativeWindowWrapper.Instance.OnNativeActivated(CoreWindowActivationState.CodeActivated);
 		}
 
 		private void OnDeactivated(NSNotification notification)
 		{
-			Windows.UI.Xaml.Window.Current?.OnActivated(CoreWindowActivationState.Deactivated);
+			NativeWindowWrapper.Instance.OnNativeActivated(CoreWindowActivationState.Deactivated);
 		}
 	}
 }

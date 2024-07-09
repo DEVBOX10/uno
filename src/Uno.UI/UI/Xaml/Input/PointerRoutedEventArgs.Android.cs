@@ -5,7 +5,7 @@ using Android.Views;
 using Uno.UI;
 using Windows.Foundation;
 using Windows.System;
-using Windows.UI.Xaml.Extensions;
+using Microsoft.UI.Xaml.Extensions;
 using Android.OS;
 using Uno.Extensions;
 
@@ -16,7 +16,7 @@ using Windows.UI.Input;
 using Windows.Devices.Input;
 #endif
 
-namespace Windows.UI.Xaml.Input
+namespace Microsoft.UI.Xaml.Input
 {
 	partial class PointerRoutedEventArgs
 	{
@@ -60,7 +60,7 @@ namespace Windows.UI.Xaml.Input
 			var nativePointerButtons = nativeEvent.ButtonState;
 			var nativePointerType = nativeEvent.GetToolType(_pointerIndex);
 			var pointerType = nativePointerType.ToPointerDeviceType();
-			var isInContact = IsInContact(nativeEvent, (PointerDeviceType)pointerType,  nativePointerAction, nativePointerButtons);
+			var isInContact = IsInContact(nativeEvent, (PointerDeviceType)pointerType, nativePointerAction, nativePointerButtons);
 			var keys = nativeEvent.MetaState.ToVirtualKeyModifiers();
 
 			FrameId = (uint)_nativeEvent.EventTime;
@@ -74,7 +74,7 @@ namespace Windows.UI.Xaml.Input
 		public PointerPoint GetCurrentPoint(UIElement relativeTo)
 		{
 			var timestamp = ToTimeStamp(_nativeEvent.EventTime);
-			var device = Windows.Devices.Input.PointerDevice.For((Windows.Devices.Input.PointerDeviceType)Pointer.PointerDeviceType);
+			var device = global::Windows.Devices.Input.PointerDevice.For((global::Windows.Devices.Input.PointerDeviceType)Pointer.PointerDeviceType);
 			var (rawPosition, position) = GetPositions(relativeTo);
 
 			return new PointerPoint(FrameId, timestamp, device, Pointer.PointerId, rawPosition, position, Pointer.IsInContact, _properties);
@@ -129,12 +129,13 @@ namespace Windows.UI.Xaml.Input
 				IsInRange = Pointer.IsInRange
 			};
 
-			var isDown = action.HasFlag(MotionEventActions.Down) || action.HasFlag(MotionEventActions.PointerDown);
+			var isDown = action == /* 0 = */ MotionEventActions.Down || action.HasFlag(MotionEventActions.PointerDown);
 			var isUp = action.HasFlag(MotionEventActions.Up) || action.HasFlag(MotionEventActions.PointerUp);
 			var updates = _none;
 			switch (type)
 			{
 				case MotionEventToolType.Finger:
+				case MotionEventToolType.Unknown: // used by Xamarin.UITest
 					props.IsLeftButtonPressed = Pointer.IsInContact;
 					updates = isDown ? _fingerDownUpdates : isUp ? _fingerUpUpdates : _none;
 					// Pressure = .5f => Keeps default as UWP returns .5 for fingers.
@@ -171,9 +172,6 @@ namespace Windows.UI.Xaml.Input
 					props.Pressure = Math.Min(1f, _nativeEvent.GetPressure(_pointerIndex)); // Might exceed 1.0 on Android
 					break;
 
-				case MotionEventToolType.Unknown: // used by Xamarin.UITest
-					props.IsLeftButtonPressed = true;
-					break;
 				default:
 					break;
 			}
@@ -188,22 +186,24 @@ namespace Windows.UI.Xaml.Input
 		}
 
 		#region Misc static helpers
-		private static readonly Dictionary<MotionEventButtonState, PointerUpdateKind> _none = new Dictionary<MotionEventButtonState, PointerUpdateKind>(0);
-		private static readonly Dictionary<MotionEventButtonState, PointerUpdateKind> _fingerDownUpdates = new Dictionary<MotionEventButtonState, PointerUpdateKind>
+		private static readonly Dictionary<MotionEventButtonState, PointerUpdateKind> _none = new(0);
+		private static readonly Dictionary<MotionEventButtonState, PointerUpdateKind> _fingerDownUpdates = new()
 		{
+			{ 0, PointerUpdateKind.LeftButtonPressed },
 			{ MotionEventButtonState.Primary, PointerUpdateKind.LeftButtonPressed }
 		};
-		private static readonly Dictionary<MotionEventButtonState, PointerUpdateKind> _fingerUpUpdates = new Dictionary<MotionEventButtonState, PointerUpdateKind>
+		private static readonly Dictionary<MotionEventButtonState, PointerUpdateKind> _fingerUpUpdates = new()
 		{
+			{ 0, PointerUpdateKind.LeftButtonReleased },
 			{ MotionEventButtonState.Primary, PointerUpdateKind.LeftButtonReleased }
 		};
-		private static readonly Dictionary<MotionEventButtonState, PointerUpdateKind> _mouseDownUpdates = new Dictionary<MotionEventButtonState, PointerUpdateKind>
+		private static readonly Dictionary<MotionEventButtonState, PointerUpdateKind> _mouseDownUpdates = new()
 		{
 			{ MotionEventButtonState.Primary, PointerUpdateKind.LeftButtonPressed },
 			{ MotionEventButtonState.Tertiary, PointerUpdateKind.MiddleButtonPressed },
 			{ MotionEventButtonState.Secondary, PointerUpdateKind.RightButtonPressed }
 		};
-		private static readonly Dictionary<MotionEventButtonState, PointerUpdateKind> _mouseUpUpdates = new Dictionary<MotionEventButtonState, PointerUpdateKind>
+		private static readonly Dictionary<MotionEventButtonState, PointerUpdateKind> _mouseUpUpdates = new()
 		{
 			{ MotionEventButtonState.Primary, PointerUpdateKind.LeftButtonReleased },
 			{ MotionEventButtonState.Tertiary, PointerUpdateKind.MiddleButtonReleased },
@@ -249,7 +249,7 @@ namespace Windows.UI.Xaml.Input
 						&& !action.HasFlag(MotionEventActions.PointerUp)
 						&& !action.HasFlag(MotionEventActions.Cancel);
 			}
-		}	
+		}
 		#endregion
 	}
 }

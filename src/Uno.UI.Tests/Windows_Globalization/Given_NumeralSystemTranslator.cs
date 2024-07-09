@@ -1,4 +1,5 @@
-﻿
+﻿#nullable enable
+
 using System;
 using System.Collections.Generic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -15,30 +16,38 @@ namespace Uno.UI.Tests.Windows_Globalization
 		[DataRow("Arab ")]
 		public void When_NumeralSystemIsInvalid_Then_Throw(string numeralSystem)
 		{
-			NumeralSystemTranslator numeralSystemTranslator = new NumeralSystemTranslator();
-			Assert.ThrowsException<ArgumentException>(() => numeralSystemTranslator.NumeralSystem = numeralSystem);
-		}
+			var sut = new NumeralSystemTranslator();
 
-		[TestMethod]
-		public void When_NumeralSystemIsNull_Then_Throw()
-		{
-			Assert.ThrowsException<ArgumentNullException>(() => new NumeralSystemTranslator { NumeralSystem = null });
-		}
+			try
+			{
+				sut.NumeralSystem = numeralSystem;
+			}
+			catch (Exception ex)
+			{
+				Assert.AreEqual("The parameter is incorrect.\r\n\r\nnumeralSystem", ex.Message);
+			}
 
+			Assert.ThrowsException<ArgumentException>(() => sut.NumeralSystem = numeralSystem);
+		}
 
 		[DataTestMethod]
+#pragma warning disable MSTEST0014 // DataRow should be valid - Works in our case
 		[DataRow(new string[0])]
 		[DataRow(new string[] { "abcd" })]
 		[DataRow(new string[] { "en-US", "abcd" })]
+#pragma warning restore MSTEST0014 // DataRow should be valid
 		public void When_LanguagesIsInvalid_Then_Throw(IEnumerable<string> languages)
 		{
-			Assert.ThrowsException<ArgumentException>(() => new NumeralSystemTranslator(languages));
-		}
+			try
+			{
+				new NumeralSystemTranslator(languages);
+			}
+			catch (Exception ex)
+			{
+				Assert.AreEqual("The parameter is incorrect.\r\n\r\nlanguages", ex.Message);
+			}
 
-		[TestMethod]
-		public void When_LanguagesIsNull_Then_Throw()
-		{
-			Assert.ThrowsException<NullReferenceException>(() => new NumeralSystemTranslator(null));
+			Assert.ThrowsException<ArgumentException>(() => new NumeralSystemTranslator(languages));
 		}
 
 		[DataTestMethod]
@@ -143,7 +152,7 @@ namespace Uno.UI.Tests.Windows_Globalization
 		[DataRow("ca-FR", "Latn", "ca-FR")]
 		[DataRow("ca-IT", "Latn", "ca-IT")]
 		[DataRow("ca-ES", "Latn", "ca")]
-#if !NETFX_CORE
+#if !WINAPPSDK
 		[DataRow("ceb", "ArabExt", "fa")]
 		[DataRow("ceb-Latn", "ArabExt", "fa")]
 		[DataRow("ceb-Latn-PH", "ArabExt", "fa")]
@@ -153,7 +162,7 @@ namespace Uno.UI.Tests.Windows_Globalization
 		[DataRow("ku", "Arab", "ku")]
 		[DataRow("ku-Arab", "Arab", "ku-Arab")]
 		[DataRow("ku-Arab-IQ", "Arab", "ku-Arab")]
-#if !NETFX_CORE
+#if !WINAPPSDK
 		[DataRow("ccp", "ArabExt", "fa")]
 		[DataRow("ccp-Cakm", "ArabExt", "fa")]
 		[DataRow("ccp-Cakm-BD", "ArabExt", "fa")]
@@ -174,7 +183,7 @@ namespace Uno.UI.Tests.Windows_Globalization
 		[DataRow("zh-MO", "Latn", "zh-Hant-MO")]
 		[DataRow("zh-TW", "Latn", "zh-Hant-TW")]
 		[DataRow("cu-RU", "Latn", "cu-Cyrl-RU")]
-#if !NETFX_CORE
+#if !WINAPPSDK
 		[DataRow("swc", "ArabExt", "fa")]
 #endif
 		[DataRow("swc-CD", "Latn", "swc-CD")]
@@ -305,7 +314,7 @@ namespace Uno.UI.Tests.Windows_Globalization
 		[DataRow("en-TC", "Latn", "en-TC")]
 		[DataRow("en-TV", "Latn", "en-TV")]
 		[DataRow("en-UG", "Latn", "en-UG")]
-#if !NETFX_CORE
+#if !WINAPPSDK
 		[DataRow("en-AE", "Latn", "en")]
 #endif
 		[DataRow("en-GB", "Latn", "en-GB")]
@@ -447,7 +456,7 @@ namespace Uno.UI.Tests.Windows_Globalization
 		[DataRow("id", "Latn", "id")]
 		[DataRow("id-ID", "Latn", "id")]
 		[DataRow("ia", "Latn", "ia")]
-#if !NETFX_CORE
+#if !WINAPPSDK
 		[DataRow("ia-FR", "ArabExt", "fa")]
 #endif
 		[DataRow("ia-001", "Latn", "ia-001")]
@@ -627,7 +636,7 @@ namespace Uno.UI.Tests.Windows_Globalization
 		[DataRow("os-RU", "Latn", "os-Cyrl-RU")]
 		[DataRow("ps", "ArabExt", "ps")]
 		[DataRow("ps-AF", "ArabExt", "ps")]
-#if !NETFX_CORE
+#if !WINAPPSDK
 		[DataRow("ps-PK", "ArabExt", "ps")]
 #endif
 		[DataRow("fa", "ArabExt", "fa")]
@@ -889,12 +898,12 @@ namespace Uno.UI.Tests.Windows_Globalization
 		[DataRow("dje-NE", "Latn", "dje-Latn-NE")]
 		[DataRow("zu", "Latn", "zu")]
 		[DataRow("zu-ZA", "Latn", "zu")]
-#endregion
+		#endregion
 		public void When_UsingLanguage_Then_InitializeCorrectly(string languageTag, string numeralSystem, string resolveLanguage)
 		{
-			var numeralSystemTranslator = new NumeralSystemTranslator(new string[] { languageTag });
-			Assert.AreEqual(numeralSystem, numeralSystemTranslator.NumeralSystem);
-			Assert.AreEqual(resolveLanguage, numeralSystemTranslator.ResolvedLanguage);
+			var sut = new NumeralSystemTranslator(new string[] { languageTag });
+			Assert.AreEqual(numeralSystem, sut.NumeralSystem);
+			Assert.AreEqual(resolveLanguage, sut.ResolvedLanguage);
 		}
 
 		[DataTestMethod]
@@ -915,9 +924,9 @@ namespace Uno.UI.Tests.Windows_Globalization
 		[DataRow("1,234% ,567,890.12", "١٬٢٣٤\u066a ٬٥٦٧٬٨٩٠٫١٢")]
 		public void When_NumeralSystemIsArab(string value, string expected)
 		{
-			NumeralSystemTranslator numeralSystemTranslator = new NumeralSystemTranslator();
-			numeralSystemTranslator.NumeralSystem = "Arab";
-			var translated = numeralSystemTranslator.TranslateNumerals(value);
+			var sut = new NumeralSystemTranslator();
+			sut.NumeralSystem = "Arab";
+			var translated = sut.TranslateNumerals(value);
 			Assert.AreEqual(expected, translated);
 		}
 
@@ -1571,9 +1580,9 @@ namespace Uno.UI.Tests.Windows_Globalization
 
 		public void When_NumeralSystemIsSpecific(string value, string expected, string numeralSystem)
 		{
-			NumeralSystemTranslator numeralSystemTranslator = new NumeralSystemTranslator();
-			numeralSystemTranslator.NumeralSystem = numeralSystem;
-			var translated = numeralSystemTranslator.TranslateNumerals(value);
+			var sut = new NumeralSystemTranslator();
+			sut.NumeralSystem = numeralSystem;
+			var translated = sut.TranslateNumerals(value);
 			Assert.AreEqual(expected, translated);
 		}
 
@@ -1617,10 +1626,10 @@ namespace Uno.UI.Tests.Windows_Globalization
 
 		public void When_NumeralSystemCaseIsNotStandard(string numeralSystem, string expected)
 		{
-			NumeralSystemTranslator numeralSystemTranslator = new NumeralSystemTranslator();
-			numeralSystemTranslator.NumeralSystem = numeralSystem;
+			var sut = new NumeralSystemTranslator();
+			sut.NumeralSystem = numeralSystem;
 
-			Assert.AreEqual(expected, numeralSystemTranslator.NumeralSystem);
+			Assert.AreEqual(expected, sut.NumeralSystem);
 		}
 	}
 }

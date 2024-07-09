@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Text;
 using Uno.UI.DataBinding;
 
-namespace Windows.UI.Xaml.Data
+namespace Microsoft.UI.Xaml.Data
 {
 	[Flags]
 	internal enum ResourceUpdateReason
@@ -25,8 +25,17 @@ namespace Windows.UI.Xaml.Data
 		HotReload = 4,
 
 		/// <summary>
+		/// Update marked as XamlLoader
+		/// </summary>
+		XamlParser = 8,
+
+		/// <summary>
 		/// Updates that should be propagated recursively through the visual tree
 		/// </summary>
 		PropagatesThroughTree = ThemeResource | HotReload,
+		/// <summary>
+		/// Updates that should be re-resolved when the bound object or its parent is loaded into the visual tree
+		/// </summary>
+		ResolvedOnLoading = StaticResourceLoading | ThemeResource,
 	}
 }

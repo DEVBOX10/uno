@@ -2,24 +2,27 @@
 using System.Collections.Generic;
 using System.Globalization;
 using Windows.Foundation;
-using Windows.UI.Xaml.Documents;
+using Microsoft.UI.Xaml.Documents;
 using Uno.Extensions;
 using Uno.Foundation;
 using System.Linq;
 
 using Windows.UI.Text;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media;
 using Uno.UI;
+using Uno.UI.Xaml;
 
-namespace Windows.UI.Xaml.Controls
+#if !HAS_UNO_WINUI
+using Microsoft/* UWP don't rename */.UI.Xaml.Media;
+#endif
+
+namespace Microsoft.UI.Xaml.Controls
 {
 	partial class TextBlock : FrameworkElement
 	{
-		private const int MaxMeasureCache = 50;
-
-		private static TextBlockMeasureCache _cache = new TextBlockMeasureCache();
 		private bool _fontStyleChanged;
 		private bool _fontWeightChanged;
+		private bool _fontStretchChanged;
 		private bool _textChanged;
 		private bool _fontFamilyChanged;
 		private bool _fontSizeChanged;
@@ -32,8 +35,12 @@ namespace Windows.UI.Xaml.Controls
 		private bool _textWrappingChanged;
 		private bool _paddingChangedChanged;
 
+		private bool _shouldUpdateIsTextTrimmed;
+
 		public TextBlock() : base("p")
 		{
+			SetDefaultForeground(ForegroundProperty);
+
 			OnFontStyleChangedPartial();
 			OnFontWeightChangedPartial();
 			OnTextChangedPartial();
@@ -70,6 +77,7 @@ namespace Windows.UI.Xaml.Controls
 		{
 			ConditionalUpdate(ref _fontStyleChanged, () => this.SetFontStyle(FontStyle));
 			ConditionalUpdate(ref _fontWeightChanged, () => this.SetFontWeight(FontWeight));
+			ConditionalUpdate(ref _fontStretchChanged, () => this.SetFontStretch(FontStretch));
 			ConditionalUpdate(ref _fontFamilyChanged, () => this.SetFontFamily(FontFamily));
 			ConditionalUpdate(ref _fontSizeChanged, () => this.SetFontSize(FontSize));
 			ConditionalUpdate(ref _maxLinesChanged, () => this.SetMaxLines(MaxLines));
@@ -79,7 +87,7 @@ namespace Windows.UI.Xaml.Controls
 			ConditionalUpdate(ref _textDecorationsChanged, () => this.SetTextDecorations(TextDecorations));
 			ConditionalUpdate(ref _paddingChangedChanged, () => this.SetTextPadding(Padding));
 
-			if(_textTrimmingChanged || _textWrappingChanged)
+			if (_textTrimmingChanged || _textWrappingChanged)
 			{
 				_textTrimmingChanged = _textWrappingChanged = false;
 				this.SetTextWrappingAndTrimming(textTrimming: TextTrimming, textWrapping: TextWrapping);
@@ -102,7 +110,7 @@ namespace Windows.UI.Xaml.Controls
 
 			if (UseInlinesFastPath)
 			{
-				if (_cache.FindMeasuredSize(this, availableSize) is Size desiredSize)
+				if (TextBlockMeasureCache.Instance.FindMeasuredSize(this, availableSize) is Size desiredSize)
 				{
 					UnoMetrics.TextBlock.MeasureCacheHits++;
 					return desiredSize;
@@ -112,7 +120,7 @@ namespace Windows.UI.Xaml.Controls
 					UnoMetrics.TextBlock.MeasureCacheMisses++;
 					desiredSize = MeasureView(availableSize);
 
-					_cache.CacheMeasure(this, availableSize, desiredSize);
+					TextBlockMeasureCache.Instance.CacheMeasure(this, availableSize, desiredSize);
 
 					return desiredSize;
 				}
@@ -148,14 +156,30 @@ namespace Windows.UI.Xaml.Controls
 				arrangeSize = finalSize;
 			}
 
+			if (Foreground is GradientBrush or RadialGradientBrush)
+			{
+				// Make sure to always re-set the foreground when the size is changed.
+				this.SetForeground(Foreground);
+			}
+
 			return base.ArrangeOverride(arrangeSize);
 		}
 
-		private int GetCharacterIndexAtPoint(Point point) => throw new NotSupportedException();
+		internal override void AfterArrange()
+		{
+			base.AfterArrange();
+
+			if (_shouldUpdateIsTextTrimmed)
+			{
+				UpdateIsTextTrimmed();
+			}
+		}
 
 		partial void OnFontStyleChangedPartial() => _fontStyleChanged = true;
 
 		partial void OnFontWeightChangedPartial() => _fontWeightChanged = true;
+
+		partial void OnFontStretchChangedPartial() => _fontStretchChanged = true;
 
 		partial void OnIsTextSelectionEnabledChangedPartial()
 		{
@@ -199,5 +223,12 @@ namespace Windows.UI.Xaml.Controls
 		partial void OnTextWrappingChangedPartial() => _textWrappingChanged = true;
 
 		partial void OnPaddingChangedPartial() => _paddingChangedChanged = true;
+
+		partial void UpdateIsTextTrimmed()
+		{
+			IsTextTrimmed =
+				IsTextTrimmable &&
+				WindowManagerInterop.GetIsOverflowing(HtmlId);
+		}
 	}
 }

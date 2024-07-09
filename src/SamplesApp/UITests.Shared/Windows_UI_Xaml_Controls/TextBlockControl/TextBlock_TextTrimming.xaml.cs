@@ -1,10 +1,10 @@
-﻿using Windows.UI.Xaml.Controls;
+﻿using Microsoft.UI.Xaml.Controls;
 using Uno.UI;
 using Uno.UI.Samples.Controls;
 
 namespace UITests.Windows_UI_Xaml_Controls.TextBlockControl
 {
-	[Sample]
+	[Sample("TextBlock")]
 	public sealed partial class TextBlock_TextTrimming : Page
 	{
 		public TextBlock_TextTrimming()

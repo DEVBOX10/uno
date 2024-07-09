@@ -47,7 +47,7 @@ public abstract class UnoViewGroup
 		Method[] methods = viewClass.getDeclaredMethods();
 
 		for(int i=0; i < methods.length; i++) {
-			if(methods[i].getName() == "setFrame" && methods[i].getParameterTypes().length == 4) {
+			if(methods[i].getName().equals("setFrame") && methods[i].getParameterTypes().length == 4) {
 				_setFrameMethod = methods[i];
 				_setFrameMethod.setAccessible(true);
 			}
@@ -95,6 +95,26 @@ public abstract class UnoViewGroup
 		);
 
 		setClipChildren(false); // The actual clipping will be calculated in managed code
+		setClipToPadding(false); // Same as above
+	}
+	
+	@Override
+	public boolean hasOverlappingRendering()
+	{
+		// This override is to prevent the Android framework from creating a layer for this view,
+		// which would cause a clipping issue because the layer could potentially be too small for
+		// the view's content.
+		
+		// By preventing Android from creating that layer, the view will be drawn directly into
+		// the parent's layer, so the problem is avoided.
+		
+		// A slight performance hit is expected, but it's should be negligible when it's only
+		// on elements having opacity < 1f.
+	
+		// Original bug: https://github.com/unoplatform/Uno.Gallery/issues/898
+	
+		// Check for opacity (Alpha) and return false if it's less than 1f
+		return getAlpha() >= 1 && super.hasOverlappingRendering();
 	}
 
 	private boolean _unoLayoutOverride;
@@ -129,13 +149,13 @@ public abstract class UnoViewGroup
 		_unoLayoutOverride = false;
 	}
 
-	protected abstract void onLayoutCore(boolean changed, int left, int top, int right, int bottom);
+	protected abstract void onLayoutCore(boolean changed, int left, int top, int right, int bottom, boolean isLayoutRequested);
 
 	protected final void onLayout(boolean changed, int left, int top, int right, int bottom)
 	{
 		if(!_unoLayoutOverride)
 		{
-			onLayoutCore(changed, left, top, right, bottom);
+			onLayoutCore(changed, left, top, right, bottom, isLayoutRequested());
 		}
 	}
 
@@ -148,6 +168,39 @@ public abstract class UnoViewGroup
 		// instead of two calls returning two integers improves
 		// the layouting performance.
 		return view.getMeasuredWidth() | (((long)view.getMeasuredHeight()) << 32);
+	}
+
+
+	/**
+	 * Fast invocation for the request layout logic.
+	 *
+	 * Implemented in java to avoid the interop cost of android-only APIs from managed code.
+	 */
+	public static void tryFastRequestLayout(View view, boolean needsForceLayout) {
+		
+		if (needsForceLayout) {
+			// Bypass Android cache, to ensure the Child's Measure() is actually invoked.
+			view.forceLayout();
+
+			// This could occur when one of the dimension is _Infinite_: Android will cache the
+			// value, which is not something we want. Specially when the container is a <StackPanel>.
+
+			// Issue: https://github.com/unoplatform/uno/issues/2879
+		}
+
+		if (view.isLayoutRequested())
+		{
+			ViewParent parent = view.getParent();
+
+			if(parent != null && !parent.isLayoutRequested())
+			{
+				// If a view has requested layout but its Parent hasn't, then the tree is in a broken state, because RequestLayout() calls
+				// cannot bubble up from below the view, and remeasures cannot bubble down from above the parent. This can arise, eg, when
+				// ForceLayout() is used. To fix this state, call RequestLayout() on the parent. Since MeasureChildOverride() is called
+				// from the top down, we should be able to assume that the tree above the parent is already in a good state.
+				parent.requestLayout();
+			}
+		}
 	}
 
 	protected final void addViewFast(View view)

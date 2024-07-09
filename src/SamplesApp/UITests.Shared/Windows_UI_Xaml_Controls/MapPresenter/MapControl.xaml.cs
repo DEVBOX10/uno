@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using Uno.Extensions;
 using Uno.UI.Samples.Controls;
 using Windows.Devices.Geolocation;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Maps;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Maps;
 
 #if HAS_UNO
 using Uno.Foundation.Logging;
@@ -17,7 +17,7 @@ using Uno.Logging;
 
 namespace Uno.UI.Samples.Content.UITests.MapControl
 {
-	[SampleControlInfo("Map", "MapControl")]
+	[SampleControlInfo("Mapping", "MapControl")]
 	public sealed partial class MapControl : UserControl
 	{
 #pragma warning disable CS0109

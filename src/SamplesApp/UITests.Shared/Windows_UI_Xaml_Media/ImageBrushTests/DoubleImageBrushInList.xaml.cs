@@ -1,11 +1,11 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Uno.UI.Samples.UITests.ImageBrushTestControl
 {
-	[Sample(Description= "DoubleImageBrushInList - images should appear in duplicate, used for testing concurrency issues with ImageBrush and image loading libraries")]
+	[Sample("Brushes", Description = "DoubleImageBrushInList - images should appear in duplicate, used for testing concurrency issues with ImageBrush and image loading libraries")]
 	public sealed partial class DoubleImageBrushInList : UserControl
 	{
 		public DoubleImageBrushInList()

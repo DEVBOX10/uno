@@ -1,9 +1,9 @@
-using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml.Controls;
+﻿using Uno.UI.Samples.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Uno.UI.Samples.Content.UITests.TextBlockControl
 {
-	[SampleControlInfo("TextBlockControl", "Progressing_TextBlock")]
+	[SampleControlInfo("TextBlock", "Progressing_TextBlock")]
 	public sealed partial class Progressing_TextBlock : UserControl
 	{
 		public Progressing_TextBlock()

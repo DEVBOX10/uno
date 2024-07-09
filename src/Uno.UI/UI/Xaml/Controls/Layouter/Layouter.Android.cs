@@ -13,7 +13,7 @@ using Font = Android.Graphics.Typeface;
 using System.Linq.Expressions;
 using Uno.UI;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	abstract partial class Layouter
 	{
@@ -27,25 +27,15 @@ namespace Windows.UI.Xaml.Controls
 			var widthSpec = ViewHelper.SpecFromLogicalSize(slotSize.Width);
 			var heightSpec = ViewHelper.SpecFromLogicalSize(slotSize.Height);
 
-			if (double.IsPositiveInfinity(slotSize.Width) || double.IsPositiveInfinity(slotSize.Height))
-			{
-				// Bypass Android cache, to ensure the Child's Measure() is actually invoked.
-				view.ForceLayout();
+			var needsForceLayout =
+				(double.IsPositiveInfinity(slotSize.Width) || double.IsPositiveInfinity(slotSize.Height)) ||
+				// uno12315: ensure the native measure cache is not used when measure-spec has changed since.
+				FeatureConfiguration.FrameworkElement.InvalidateNativeCacheOnRemeasure && (
+					view.MeasuredWidth != ViewHelper.LogicalToPhysicalPixels(slotSize.Width) ||
+					view.MeasuredHeight != ViewHelper.LogicalToPhysicalPixels(slotSize.Height)
+				);
 
-				// This could occur when one of the dimension is _Infinite_: Android will cache the
-				// value, which is not something we want. Specially when the container is a <StackPanel>.
-
-				// Issue: https://github.com/unoplatform/uno/issues/2879
-			}
-
-			if (view.IsLayoutRequested && view.Parent is View parent && !parent.IsLayoutRequested)
-			{
-				// If a view has requested layout but its Parent hasn't, then the tree is in a broken state, because RequestLayout() calls
-				// cannot bubble up from below the view, and remeasures cannot bubble down from above the parent. This can arise, eg, when
-				// ForceLayout() is used. To fix this state, call RequestLayout() on the parent. Since MeasureChildOverride() is called
-				// from the top down, we should be able to assume that the tree above the parent is already in a good state.
-				parent.RequestLayout();
-			}
+			Uno.UI.Controls.BindableView.TryFastRequestLayout(view, needsForceLayout);
 
 			MeasureChild(view, widthSpec, heightSpec);
 

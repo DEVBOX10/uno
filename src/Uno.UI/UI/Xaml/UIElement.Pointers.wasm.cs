@@ -1,387 +1,527 @@
+﻿#nullable enable
+
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.JavaScript;
 using Uno.Foundation;
 using Windows.Foundation;
-using Windows.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Input;
 using Windows.System;
+using Uno;
+using Uno.Foundation.Interop;
+using Uno.Foundation.Logging;
 using Uno.UI;
+using Uno.UI.Extensions;
 using Uno.UI.Xaml;
+using Uno.UI.Xaml.Core;
+using Uno.UI.Xaml.Islands;
+using WinUICoreServices = Uno.UI.Xaml.Core.CoreServices;
 
+using PointerIdentifierPool = Windows.Devices.Input.PointerIdentifierPool; // internal type (should be in Uno namespace)
+using PointerIdentifier = Windows.Devices.Input.PointerIdentifier; // internal type (should be in Uno namespace)
+using PointerIdentifierDeviceType = Windows.Devices.Input.PointerDeviceType; // PointerIdentifier always uses Windows.Devices as it does noe have access to Microsoft.UI.Input (Uno.UI assembly)
 #if HAS_UNO_WINUI
 using Microsoft.UI.Input;
+using PointerDeviceType = Microsoft.UI.Input.PointerDeviceType;
 #else
-using Windows.Devices.Input;
 using Windows.UI.Input;
+using PointerDeviceType = Windows.Devices.Input.PointerDeviceType;
 #endif
 
-namespace Windows.UI.Xaml
-{
-	public partial class UIElement : DependencyObject
-	{
-		// Ref:
-		// https://www.w3.org/TR/pointerevents/
-		// https://developer.mozilla.org/en-US/docs/Web/API/PointerEvent
-		// https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent
+namespace Microsoft.UI.Xaml;
 
-		#region Native event registration handling
-		partial void OnGestureRecognizerInitialized(GestureRecognizer recognizer)
+public partial class UIElement : DependencyObject
+{
+	private static TSInteropMarshaller.HandleRef<NativePointerEventArgs> _pointerEventArgs;
+	private static TSInteropMarshaller.HandleRef<NativePointerEventResult> _pointerEventResult;
+
+	private static Microsoft/* UWP don't rename */.UI.Input.InputSystemCursorShape? _lastSetCursor;
+
+	// Ref:
+	// https://www.w3.org/TR/pointerevents/
+	// https://developer.mozilla.org/en-US/docs/Web/API/PointerEvent
+	// https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent
+
+	#region Native event registration handling
+	private NativePointerEvent _subscribedNativeEvents;
+
+	partial void OnGestureRecognizerInitialized(GestureRecognizer recognizer)
+	{
+		// When a gesture recognizer is initialized, we subscribe to pointer events in order to feed it.
+		// Note: We register to Move, so it will also register Enter, Exited, Pressed, Released and Cancel.
+		//		 Gesture recognizer does not needs CaptureLost nor Wheel events.
+		AddPointerHandler(PointerMovedEvent, 1, default, default);
+	}
+
+	partial void AddPointerHandler(RoutedEvent routedEvent, int handlersCount, object handler, bool handledEventsToo)
+	{
+		if (_pointerEventArgs == null)
 		{
-			// When a gesture recognizer is initialized, we subscribe to pointer events in order to feed it.
-			// Note: We register to Move, so it will also register Enter, Exited, Pressed, Released and Cancel.
-			//		 Gesture recognizer does not needs CaptureLost nor Wheel events.
-			AddPointerHandler(PointerMovedEvent, 1, default, default);
+			_pointerEventArgs = TSInteropMarshaller.Allocate<NativePointerEventArgs>("UnoStatic_Windows_UI_Xaml_UIElement:setPointerEventArgs");
+			_pointerEventResult = TSInteropMarshaller.Allocate<NativePointerEventResult>("UnoStatic_Windows_UI_Xaml_UIElement:setPointerEventResult");
 		}
 
-		partial void AddPointerHandler(RoutedEvent routedEvent, int handlersCount, object handler, bool handledEventsToo)
+		if (handlersCount != 1
+			|| routedEvent == PointerCaptureLostEvent) // Captures are handled in managed code only
 		{
-			if (handlersCount != 1 || _registeredRoutedEvents.HasFlag(routedEvent.Flag))
+			return;
+		}
+
+		var events = default(NativePointerEvent);
+
+		// First we make sure to subscribe to the missing defaults events
+		events |= ~_subscribedNativeEvents & NativePointerEvent.Defaults;
+
+		// Add optional events
+		switch (routedEvent.Flag)
+		{
+			case RoutedEventFlag.PointerWheelChanged when !_subscribedNativeEvents.HasFlag(NativePointerEvent.wheel):
+				events |= NativePointerEvent.wheel;
+				break;
+		}
+
+		if (events is not default(NativePointerEvent))
+		{
+			TSInteropMarshaller.InvokeJS(
+				"UnoStatic_Windows_UI_Xaml_UIElement:subscribePointerEvents",
+				new NativePointerSubscriptionParams
+				{
+					HtmlId = Handle,
+					Events = (byte)events
+				});
+
+			_subscribedNativeEvents |= events;
+		}
+	}
+
+	partial void RemovePointerHandler(RoutedEvent routedEvent, int remainingHandlersCount, object handler)
+	{
+		if (remainingHandlersCount > 0)
+		{
+			return;
+		}
+
+		if (!IsLoaded)
+		{
+			// If element is not in the visual tree its native element might also have been already destroyed,
+			// in that case we just ignore the native handler removal.
+			// The native handler will somehow leak, but if the control is re-used we will actually avoid the cost to re-create the handler,
+			// and if the control if dropped, then native handler will also be dropped.
+			// Even if not recommended, it might happen that users use the control finalizer to remove pointer events
+			// (cf. WinUI's TreeViewItem.RecycleEvents() invoked by the finalizer), this check make sure to not crash in the finalizer!
+			return;
+		}
+
+		if (_gestures is null
+			&& CountHandler(PointerEnteredEvent) is 0
+			&& CountHandler(PointerExitedEvent) is 0
+			&& CountHandler(PointerPressedEvent) is 0
+			&& CountHandler(PointerReleasedEvent) is 0
+			&& CountHandler(PointerCanceledEvent) is 0
+			&& CountHandler(PointerMovedEvent) is 0
+			&& CountHandler(PointerWheelChangedEvent) is 0)
+		{
+			TSInteropMarshaller.InvokeJS(
+				"UnoStatic_Windows_UI_Xaml_UIElement:unSubscribePointerEvents",
+				new NativePointerSubscriptionParams
+				{
+					HtmlId = Handle,
+					Events = (byte)_subscribedNativeEvents
+				});
+
+			_subscribedNativeEvents = default;
+		}
+	}
+	#endregion
+
+	#region Native event dispatch
+	[EditorBrowsable(EditorBrowsableState.Never)]
+	[JSExport]
+	internal static void OnNativePointerEvent()
+	{
+		var result = new HtmlEventDispatchResultHelper();
+		try
+		{
+			_logTrace?.Trace("Receiving native pointer event.");
+
+			var args = _pointerEventArgs.Value;
+			var element = GetElementFromHandle(args.HtmlId);
+
+			if (element is null)
 			{
+				if (_log.IsEnabled(LogLevel.Error))
+				{
+					_log.Error($"Received pointer event for '{args.HtmlId}' but element does not exists anymore.");
+				}
+
 				return;
 			}
 
-			// In order to ensure valid pressed and over state, we ** must ** subscribe to all the related events
-			// before subscribing to other pointer events.
-			if (!_registeredRoutedEvents.HasFlag(RoutedEventFlag.PointerEntered))
+			_logTrace?.Trace($"Dispatching to {element.GetDebugName()} pointer arg: {args}.");
+
+			PointerRoutedEventArgs? routedArgs = null;
+			switch ((NativePointerEvent)args.Event)
 			{
-				WindowManagerInterop.RegisterPointerEventsOnView(HtmlId);
+				case NativePointerEvent.pointerover:
+					{
+						// On WASM we do get 'pointerover' event for sub elements,
+						// so we can avoid useless work by validating if the pointer is already flagged as over element.
+						// If so, we stop bubbling since our parent will do the same!
+						routedArgs = ToPointerArgs(element, args);
+						if (element.IsOver(routedArgs.Pointer))
+						{
+							result.Add(HtmlEventDispatchResult.StopPropagation);
+						}
+						else
+						{
+							result.Add(routedArgs, element.OnNativePointerEnter(routedArgs));
+						}
 
-				_registeredRoutedEvents |=
-					  RoutedEventFlag.PointerEntered
-					| RoutedEventFlag.PointerExited
-					| RoutedEventFlag.PointerPressed
-					| RoutedEventFlag.PointerReleased
-					| RoutedEventFlag.PointerCanceled;
+						break;
+					}
 
-				// Note: we use 'pointerenter' and 'pointerleave' which are not bubbling natively
-				//		 as on UWP, even if the event are RoutedEvents, PointerEntered and PointerExited
-				//		 are routed only in some particular cases (entering at once on multiple controls),
-				//		 it's easier to handle this in managed code.
-				RegisterEventHandler("pointerenter", (RawEventHandler)DispatchNativePointerEnter, GenericEventHandlers.RaiseRawEventHandler);
-				RegisterEventHandler("pointerleave", (RawEventHandler)DispatchNativePointerLeave, GenericEventHandlers.RaiseRawEventHandler);
-				RegisterEventHandler("pointerdown", (RawEventHandler)DispatchNativePointerDown, GenericEventHandlers.RaiseRawEventHandler);
-				RegisterEventHandler("pointerup", (RawEventHandler)DispatchNativePointerUp, GenericEventHandlers.RaiseRawEventHandler);
-				RegisterEventHandler("pointercancel", (RawEventHandler)DispatchNativePointerCancel, GenericEventHandlers.RaiseRawEventHandler); //https://www.w3.org/TR/pointerevents/#the-pointercancel-event
+				case NativePointerEvent.pointerout: // No needs to check IsOver (leaving vs. bubbling), it's already done in native code
+					{
+						routedArgs = ToPointerArgs(element, args);
+						var handled = element.OnNativePointerExited(routedArgs);
+						result.Add(routedArgs, handled);
+
+						break;
+					}
+
+				case NativePointerEvent.pointerdown:
+					{
+						routedArgs = ToPointerArgs(element, args);
+						var handled = element.OnNativePointerDown(routedArgs);
+						result.Add(routedArgs, handled);
+
+						break;
+					}
+
+				case NativePointerEvent.pointerup:
+					{
+						routedArgs = ToPointerArgs(element, args);
+						var handled = element.OnNativePointerUp(routedArgs);
+						result.Add(routedArgs, handled);
+
+						if (result.ShouldStop)
+						{
+							element.XamlRoot?.VisualTree.ContentRoot.InputManager.Pointers.ProcessPointerUp(routedArgs, isAfterHandledUp: true);
+						}
+
+						break;
+					}
+
+				case NativePointerEvent.pointermove:
+					{
+						routedArgs = ToPointerArgs(element, args);
+
+						// We do have "implicit capture" for touch and pen on chromium browsers, they won't raise 'pointerout' once in contact,
+						// this means that we need to validate the isOver to raise enter and exit like on UWP.
+						var needsToCheckIsOver = routedArgs.Pointer.PointerDeviceType switch
+						{
+							PointerDeviceType.Touch => routedArgs.Pointer.IsInRange, // If pointer no longer in range, isOver is always false
+							PointerDeviceType.Pen => routedArgs.Pointer.IsInContact, // We can ignore check when only hovering elements, browser does its job in that case
+							PointerDeviceType.Mouse => PointerCapture.TryGet(routedArgs.Pointer, out _), // Browser won't raise pointerenter/out as soon has we have an active capture
+							_ => true // For safety
+						};
+						var handled = needsToCheckIsOver
+							? element.OnNativePointerMoveWithOverCheck(routedArgs, isOver: routedArgs.IsPointCoordinatesOver(element))
+							: element.OnNativePointerMove(routedArgs);
+						result.Add(routedArgs, handled);
+
+						break;
+					}
+
+				case NativePointerEvent.pointercancel:
+					{
+						routedArgs = ToPointerArgs(element, args);
+						var handled = element.OnNativePointerCancel(routedArgs, isSwallowedBySystem: true);
+						result.Add(routedArgs, handled);
+
+						break;
+					}
+
+				case NativePointerEvent.wheel:
+					if (args.wheelDeltaX is not 0)
+					{
+						routedArgs = ToPointerArgs(element, args, wheel: (true, args.wheelDeltaX));
+						var handled = element.OnNativePointerWheel(routedArgs);
+						result.Add(routedArgs, handled);
+					}
+
+					if (args.wheelDeltaY is not 0)
+					{
+						// Note: Web browser vertical scrolling is the opposite compared to WinUI!
+						routedArgs = ToPointerArgs(element, args, wheel: (false, -args.wheelDeltaY));
+						var handled = element.OnNativePointerWheel(routedArgs);
+						result.Add(routedArgs, handled);
+					}
+
+					break;
 			}
 
-			switch (routedEvent.Flag)
+			if (routedArgs is { } && (NativePointerEvent)args.Event is not NativePointerEvent.pointerout)
 			{
-				case RoutedEventFlag.PointerEntered:
-				case RoutedEventFlag.PointerExited:
-				case RoutedEventFlag.PointerPressed:
-				case RoutedEventFlag.PointerReleased:
-				case RoutedEventFlag.PointerCanceled:
-					// All event above are automatically subscribed
-					break;
-
-				case RoutedEventFlag.PointerMoved:
-					_registeredRoutedEvents |= RoutedEventFlag.PointerMoved;
-					RegisterEventHandler(
-						"pointermove",
-						handler: (RawEventHandler)DispatchNativePointerMove,
-						invoker: GenericEventHandlers.RaiseRawEventHandler,
-						onCapturePhase: false,
-						eventExtractor: HtmlEventExtractor.PointerEventExtractor
-					);
-					break;
-
-				case RoutedEventFlag.PointerCaptureLost:
-					// No native registration: Captures are handled in managed code only
-					_registeredRoutedEvents |= routedEvent.Flag;
-					break;
-
-				case RoutedEventFlag.PointerWheelChanged:
-					_registeredRoutedEvents |= RoutedEventFlag.PointerMoved;
-					RegisterEventHandler(
-						"wheel",
-						handler: (RawEventHandler)DispatchNativePointerWheel,
-						invoker: GenericEventHandlers.RaiseRawEventHandler,
-						onCapturePhase: false,
-						eventExtractor: HtmlEventExtractor.PointerEventExtractor
-					);
-					break;
-
-				default:
-					Application.Current.RaiseRecoverableUnhandledException(new NotImplementedException($"Pointer event {routedEvent.Name} is not supported on this platform"));
-					break;
+				// This corresponds to SetSourceCursor in InputManager.Pointers.managed.cs
+				if ((routedArgs.OriginalSource as UIElement)?.CalculatedFinalCursor is { } cursorShape)
+				{
+					if (_lastSetCursor is not { } c || c != cursorShape)
+					{
+						WindowManagerInterop.SetBodyCursor(Microsoft/* UWP don't rename */.UI.Input.InputSystemCursorShapeExtensions.ToCssProtectedCursor(cursorShape));
+						_lastSetCursor = cursorShape;
+					}
+				}
+				else
+				{
+					WindowManagerInterop.SetBodyCursor("none"); // hides the cursor
+				}
 			}
 		}
-		#endregion
-
-		#region Native event dispatch
-		// Note about the HtmlEventDispatchResult:
-		//	For pointer events we never want to prevent the default behavior.
-		//	Especially for wheel where preventing the default would break scrolling.
-		//	cf. remarks on HtmlEventDispatchResult.PreventDefault
-		private static HtmlEventDispatchResult DispatchNativePointerEnter(UIElement target, string eventPayload)
-			=> TryParse(eventPayload, out var args) && target.OnNativePointerEnter(ToPointerArgs(target, args))
-				? HtmlEventDispatchResult.StopPropagation
-				: HtmlEventDispatchResult.Ok;
-
-		private static HtmlEventDispatchResult DispatchNativePointerLeave(UIElement target, string eventPayload)
-			=> TryParse(eventPayload, out var args) && target.OnNativePointerExited(ToPointerArgs(target, args))
-				? HtmlEventDispatchResult.StopPropagation
-				: HtmlEventDispatchResult.Ok;
-
-		private static HtmlEventDispatchResult DispatchNativePointerDown(UIElement target, string eventPayload)
-			=> TryParse(eventPayload, out var args) && target.OnNativePointerDown(ToPointerArgs(target, args, isInContact: true))
-				? HtmlEventDispatchResult.StopPropagation
-				: HtmlEventDispatchResult.Ok;
-
-		private static HtmlEventDispatchResult DispatchNativePointerUp(UIElement target, string eventPayload)
-			=> TryParse(eventPayload, out var args) && target.OnNativePointerUp(ToPointerArgs(target, args, isInContact: false))
-				? HtmlEventDispatchResult.StopPropagation
-				: HtmlEventDispatchResult.Ok;
-
-		private static HtmlEventDispatchResult DispatchNativePointerMove(UIElement target, string eventPayload)
-			=> TryParse(eventPayload, out var args) && target.OnNativePointerMove(ToPointerArgs(target, args))
-				? HtmlEventDispatchResult.StopPropagation
-				: HtmlEventDispatchResult.Ok;
-
-		private static HtmlEventDispatchResult DispatchNativePointerCancel(UIElement target, string eventPayload)
-			=> TryParse(eventPayload, out var args) && target.OnNativePointerCancel(ToPointerArgs(target, args, isInContact: false), isSwallowedBySystem: true)
-				? HtmlEventDispatchResult.StopPropagation
-				: HtmlEventDispatchResult.Ok;
-
-		private static HtmlEventDispatchResult DispatchNativePointerWheel(UIElement target, string eventPayload)
+		catch (Exception error)
 		{
-			if (TryParse(eventPayload, out var args))
+			if (_log.IsEnabled(LogLevel.Error))
 			{
-				// We might have a scroll along 2 directions at once (touch pad).
-				// As WinUI does support scrolling only along one direction at a time, we have to raise 2 managed events.
-
-				var handled = false;
-				if (args.wheelDeltaX != 0)
-				{
-					handled |= target.OnNativePointerWheel(ToPointerArgs(target, args, wheel: (true, args.wheelDeltaX), isInContact: null /* maybe */));
-				}
-				if (args.wheelDeltaY != 0)
-				{
-					// Note: Web browser vertical scrolling is the opposite compared to WinUI!
-					handled |= target.OnNativePointerWheel(ToPointerArgs(target, args, wheel: (false, -args.wheelDeltaY), isInContact: null /* maybe */));
-				}
-				return handled
-					? HtmlEventDispatchResult.StopPropagation
-					: HtmlEventDispatchResult.Ok;
-			}
-			else
-			{
-				return HtmlEventDispatchResult.Ok;
+				_log.Error($"Failed to dispatch native pointer event: {error}");
 			}
 		}
-
-		private static bool TryParse(string eventPayload, out NativePointerEventArgs args)
+		finally
 		{
-			var parts = eventPayload?.Split(';');
-			if (parts?.Length != 13)
+			_pointerEventResult.Value = new NativePointerEventResult
 			{
-				args = default;
-				return false;
-			}
-
-			args = new NativePointerEventArgs { 
-				pointerId = double.Parse(parts[0], CultureInfo.InvariantCulture), // On Safari for iOS, the ID might be negative!
-				x = double.Parse(parts[1], CultureInfo.InvariantCulture),
-				y = double.Parse(parts[2], CultureInfo.InvariantCulture),
-				ctrl = parts[3] == "1",
-				shift = parts[4] == "1",
-				buttons = int.Parse(parts[5], CultureInfo.InvariantCulture),
-				buttonUpdate = int.Parse(parts[6], CultureInfo.InvariantCulture),
-				typeStr = parts[7],
-				srcHandle = int.Parse(parts[8], CultureInfo.InvariantCulture),
-				timestamp = double.Parse(parts[9], CultureInfo.InvariantCulture),
-				pressure = double.Parse(parts[10], CultureInfo.InvariantCulture),
-				wheelDeltaX = double.Parse(parts[11], CultureInfo.InvariantCulture),
-				wheelDeltaY = double.Parse(parts[12], CultureInfo.InvariantCulture),
+				Result = (byte)result.Value
 			};
-			return true;
 		}
+	}
 
-		private static PointerRoutedEventArgs ToPointerArgs(
-			UIElement snd,
-			NativePointerEventArgs args,
-			bool? isInContact = null,
-			(bool isHorizontalWheel, double delta) wheel = default)
+	private static PointerRoutedEventArgs ToPointerArgs(
+		UIElement snd,
+		NativePointerEventArgs args,
+		(bool isHorizontalWheel, double delta) wheel = default)
+	{
+		const int cancel = (int)NativePointerEvent.pointercancel;
+		const int exitOrUp = (int)(NativePointerEvent.pointerout | NativePointerEvent.pointerup);
+
+		var pointerType = (PointerDeviceType)args.deviceType;
+		var pointerId = PointerIdentifierPool.RentManaged(new PointerIdentifier((PointerIdentifierDeviceType)pointerType, (uint)args.pointerId));
+
+		var src = GetElementFromHandle(args.srcHandle) ?? (UIElement)snd;
+		var position = new Point(args.x, args.y);
+		var isInContact = args.buttons != 0;
+		var isInRange = true;
+		if (args.Event is cancel)
 		{
-			var pointerId = (uint)args.pointerId;
-			var src = GetElementFromHandle(args.srcHandle) ?? (UIElement)snd;
-			var position = new Point(args.x, args.y);
-			var pointerType = ConvertPointerTypeString(args.typeStr);
-			var keyModifiers = VirtualKeyModifiers.None;
-			if (args.ctrl) keyModifiers |= VirtualKeyModifiers.Control;
-			if (args.shift) keyModifiers |= VirtualKeyModifiers.Shift;
-
-			return new PointerRoutedEventArgs(
-				args.timestamp,
-				pointerId,
-				pointerType,
-				position,
-				isInContact ?? ((UIElement)snd).IsPressed(pointerId),
-				(WindowManagerInterop.HtmlPointerButtonsState)args.buttons,
-				(WindowManagerInterop.HtmlPointerButtonUpdate)args.buttonUpdate,
-				keyModifiers,
-				args.pressure,
-				wheel,
-				src);
+			isInRange = false;
 		}
-
-		private static PointerDeviceType ConvertPointerTypeString(string typeStr)
+		else if ((args.Event & exitOrUp) != 0)
 		{
-			PointerDeviceType type;
-			switch (typeStr.ToUpper())
+			isInRange = pointerType switch
 			{
-				case "MOUSE":
-				default:
-					type = PointerDeviceType.Mouse;
-					break;
-				// Note: As of 2019-11-28, once pen pressed events pressed/move/released are reported as TOUCH on Firefox
-				//		 https://bugzilla.mozilla.org/show_bug.cgi?id=1449660
-				case "PEN":
-					type = PointerDeviceType.Pen;
-					break;
-				case "TOUCH":
-					type = PointerDeviceType.Touch;
-					break;
-			}
-
-			return type;
+				PointerDeviceType.Mouse => true, // Mouse is always in range (unless for 'cancel' eg. if it was unplugged from computer)
+				PointerDeviceType.Touch => false, // If we get a pointer out for touch, it means that pointer left the screen (pt up - a.k.a. Implicit capture)
+				PointerDeviceType.Pen => args.hasRelatedTarget, // If the relatedTarget is null it means pointer left the detection range ... but only for out event!
+				_ => !isInContact // Safety!
+			};
 		}
-		#endregion
+		var keyModifiers = VirtualKeyModifiers.None;
+		if (args.ctrl) keyModifiers |= VirtualKeyModifiers.Control;
+		if (args.shift) keyModifiers |= VirtualKeyModifiers.Shift;
 
-		#region Capture
-		partial void OnManipulationModeChanged(ManipulationModes _, ManipulationModes newMode)
-			=> SetStyle("touch-action", newMode == ManipulationModes.None ? "none" : "auto");
+		var buttons = (WindowManagerInterop.HtmlPointerButtonsState)args.buttons;
+		var buttonUpdate = (WindowManagerInterop.HtmlPointerButtonUpdate)args.buttonUpdate;
 
-		partial void CapturePointerNative(Pointer pointer)
+		if (args.Event == (int)NativePointerEvent.pointerdown &&
+			buttons == WindowManagerInterop.HtmlPointerButtonsState.None &&
+			args.deviceType == (int)PointerDeviceType.Mouse)
 		{
-			var command = "Uno.UI.WindowManager.current.setPointerCapture(" + HtmlId + ", " + pointer.PointerId + ");";
-			WebAssemblyRuntime.InvokeJS(command);
-
-			if (pointer.PointerDeviceType != PointerDeviceType.Mouse)
+			// This scenario should technically not occur, but it may happen for macOS devices with the trackpad tap to click setting
+			// enabled (see discussion in issue #16076). To work around this, we use the buttonUpdate value which seems to be reliable.
+			buttons = buttonUpdate switch
 			{
-				SetStyle("touch-action", "none");
-			}
+				WindowManagerInterop.HtmlPointerButtonUpdate.Left => WindowManagerInterop.HtmlPointerButtonsState.Left,
+				WindowManagerInterop.HtmlPointerButtonUpdate.Middle => WindowManagerInterop.HtmlPointerButtonsState.Middle,
+				WindowManagerInterop.HtmlPointerButtonUpdate.Right => WindowManagerInterop.HtmlPointerButtonsState.Right,
+				WindowManagerInterop.HtmlPointerButtonUpdate.X1 => WindowManagerInterop.HtmlPointerButtonsState.X1,
+				WindowManagerInterop.HtmlPointerButtonUpdate.X2 => WindowManagerInterop.HtmlPointerButtonsState.X2,
+				WindowManagerInterop.HtmlPointerButtonUpdate.Eraser => WindowManagerInterop.HtmlPointerButtonsState.Eraser,
+				_ => WindowManagerInterop.HtmlPointerButtonsState.None
+			};
 		}
 
-		partial void ReleasePointerNative(Pointer pointer)
-		{
-			var command = "Uno.UI.WindowManager.current.releasePointerCapture(" + HtmlId + ", " + pointer.PointerId + ");";
-			WebAssemblyRuntime.InvokeJS(command);
+		return new PointerRoutedEventArgs(
+			args.timestamp,
+			pointerId,
+			position,
+			isInContact,
+			isInRange,
+			buttons,
+			buttonUpdate,
+			keyModifiers,
+			args.pressure,
+			wheel,
+			src);
+	}
+	#endregion
 
-			if (pointer.PointerDeviceType != PointerDeviceType.Mouse && ManipulationMode != ManipulationModes.None)
-			{
-				SetStyle("touch-action", "auto");
-			}
+	partial void OnManipulationModeChanged(ManipulationModes oldMode, ManipulationModes newMode)
+	{
+		if (newMode == ManipulationModes.System)
+		{
+			ResetStyle("touch-action");
 		}
-		#endregion
-
-		#region HitTestVisibility
-		internal void UpdateHitTest()
+		else
 		{
-			this.CoerceValue(HitTestVisibilityProperty);
+			// 'none' here means that the browser is not allowed to steal pointer for it's own manipulations
+			SetStyle("touch-action", "none");
 		}
+	}
 
-		[GeneratedDependencyProperty(DefaultValue = HitTestability.Collapsed, ChangedCallback = true, CoerceCallback = true, Options = FrameworkPropertyMetadataOptions.Inherits)]
-		internal static DependencyProperty HitTestVisibilityProperty { get; } = CreateHitTestVisibilityProperty();
+	#region HitTestVisibility
+	internal void UpdateHitTest()
+	{
+		this.CoerceValue(HitTestVisibilityProperty);
+	}
 
-		internal HitTestability HitTestVisibility
+	[GeneratedDependencyProperty(DefaultValue = HitTestability.Collapsed, ChangedCallback = true, CoerceCallback = true, Options = FrameworkPropertyMetadataOptions.Inherits)]
+	internal static DependencyProperty HitTestVisibilityProperty { get; } = CreateHitTestVisibilityProperty();
+
+	internal HitTestability HitTestVisibility
+	{
+		get => GetHitTestVisibilityValue();
+		set => SetHitTestVisibilityValue(value);
+	}
+
+	/// <summary>
+	/// This calculates the final hit-test visibility of an element.
+	/// </summary>
+	/// <returns></returns>
+	private object CoerceHitTestVisibility(object baseValue)
+	{
+		if (this is RootVisual or XamlIsland)
 		{
-			get => GetHitTestVisibilityValue();
-			set => SetHitTestVisibilityValue(value);
-		}
-
-		/// <summary>
-		/// This calculates the final hit-test visibility of an element.
-		/// </summary>
-		/// <returns></returns>
-		private object CoerceHitTestVisibility(object baseValue)
-		{
-			// The HitTestVisibilityProperty is never set directly. This means that baseValue is always the result of the parent's CoerceHitTestVisibility.
-			var baseHitTestVisibility = (HitTestability)baseValue;
-
-			// If the parent is collapsed, we should be collapsed as well. This takes priority over everything else, even if we would be visible otherwise.
-			if (baseHitTestVisibility == HitTestability.Collapsed)
-			{
-				return HitTestability.Collapsed;
-			}
-
-			// If we're not locally hit-test visible, visible, or enabled, we should be collapsed. Our children will be collapsed as well.
-			// SvgElements are an exception here since they won't be loaded.
-			if (!(IsLoaded || HtmlTagIsSvg) || !IsHitTestVisible || Visibility != Visibility.Visible || !IsEnabledOverride())
-			{
-				return HitTestability.Collapsed;
-			}
-
-			// If we're not hit (usually means we don't have a Background/Fill), we're invisible. Our children will be visible or not, depending on their state.
-			if (!IsViewHit())
-			{
-				return HitTestability.Invisible;
-			}
-
-			// If we're not collapsed or invisible, we can be targeted by hit-testing. This means that we can be the source of pointer events.
 			return HitTestability.Visible;
 		}
 
-		private protected virtual void OnHitTestVisibilityChanged(HitTestability oldValue, HitTestability newValue)
+		// The HitTestVisibilityProperty is never set directly. This means that baseValue is always the result of the parent's CoerceHitTestVisibility.
+		var baseHitTestVisibility = (HitTestability)baseValue;
+
+		// If the parent is collapsed, we should be collapsed as well. This takes priority over everything else, even if we would be visible otherwise.
+		if (baseHitTestVisibility == HitTestability.Collapsed)
 		{
-			ApplyHitTestVisibility(newValue);
+			return HitTestability.Collapsed;
 		}
 
-		private void ApplyHitTestVisibility(HitTestability value)
+		// If we're not locally hit-test visible, visible, or enabled, we should be collapsed. Our children will be collapsed as well.
+		// SvgElements are an exception here since they won't be loaded.
+		if (!(IsLoaded || HtmlTagIsSvg) || !IsHitTestVisible || Visibility != Visibility.Visible || !IsEnabledOverride())
 		{
-			if (value == HitTestability.Visible)
-			{
-				// By default, elements have 'pointer-event' set to 'auto' (see Uno.UI.css .uno-uielement class).
-				// This means that they can be the target of hit-testing and will raise pointer events when interacted with.
-				// This is aligned with HitTestVisibilityProperty's default value of Visible.
-				WindowManagerInterop.SetPointerEvents(HtmlId, true);
-			}
-			else
-			{
-				// If HitTestVisibilityProperty is calculated to Invisible or Collapsed,
-				// we don't want to be the target of hit-testing and raise any pointer events.
-				// This is done by setting 'pointer-events' to 'none'.
-				WindowManagerInterop.SetPointerEvents(HtmlId, false);
-			}
-
-			if (FeatureConfiguration.UIElement.AssignDOMXamlProperties)
-			{
-				UpdateDOMProperties();
-			}
+			return HitTestability.Collapsed;
 		}
 
-		internal void SetHitTestVisibilityForRoot()
+		// Special case for external html element, we are always considering them as hit testable.
+		if (HtmlTagIsExternallyDefined && !FeatureConfiguration.FrameworkElement.UseLegacyHitTest)
 		{
-			// Root element must be visible to hit testing, regardless of the other properties values.
-			// The default value of HitTestVisibility is collapsed to avoid spending time coercing to a
-			// Collapsed.
-			HitTestVisibility = HitTestability.Visible;
+			return HitTestability.Visible;
 		}
 
-		internal void ClearHitTestVisibilityForRoot()
+		// If we're not collapsed or invisible, we can be targeted by hit-testing. This means that we can be the source of pointer events.		
+		if (IsViewHit())
 		{
-			this.ClearValue(HitTestVisibilityProperty);
+			return HitTestability.Visible;
 		}
 
-		#endregion
+		// If we're not hit (usually means we don't have a Background/Fill), we're invisible. Our children will be visible or not, depending on their state.
+		return HitTestability.Invisible;
+	}
 
-		// TODO: This should be marshaled instead of being parsed! https://github.com/unoplatform/uno/issues/2116
-		private struct NativePointerEventArgs
+	private protected virtual void OnHitTestVisibilityChanged(HitTestability oldValue, HitTestability newValue)
+	{
+		ApplyHitTestVisibility(newValue);
+	}
+
+	private void ApplyHitTestVisibility(HitTestability value)
+	{
+		// By default, elements have 'pointer-event' set to 'none' (see Uno.UI.css .uno-uielement class)
+		// which is aligned with HitTestVisibilityProperty's default value of Visible.
+		// If HitTestVisibilityProperty is calculated to Invisible or Collapsed,
+		// we don't want to be the target of hit-testing and raise any pointer events.
+		// This is done by setting 'pointer-events' to 'none'.
+		// However setting it to 'none' will allow pointer event to pass through the element (a.k.a. Invisible)
+
+		WindowManagerInterop.SetPointerEvents(HtmlId, value is HitTestability.Visible);
+
+		if (FeatureConfiguration.UIElement.AssignDOMXamlProperties)
 		{
-			public double pointerId; // Warning: This is a Number in JS, and it might be negative on safari for iOS
-			public double x;
-			public double y;
-			public bool ctrl;
-			public bool shift;
-			public int buttons;
-			public int buttonUpdate;
-			public string typeStr;
-			public int srcHandle;
-			public double timestamp;
-			public double pressure;
-			public double wheelDeltaX;
-			public double wheelDeltaY;
+			UpdateDOMProperties();
 		}
+	}
+
+	#endregion
+
+	[TSInteropMessage(Marshaller = CodeGeneration.Disabled, UnMarshaller = CodeGeneration.Enabled)]
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
+	private struct NativePointerSubscriptionParams
+	{
+		public IntPtr HtmlId;
+
+		public byte Events; // One or multiple NativePointerEvent
+	}
+
+	[TSInteropMessage(Marshaller = CodeGeneration.Enabled, UnMarshaller = CodeGeneration.Disabled)]
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
+	private struct NativePointerEventArgs
+	{
+		public IntPtr HtmlId;
+
+		public byte Event; // ONE of NativePointerEvent
+
+		public double pointerId; // Warning: This is a Number in JS, and it might be negative on safari for iOS
+		public double x;
+		public double y;
+		public bool ctrl;
+		public bool shift;
+		public int buttons;
+		public int buttonUpdate;
+		public int deviceType;
+		public int srcHandle;
+		public double timestamp;
+		public double pressure;
+		public double wheelDeltaX;
+		public double wheelDeltaY;
+		public bool hasRelatedTarget;
+
+		/// <inheritdoc />
+		public override string ToString()
+			=> $"elt={HtmlId}|evt={(NativePointerEvent)Event}|id={pointerId}|x={x}|y={x}|ctrl={ctrl}|shift={shift}|bts={buttons}|btUpdate={buttonUpdate}|type={(PointerDeviceType)deviceType}|srcId={srcHandle}|ts={timestamp}|pres={pressure}|wheelX={wheelDeltaX}|wheelY={wheelDeltaY}|relTarget={hasRelatedTarget}";
+	}
+
+	[TSInteropMessage(Marshaller = CodeGeneration.Disabled, UnMarshaller = CodeGeneration.Enabled)]
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
+	private struct NativePointerEventResult
+	{
+		public byte Result; // HtmlEventDispatchResult
+	}
+
+	[Flags]
+	private enum NativePointerEvent : byte
+	{
+		// WARNING: This enum has a corresponding version in TypeScript!
+
+		// Minimal default pointer required to maintain state
+		pointerover = 1,
+		pointerout = 1 << 1,
+		pointerdown = 1 << 2,
+		pointerup = 1 << 3,
+		pointercancel = 1 << 4,
+		pointermove = 1 << 5, // Required since when pt is captured, isOver will be maintained by the moveWithOverCheck
+
+		// Optional pointer events
+		wheel = 1 << 6,
+
+		Defaults = pointerover | pointerout | pointerdown | pointerup | pointercancel | pointermove,
 	}
 }

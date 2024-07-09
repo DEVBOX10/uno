@@ -1,43 +1,40 @@
-﻿#if XAMARIN_IOS
-using Foundation;
+﻿using Foundation;
 using System;
 using System.Linq;
 using UIKit;
 using Windows.ApplicationModel.Activation;
 using Windows.ApplicationModel;
 using ObjCRuntime;
+using Windows.Globalization;
 using Windows.Graphics.Display;
-using Uno.UI.Services;
 using Uno.Extensions;
-
 using Windows.UI.Core;
 using Uno.Foundation.Logging;
+using System.Globalization;
+using System.Threading;
+using Uno.UI.Xaml.Controls;
 
 #if HAS_UNO_WINUI
-using LaunchActivatedEventArgs = Microsoft.UI.Xaml.LaunchActivatedEventArgs;
+using LaunchActivatedEventArgs = Microsoft/* UWP don't rename */.UI.Xaml.LaunchActivatedEventArgs;
 #else
 using LaunchActivatedEventArgs = Windows.ApplicationModel.Activation.LaunchActivatedEventArgs;
 #endif
 
-namespace Windows.UI.Xaml
+namespace Microsoft.UI.Xaml
 {
 	[Register("UnoAppDelegate")]
 	public partial class Application : UIApplicationDelegate
 	{
-		private bool _suspended;
-		internal bool IsSuspended => _suspended;
+		private bool _preventSecondaryActivationHandling;
 
-		private bool _preventSecondaryActivationHandling = false;
-
-		public Application()
+		partial void InitializePartial()
 		{
-			Current = this;
-			ResourceHelper.ResourcesService = new ResourcesService(new[] { NSBundle.MainBundle });
+			SetCurrentLanguage();
 
 			SubscribeBackgroundNotifications();
 		}
 
-		public Application(IntPtr handle) : base(handle)
+		public Application(NativeHandle handle) : base(handle)
 		{
 		}
 
@@ -98,7 +95,7 @@ namespace Windows.UI.Xaml
 		}
 
 		public override bool ContinueUserActivity(UIApplication application, NSUserActivity userActivity, UIApplicationRestorationHandler completionHandler) =>
-			TryHandleUniversalLinkFromUserActivity(userActivity);		
+			TryHandleUniversalLinkFromUserActivity(userActivity);
 
 		public override void UserActivityUpdated(UIApplication application, NSUserActivity userActivity) =>
 			TryHandleUniversalLinkFromUserActivity(userActivity);
@@ -129,27 +126,7 @@ namespace Windows.UI.Xaml
 			_preventSecondaryActivationHandling = false;
 		}
 
-		partial void OnSuspendingPartial()
-		{
-			var operation = new SuspendingOperation(DateTime.Now.AddSeconds(10));
-
-			Suspending?.Invoke(this, new SuspendingEventArgs(operation));
-
-			_suspended = true;
-		}
-
-		public override void WillEnterForeground(UIApplication application)
-			=> OnResuming();
-
-		partial void OnResumingPartial()
-		{
-			if (_suspended)
-			{
-				_suspended = false;
-
-				Resuming?.Invoke(this, null);
-			}
-		}
+		private DateTimeOffset GetSuspendingOffset() => DateTimeOffset.Now.AddSeconds(10);
 
 		public override UIInterfaceOrientationMask GetSupportedInterfaceOrientations(UIApplication application, [Transient] UIWindow forWindow)
 		{
@@ -232,27 +209,45 @@ namespace Windows.UI.Xaml
 
 		private void OnEnteredBackground(NSNotification notification)
 		{
-			Windows.UI.Xaml.Window.Current?.OnVisibilityChanged(false);
-			EnteredBackground?.Invoke(this, new EnteredBackgroundEventArgs());
+			NativeWindowWrapper.Instance.OnNativeVisibilityChanged(false);
 
-			OnSuspending();
+			RaiseEnteredBackground(() => RaiseSuspending());
 		}
 
 		private void OnLeavingBackground(NSNotification notification)
-		{			
-			LeavingBackground?.Invoke(this, new LeavingBackgroundEventArgs());
-			Windows.UI.Xaml.Window.Current?.OnVisibilityChanged(true);
+		{
+			RaiseResuming();
+			RaiseLeavingBackground(() => NativeWindowWrapper.Instance.OnNativeVisibilityChanged(true));
 		}
 
 		private void OnActivated(NSNotification notification)
 		{
-			Windows.UI.Xaml.Window.Current?.OnActivated(CoreWindowActivationState.CodeActivated);
+			NativeWindowWrapper.Instance.OnNativeActivated(CoreWindowActivationState.CodeActivated);
 		}
 
 		private void OnDeactivated(NSNotification notification)
 		{
-			Windows.UI.Xaml.Window.Current?.OnActivated(CoreWindowActivationState.Deactivated);
+			NativeWindowWrapper.Instance.OnNativeActivated(CoreWindowActivationState.Deactivated);
+		}
+
+		private void SetCurrentLanguage()
+		{
+			// net6.0-iOS does not automatically set the thread and culture info
+			// https://github.com/xamarin/xamarin-macios/issues/14740
+			var language = NSLocale.PreferredLanguages.ElementAtOrDefault(0);
+
+			try
+			{
+				var cultureInfo = CultureInfo.CreateSpecificCulture(language);
+				CultureInfo.CurrentUICulture = cultureInfo;
+				CultureInfo.CurrentCulture = cultureInfo;
+				Thread.CurrentThread.CurrentCulture = cultureInfo;
+				Thread.CurrentThread.CurrentUICulture = cultureInfo;
+			}
+			catch (Exception ex)
+			{
+				this.Log().Error($"Failed to set current culture for language: {language}", ex);
+			}
 		}
 	}
 }
-#endif

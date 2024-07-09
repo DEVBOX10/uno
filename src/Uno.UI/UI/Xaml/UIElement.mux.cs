@@ -4,19 +4,23 @@
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using DirectUI;
 using Uno.UI.Extensions;
+using Uno.UI.Xaml;
 using Uno.UI.Xaml.Core;
 using Uno.UI.Xaml.Input;
 using Windows.Foundation;
-using Windows.UI.Xaml.Automation.Peers;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
-using static Microsoft.UI.Xaml.Controls._Tracing;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Uno.Collections;
+using Windows.System;
+using static Microsoft/* UWP don't rename */.UI.Xaml.Controls._Tracing;
 
-namespace Windows.UI.Xaml
+namespace Microsoft.UI.Xaml
 {
 	public partial class UIElement
 	{
@@ -28,7 +32,7 @@ namespace Windows.UI.Xaml
 		/// Set to True when the imminent Focus(FocusState) call needs to use an animation if bringing the focused
 		/// element into view.
 		/// </summary>
-		private bool _animateIfBringIntoView = false;
+		private bool _animateIfBringIntoView;
 
 		/// <summary>
 		/// If true focusmgr does not set the focus on children or the element. Notice that this flag only and only
@@ -99,7 +103,14 @@ namespace Windows.UI.Xaml
 			{
 				var pNext = pElement.GetUIElementAdjustedParentInternal(true /*public parents only*/);
 
-				if (pNext != null && pNext.Visibility == Visibility.Collapsed)
+				if (pNext?.Visibility == Visibility.Collapsed)
+				{
+					return false;
+				}
+
+				// TODO Uno specific: IsLeaving is not yet implemented on visual tree level,
+				// so we check if the Page is being navigated away from here instead.
+				if (pNext?.IsLeavingFrame == true)
 				{
 					return false;
 				}
@@ -110,7 +121,7 @@ namespace Windows.UI.Xaml
 			return true;
 		}
 
-		private protected AutomationPeer? GetOrCreateAutomationPeer()
+		internal protected AutomationPeer? GetOrCreateAutomationPeer()
 		{
 			bool isPopupOpen = true;
 
@@ -133,7 +144,7 @@ namespace Windows.UI.Xaml
 				//	}
 				//	else if (!spAP)
 				//	{
-				//		RRETURN(S_FALSE);
+				//		RRETURN(S_false);
 				//	}
 
 				//	// This FX peer gains state when the AutomationPeer is stored in m_tpAP, so mark as
@@ -151,8 +162,14 @@ namespace Windows.UI.Xaml
 				//{
 				//	m_tpAP.Clear();
 				//}
-				//RRETURN(S_FALSE);
+				//RRETURN(S_false);
 			}
+		}
+
+		//UNO TODO: Implement GetClickablePointRasterizedClient on UIElement
+		internal Point GetClickablePointRasterizedClient()
+		{
+			return new Point();
 		}
 
 		//TODO:MZ: Implement all these in appropriate places :-)
@@ -413,7 +430,7 @@ namespace Windows.UI.Xaml
 			////	// Content in a XamlIsland shouldn't interact with elements outside of that XamlIsland.
 			////	// Example: TransformToRoot on an element within a XamlIsland shouldn't include the transform
 			////	// of the RootVisual, which is the DPI scale.
-			////	return nullptr;
+			////	return null;
 			////}
 
 			//UIElement pParent = GetUIElementParentInternal(publicParentsOnly);
@@ -424,7 +441,7 @@ namespace Windows.UI.Xaml
 			//{
 			//	bool parentIsPopupRoot = false;
 
-			//	if (SUCCEEDED(GetContext()->IsObjectAnActivePopupRoot(pParent, &parentIsPopupRoot)))
+			//	if (SUCCEEDED(GetContext().IsObjectAnActivePopupRoot(pParent, &parentIsPopupRoot)))
 			//	{
 			//		// The only elements visually parented to the PopupRoot are Popup.Child and TransitionRoots.
 			//		// In the former case, the adjusted parent we'll return is the Popup itself.
@@ -432,7 +449,7 @@ namespace Windows.UI.Xaml
 			//		if (parentIsPopupRoot && !OfTypeByIndex<KnownTypeIndex::TransitionRoot>())
 			//		{
 			//			pParent = static_cast<CUIElement*>(GetLogicalParentNoRef());
-			//			ASSERT(pParent->OfTypeByIndex<KnownTypeIndex::Popup>());
+			//			ASSERT(pParent.OfTypeByIndex<KnownTypeIndex::Popup>());
 			//		}
 			//	}
 			//}
@@ -459,15 +476,26 @@ namespace Windows.UI.Xaml
 			//	&& (pParent == null || !useRealParentForClosedParentedPopups))
 			//{
 			//	PopupRoot? pPopupRoot = null;
-			//	IGNOREHR(GetContext()->GetAdjustedPopupRootForElement(this, pPopupRoot));
+			//	IGNOREHR(GetContext().GetAdjustedPopupRootForElement(this, pPopupRoot));
 			//	pParent = pPopupRoot;
 			//}
 
 			//return pParent;
 		}
 
+		//UNO TODO: Implement GetUIElementParentInternal on UIElement
+		internal DependencyObject GetAccessKeyScopeOwner()
+		{
+			throw new NotImplementedException("GetUIElementParentInternal is not implemented on UIElement");
+		}
+
 		/// <summary>
-		/// Default to FALSE and expose as needed.  Elements that don't support having children will never
+		/// Override this method and return TRUE in order to navigate among automation children in reverse order.
+		/// </summary>
+		internal virtual bool AreAutomationPeerChildrenReversed() => false;
+
+		/// <summary>
+		/// Default to false and expose as needed.  Elements that don't support having children will never
 		/// allocate children collections.  Elements that do support children may do so as an implementation
 		/// detail (e.g. selection grippers for TextBlock), or to support public API exposure (e.g. Panel.Children).
 		/// </summary>
@@ -518,7 +546,7 @@ namespace Windows.UI.Xaml
 		internal Rect GetGlobalBoundsLogical(bool ignoreClipping = false, bool useTargetInformation = false)
 		{
 			//TODO Uno specific: This implementation is significantly simplified from the actual WinUI implementation.
-			var rootVisual = VisualTree.GetRootForElement(this);
+			var rootVisual = VisualTree.GetRootForElement(this) ?? VisualTree.GetRootOrIslandForElement(this);
 			if (rootVisual == null)
 			{
 				return Rect.Empty;
@@ -559,7 +587,7 @@ namespace Windows.UI.Xaml
 		protected virtual IEnumerable<DependencyObject>? GetChildrenInTabFocusOrder()
 		{
 			var children = FocusProperties.GetFocusChildren(this);
-			if (children != null && /*!children->IsLeaving() && */children.Length > 0)
+			if (children != null && /*!children.IsLeaving() && */children.Length > 0)
 			{
 				return children;
 			}
@@ -583,5 +611,290 @@ namespace Windows.UI.Xaml
 		/// <param name="uiElement">UIElement.</param>
 		/// <returns>True if the element is a ScrollViewer.</returns>
 		internal bool IsScroller() => this is ScrollViewer;
+
+		private void OnKeyDown(KeyRoutedEventArgs pEventArgs)
+		{
+#if HAS_UNO // Uno specific: In case of WinUI this logic is called only
+			// if not already handled and only on non-controls
+			if (pEventArgs.Handled)
+			{
+				return;
+			}
+
+			if (this is Control control)
+			{
+				return;
+			}
+#endif
+
+			/*
+			1. We take different paths for raising events depending on whether the source is a UIElement or a Control
+			2. The DXAML layer OnKeyDown virtual is defined on Control
+
+			As a result, we execute similar logic to process KeyboardAccelerators in both CUIElement::OnKeyDown and Control::OnKeyDown
+			One deals with controls, this deals with all other UIElements.
+			*/
+			KeyRoutedEventArgs pKeyRoutedEventArgs = (KeyRoutedEventArgs)pEventArgs;
+			bool handled = false;
+			bool handledShouldNotImpedeTextInput = false;
+			VirtualKey dxamlOriginalKey;
+
+			dxamlOriginalKey = pKeyRoutedEventArgs.OriginalKey;
+
+			VirtualKey originalKey = dxamlOriginalKey;
+
+			var keyModifiers = CoreImports.Input_GetKeyboardModifiers();
+
+			if (KeyboardAcceleratorUtility.IsKeyValidForAccelerators(originalKey, KeyboardAcceleratorUtility.MapVirtualKeyModifiersToIntegersModifiers(keyModifiers)))
+			{
+				KeyboardAcceleratorUtility.ProcessKeyboardAccelerators(
+					originalKey,
+					keyModifiers,
+					VisualTree.GetContentRootForElement(this)!.GetAllLiveKeyboardAccelerators(),
+					this,
+					out handled,
+					out handledShouldNotImpedeTextInput,
+					null,
+					false);
+
+				if (handled)
+				{
+					pKeyRoutedEventArgs.Handled = true;
+				}
+				if (handledShouldNotImpedeTextInput)
+				{
+					pKeyRoutedEventArgs.HandledShouldNotImpedeTextInput = true;
+				}
+			}
+		}
+
+		// Implements a depth-first search of the element's sub-tree,
+		// looking for an accelerator that can be invoked
+		private static void TryInvokeKeyboardAccelerator(
+			DependencyObject? pFocusedElement,
+			UIElement pElement,
+			VirtualKey key,
+			VirtualKeyModifiers keyModifiers,
+			ref bool handled,
+			ref bool handledShouldNotImpedeTextInput)
+		{
+			//Try to process accelerators on current CUIElement.
+			KeyboardAcceleratorUtility.ProcessKeyboardAccelerators(
+				key,
+				keyModifiers,
+				VisualTree.GetContentRootForElement(pElement)!.GetAllLiveKeyboardAccelerators(),
+				pElement,
+				out handled,
+				out handledShouldNotImpedeTextInput,
+				pFocusedElement,
+				true /*isCallFromTryInvoke*/ );
+			if (handled)
+			{
+				return;
+			}
+
+			IEnumerable<DependencyObject>? pCollection = null;
+			if (pElement.CanHaveChildren())
+			{
+				pCollection = Uno.UI.Extensions.DependencyObjectExtensions.GetChildren(pElement);
+			}
+
+			if (pCollection is null)
+			{
+				return;
+			}
+
+			//For each child make recursive call
+			foreach (var pDOChild in pCollection)
+			{
+				var pChild = pDOChild as UIElement;
+				if (pChild is not null && pChild.IsEnabled())
+				{
+					TryInvokeKeyboardAccelerator(pFocusedElement, pChild, key, keyModifiers, ref handled, ref handledShouldNotImpedeTextInput);
+					if (handled)
+					{
+						return;
+					}
+				}
+			}
+		}
+
+		/* static */
+		internal static bool RaiseKeyboardAcceleratorInvokedStatic(
+			DependencyObject pElement,
+			KeyboardAcceleratorInvokedEventArgs pKAIEventArgs)
+		{
+			var peer = pElement;
+			if (peer is null)
+			{
+				return false;
+			}
+
+			var element = peer as UIElement;
+			if (element is null)
+			{
+				return false;
+			}
+
+			element.OnKeyboardAcceleratorInvoked(pKAIEventArgs);
+			return pKAIEventArgs.Handled;
+		}
+
+		internal static void RaiseProcessKeyboardAcceleratorsStatic(
+			UIElement pUIElement,
+			VirtualKey key,
+			VirtualKeyModifiers keyModifiers,
+			ref bool pHandled,
+			ref bool pHandledShouldNotImpedeTextInput)
+		{
+			DependencyObject peer = pUIElement;
+			if (peer is null)
+			{
+				return;
+			}
+			UIElement element = pUIElement;
+
+			ProcessKeyboardAcceleratorEventArgs spProcessKeyboardAcceleratorEventArgs = new(key, keyModifiers);
+
+			element.OnProcessKeyboardAccelerators(spProcessKeyboardAcceleratorEventArgs);
+
+			pHandled = spProcessKeyboardAcceleratorEventArgs.Handled;
+			pHandledShouldNotImpedeTextInput = spProcessKeyboardAcceleratorEventArgs.HandledShouldNotImpedeTextInput;
+
+			if (!pHandled)
+			{
+				element.ProcessKeyboardAccelerators?.Invoke(element, spProcessKeyboardAcceleratorEventArgs);
+
+				pHandled = spProcessKeyboardAcceleratorEventArgs.Handled;
+				pHandledShouldNotImpedeTextInput = spProcessKeyboardAcceleratorEventArgs.HandledShouldNotImpedeTextInput;
+			}
+		}
+
+		protected virtual void OnProcessKeyboardAccelerators(ProcessKeyboardAcceleratorEventArgs args)
+		{
+			FlyoutBase spFlyout = ContextFlyout;
+			if (spFlyout is not null)
+			{
+				spFlyout.TryInvokeKeyboardAccelerator(args);
+
+				bool bHandled = args.Handled;
+				if (bHandled)
+				{
+					return;
+				}
+			}
+
+			// If event is not yet handled and current element is Button then TryInvoke on Flyout if it exists.
+			if (this is Button button)
+			{
+				button.OnProcessKeyboardAcceleratorsImplLocal(args);
+			}
+		}
+
+		/// <summary>
+		/// Attempts to invoke a keyboard shortcut (or accelerator) by searching the entire visual tree of the UIElement for the shortcut.
+		/// </summary>
+		/// <param name="args">The ProcessKeyboardAcceleratorEventArgs.</param>
+		public void TryInvokeKeyboardAccelerator(ProcessKeyboardAcceleratorEventArgs args)
+		{
+			// Search for an accelerator that can be invoked
+			bool handled = false;
+			bool handledShouldNotImpedeTextInput = false;
+			VirtualKey key = args.Key;
+			VirtualKeyModifiers keyModifiers = args.Modifiers;
+			if (KeyboardAcceleratorUtility.IsKeyValidForAccelerators(key, KeyboardAcceleratorUtility.MapVirtualKeyModifiersToIntegersModifiers(keyModifiers)))
+			{
+				// Get the focused element
+				var focusManager = VisualTree.GetFocusManagerForElement(this);
+				var pFocusedElement = focusManager?.FocusedElement;
+
+				UIElement.TryInvokeKeyboardAccelerator(pFocusedElement, this, key, keyModifiers, ref handled, ref handledShouldNotImpedeTextInput);
+				args.Handled = handled;
+				args.HandledShouldNotImpedeTextInput = handledShouldNotImpedeTextInput;
+			}
+		}
+
+		//UNO TODO: Implement GetGlobalBoundsWithOptions on UIElement
+		internal Rect GetGlobalBoundsWithOptions(bool ignoreClipping, bool ignoreClippingOnScrollContentPresenters, bool useTargetInformation)
+		{
+			return new Rect();
+		}
+
+#if UNO_HAS_ENHANCED_LIFECYCLE
+		// Doesn't exactly match WinUI code.
+		internal virtual void Enter(EnterParams @params, int depth)
+		{
+			Depth = depth;
+
+			if (@params.IsLive)
+			{
+				IsActiveInVisualTree = true;
+			}
+
+			foreach (var child in _children)
+			{
+				if (child == this)
+				{
+					// In some cases, we end up with ContentPresenter having itself as a child.
+					// Initial investigation: ScrollViewer sets its Content to ContentPresenter, and
+					// ContentPresenter sets its Content as the ScrollViewer Content.
+					// Skip this case for now.
+					// TODO: Investigate this more deeply.
+					continue;
+				}
+
+				child.Enter(@params, depth + 1);
+			}
+
+			if (@params.IsLive)
+			{
+				var core = this.GetContext();
+				core.EventManager.AddRequestsInOrder(this);
+			}
+
+			// Make sure that we propagate OnDirtyPath bits to the new parent.
+			SetLayoutFlags(LayoutFlag.MeasureDirty | LayoutFlag.ArrangeDirty);
+		}
+
+		internal virtual void Leave(LeaveParams @params)
+		{
+			foreach (var child in _children)
+			{
+				if (child == this)
+				{
+					// In some cases, we end up with ContentPresenter having itself as a child.
+					// Initial investigation: ScrollViewer sets its Content to ContentPresenter, and
+					// ContentPresenter sets its Content as the ScrollViewer Content.
+					// Skip this case for now.
+					// TODO: Investigate this more deeply.
+					continue;
+				}
+
+				child.Leave(@params);
+			}
+
+			if (IsActiveInVisualTree)
+			{
+				if (IsLoaded)
+				{
+					// This doesn't match WinUI.
+					// On WinUI, Unloaded can be fired even if Loaded is not fired.
+					// However, currently this is problematic due to bugs in ContentControl.
+					// Mainly, when we set ContentControl.Content, the content is added as a direct child to ContentControl
+					// Then, at some point later, we'll need to attach the Content to ContentPresenter instead of ContentControl directly.
+					// This "re-attaching" of Content will cause it to leave the visual tree and fire unloaded, which is not correct.
+					// In WinUI, ContentControl works differently.
+					//
+					// Another reason why we may not want to match WinUI behavior is that we rely on Loaded/Unloaded for event subscriptions/unsubscriptions in many controls
+					// Matching WinUI behavior can make those control go into bad state and/or memory leaks in niche cases.
+					// This can be revisited in the future if it caused issues.
+					OnElementUnloaded();
+				}
+
+				var eventManager = this.GetContext().EventManager;
+				eventManager.RemoveRequest(this);
+			}
+		}
+#endif
 	}
 }

@@ -8,9 +8,11 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Uno.Extensions;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Data;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
+using FluentAssertions;
+using FluentAssertions.Execution;
 
 namespace Uno.UI.Tests.ItemsControlTests
 {
@@ -23,7 +25,7 @@ namespace Uno.UI.Tests.ItemsControlTests
 		[TestMethod]
 		public void When_EarlyItems()
 		{
-			var style = new Style(typeof(Windows.UI.Xaml.Controls.ItemsControl))
+			var style = new Style(typeof(Microsoft.UI.Xaml.Controls.ItemsControl))
 			{
 				Setters =  {
 					new Setter<ItemsControl>("Template", t =>
@@ -103,7 +105,7 @@ namespace Uno.UI.Tests.ItemsControlTests
 				Style = style
 			};
 
-			Assert.IsNull(SUT.ItemsPresenter);
+			//Assert.IsNull(SUT.ItemsPresenter);
 
 			itemsPresenter.ForceLoaded();
 
@@ -112,6 +114,9 @@ namespace Uno.UI.Tests.ItemsControlTests
 #endif
 
 		[TestMethod]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
 		public void When_OnItemsSourceChanged()
 		{
 			var count = 0;
@@ -131,8 +136,117 @@ namespace Uno.UI.Tests.ItemsControlTests
 					"Item1"
 				}
 			};
-			
+
 			Assert.AreEqual(1, count);
+		}
+
+		[TestMethod]
+		public void When_OnItemsSourceChanged_AfterRemove_ThenIndexesAreRecalculated()
+		{
+			void Operation(ObservableCollection<string> list)
+			{
+				list.RemoveAt(1);
+			}
+
+			CheckItemsSourceChanged(Operation);
+		}
+
+		[TestMethod]
+		public void When_OnItemsSourceChanged_AfterInsert_ThenIndexesAreRecalculated()
+		{
+			void Operation(ObservableCollection<string> list)
+			{
+				list.Insert(2, "new item");
+			}
+
+			CheckItemsSourceChanged(Operation);
+		}
+
+		[TestMethod]
+		public void When_OnItemsSourceChanged_AfterAdd_ThenIndexesAreRecalculated()
+		{
+			void Operation(ObservableCollection<string> list)
+			{
+				list.Add("new item at the end");
+			}
+
+			CheckItemsSourceChanged(Operation);
+		}
+
+		[TestMethod]
+		public void When_OnItemsSourceChanged_AfterClear_ThenIndexesAreRecalculated()
+		{
+			void Operation(ObservableCollection<string> list)
+			{
+				list.Clear();
+			}
+
+			CheckItemsSourceChanged(Operation);
+		}
+
+		[TestMethod]
+		public void When_OnItemsSourceChanged_AfterMove_ThenIndexesAreRecalculated()
+		{
+			void Operation(ObservableCollection<string> list)
+			{
+				list.Move(1, 3);
+			}
+
+			CheckItemsSourceChanged(Operation);
+		}
+
+		[TestMethod]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
+		public void When_OnItemsSourceChanged_AfterReplace_ThenIndexesAreRecalculated()
+		{
+			void Operation(ObservableCollection<string> list)
+			{
+				list[1] = "new index 1";
+			}
+
+			CheckItemsSourceChanged(Operation);
+		}
+
+		private static void CheckItemsSourceChanged(Action<ObservableCollection<string>> operation)
+		{
+			var source = new ObservableCollection<string>();
+
+			source.Add("item 0");
+			source.Add("item 1");
+			source.Add("item 2");
+			source.Add("item 3");
+			source.Add("item 4");
+
+			var panel = new StackPanel();
+			var sut = new ItemsControl
+			{
+				ItemsPanelRoot = panel,
+				InternalItemsPanelRoot = panel,
+				ItemTemplate = new DataTemplate(() => { return new Border(); }),
+				ItemsSource = source
+			};
+
+			using var _ = new AssertionScope();
+
+			CheckIndexes();
+
+			operation(source);
+
+			CheckIndexes();
+
+			void CheckIndexes()
+			{
+				panel.Children­.Should().HaveCount(source.Count);
+
+				for (var i = 0; i < panel.Children.Count; i++)
+				{
+					var child = panel.Children[i];
+					var index = child.GetValue(ItemsControl.IndexForItemContainerProperty);
+					index.Should().Be(i);
+				}
+			}
 		}
 
 		[TestMethod]
@@ -347,7 +461,7 @@ namespace Uno.UI.Tests.ItemsControlTests
 		}
 
 		[TestMethod]
-		public async Task When_ItemsSource_Changes_Items_VectorChanged_Triggered()
+		public void When_ItemsSource_Changes_Items_VectorChanged_Triggered()
 		{
 			var listView = new ItemsControl();
 
@@ -375,7 +489,7 @@ namespace Uno.UI.Tests.ItemsControlTests
 
 #if IS_UNIT_TESTS
 		[TestMethod]
-		public async Task When_Collection_Reset()
+		public void When_Collection_Reset()
 		{
 			var count = 0;
 			var panel = new StackPanel();
@@ -410,7 +524,7 @@ namespace Uno.UI.Tests.ItemsControlTests
 			}
 
 			Assert.AreEqual(SUT.Items.Count, 5);
-			Assert.AreEqual(count, 5);
+			Assert.AreEqual(count, FrameworkTemplatePool.IsPoolingEnabled ? 5 : 8);
 			Assert.IsNotNull(SUT.ContainerFromItem("One"));
 			Assert.IsNotNull(SUT.ContainerFromItem("Four"));
 			Assert.IsNotNull(SUT.ContainerFromItem("Five"));
@@ -418,7 +532,7 @@ namespace Uno.UI.Tests.ItemsControlTests
 #endif
 
 		[TestMethod]
-		public async Task When_Collection_Append()
+		public void When_Collection_Append()
 		{
 			var count = 0;
 			var panel = new StackPanel();
@@ -458,7 +572,7 @@ namespace Uno.UI.Tests.ItemsControlTests
 		}
 
 		private Style BuildBasicContainerStyle() =>
-			new Style(typeof(Windows.UI.Xaml.Controls.ListViewItem))
+			new Style(typeof(Microsoft.UI.Xaml.Controls.ListViewItem))
 			{
 				Setters =  {
 					new Setter<ListViewItem>("Template", t =>

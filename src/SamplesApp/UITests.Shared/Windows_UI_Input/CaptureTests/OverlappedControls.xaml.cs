@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Linq;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Uno.UI;
 using Uno.UI.Samples.Controls;
 
 namespace UITests.Shared.Windows_UI_Input.CaptureTests
 {
-	[SampleControlInfo("Gesture recognizer", "Capture with overlap")]
+	[SampleControlInfo("Gesture Recognizer", "Capture with overlap")]
 	public sealed partial class OverlappedControls : Page
 	{
 		public OverlappedControls()

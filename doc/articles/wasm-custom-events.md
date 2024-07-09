@@ -1,3 +1,7 @@
+---
+uid: Uno.Development.WasmCustomEvents
+---
+
 # (Wasm) Handling custom HTML events
 
 There is a specification in HTML to create custom DOM events.
@@ -10,7 +14,7 @@ To reach this, you need to register to those events.
 In javascript (or Typescript), you can send a custom event
 using the following code:
 
-``` javascript
+```javascript
     // Generate a custom generic event from JavaScript/Typescript
     htmlElement.dispatchEvent(new Event("simpleEvent"));
 
@@ -25,7 +29,7 @@ using the following code:
 
 ## Registering an event handler in C# for those events
 
-``` csharp
+```csharp
     protected override void OnLoaded()
     {
         // Note: following extensions are in the namespace "Uno.Extensions"

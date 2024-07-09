@@ -5,9 +5,9 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using Windows.Storage.Streams;
 using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Imaging;
 
 
 namespace Uno.UI.Samples.UITests.ImageTestsControl
@@ -22,7 +22,7 @@ namespace Uno.UI.Samples.UITests.ImageTestsControl
 			this.Loaded += OnLoaded;
 		}
 
-		private const string _imageUrl = "http://placehold.it/420x220&text=Super+Image";
+		private const string _imageUrl = "https://via.placeholder.com/420x220.png?text=Super+Image";
 
 		private async void OnLoaded(object sender, RoutedEventArgs e)
 		{
@@ -35,11 +35,7 @@ namespace Uno.UI.Samples.UITests.ImageTestsControl
 
 		private static async Task<IRandomAccessStream> GetStream(string url)
 		{
-#if __WASM__
-			using var httpClient = new HttpClient(new Uno.UI.Wasm.WasmHttpHandler());
-#else
 			using var httpClient = new HttpClient();
-#endif
 			var data = await httpClient.GetByteArrayAsync(url);
 
 			return new MemoryStream(data).AsRandomAccessStream();

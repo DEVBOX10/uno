@@ -1,14 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Interop;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Interop;
 using PropertyChangedEventHandler = System.ComponentModel.PropertyChangedEventHandler;
 using PropertyChangedEventArgs = System.ComponentModel.PropertyChangedEventArgs;
 using Type = System.Type;
-using static Microsoft.UI.Xaml.Controls._Tracing;
+using static Microsoft/* UWP don't rename */.UI.Xaml.Controls._Tracing;
 
-namespace Microsoft.UI.Xaml.Controls
+namespace Microsoft/* UWP don't rename */.UI.Xaml.Controls
 {
 	public partial class SelectionModel : global::System.ComponentModel.INotifyPropertyChanged, ICustomPropertyProvider
 	{
@@ -40,7 +40,7 @@ namespace Microsoft.UI.Xaml.Controls
 				ClearSelection(true /* resetAnchor */, false /* raiseSelectionChanged */);
 				m_rootNode.Source = value;
 				OnSelectionChanged();
-				RaisePropertyChanged("Source");
+				RaisePropertyChanged(nameof(Source));
 			}
 		}
 
@@ -66,7 +66,7 @@ namespace Microsoft.UI.Xaml.Controls
 						SelectWithPathImpl(firstSelectionIndexPath, true /* select */, true /* raiseSelectionChanged */);
 					}
 
-					RaisePropertyChanged("SingleSelect");
+					RaisePropertyChanged(nameof(SingleSelect));
 				}
 			}
 		}
@@ -432,6 +432,15 @@ namespace Microsoft.UI.Xaml.Controls
 			OnSelectionChanged();
 		}
 
+		// This function assumes a flat list data source.
+		// This allows us to avoid devirtualizing all the items.
+		internal void SelectAllFlat()
+		{
+			m_rootNode.SelectAll();
+			OnSelectionChanged();
+		}
+
+
 		public void ClearSelection()
 		{
 			ClearSelection(true /*resetAnchor*/, true /* raiseSelectionChanged */);
@@ -445,19 +454,18 @@ namespace Microsoft.UI.Xaml.Controls
 
 		ICustomProperty ICustomPropertyProvider.GetCustomProperty(string name)
 		{
-			//TODO: MZ: Not implemented, maybe not used currently
-			//// Exposing SelectedItem through ICustomPropertyProvider so that Binding can work 
-			//// for SelectedItem. This is requried since SelectedItem is not a dependency proeprty and
-			//// is evaluated when requested.
-			//if (name == "SelectedItem")
-			//{
-			//	var selectedItemCustomProperty = new CustomProperty(
-			//		"SelectedItem" /* name */,
-			//		typeof(object) /* typeName */,
-			//		(target) => ((SelectionModel)target).SelectedItem /* getter */,
-			//		null /* setter */);
-			//	return selectedItemCustomProperty;
-			//}
+			// Exposing SelectedItem through ICustomPropertyProvider so that Binding can work 
+			// for SelectedItem. This is requried since SelectedItem is not a dependency proeprty and
+			// is evaluated when requested.
+			if (name == "SelectedItem")
+			{
+				var selectedItemCustomProperty = new CustomProperty(
+					nameof(SelectedItem) /* name */,
+					typeof(object) /* typeName */,
+					(target) => ((SelectionModel)target).SelectedItem /* getter */,
+					null /* setter */);
+				return selectedItemCustomProperty;
+			}
 
 			return null;
 		}
@@ -491,7 +499,15 @@ namespace Microsoft.UI.Xaml.Controls
 
 		internal void OnSelectionInvalidatedDueToCollectionChange()
 		{
-			OnSelectionChanged();
+			m_selectionInvalidatedDueToCollectionChange = true;
+			try
+			{
+				OnSelectionChanged();
+			}
+			finally
+			{
+				m_selectionInvalidatedDueToCollectionChange = false;
+			}
 		}
 
 		internal object ResolvePath(object data, IndexPath dataIndexPath)

@@ -3,104 +3,214 @@
 using System;
 using Uno.Disposables;
 using Windows.Foundation;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 #if HAS_UNO_WINUI
-using WindowSizeChangedEventArgs = Microsoft.UI.Xaml.WindowSizeChangedEventArgs;
+using WindowSizeChangedEventArgs = Microsoft/* UWP don't rename */.UI.Xaml.WindowSizeChangedEventArgs;
 #else
 using WindowSizeChangedEventArgs = Windows.UI.Core.WindowSizeChangedEventArgs;
 #endif
 
-namespace Uno.UI.Xaml.Controls
+namespace Uno.UI.Xaml.Controls;
+
+internal partial class SystemFocusVisual : Control
 {
-	internal partial class SystemFocusVisual : Control
+	private SerialDisposable _focusedElementSubscriptions = new SerialDisposable();
+	private Rect _lastRect = Rect.Empty;
+
+	public SystemFocusVisual()
 	{
-		private SerialDisposable _focusedElementSubscriptions = new SerialDisposable();
-		private Rect _lastRect = Rect.Empty;
+		DefaultStyleKey = typeof(SystemFocusVisual);
+		Loaded += OnLoaded;
+		Unloaded += OnUnloaded;
+	}
 
-		public SystemFocusVisual()
+	private void OnLoaded(object sender, RoutedEventArgs e)
+	{
+		if (XamlRoot is not null)
 		{
-			DefaultStyleKey = typeof(SystemFocusVisual);
-			Windows.UI.Xaml.Window.Current.SizeChanged += WindowSizeChanged;
+			XamlRoot.Changed += XamlRootChanged;
 		}
+	}
 
-		public UIElement? FocusedElement
+	private void OnUnloaded(object sender, RoutedEventArgs e)
+	{
+		if (XamlRoot is not null)
 		{
-			get => (FrameworkElement?)GetValue(FocusedElementProperty);
-			set => SetValue(FocusedElementProperty, value);
+			XamlRoot.Changed -= XamlRootChanged;
 		}
+	}
 
-		public static readonly DependencyProperty FocusedElementProperty =
-			DependencyProperty.Register(
-				nameof(FocusedElement),
-				typeof(UIElement),
-				typeof(SystemFocusVisual),
-				new FrameworkPropertyMetadata(default, OnFocusedElementChanged));
+	public UIElement? FocusedElement
+	{
+		get => (FrameworkElement?)GetValue(FocusedElementProperty);
+		set => SetValue(FocusedElementProperty, value);
+	}
 
-		internal void Redraw() => SetLayoutProperties();
+	public static readonly DependencyProperty FocusedElementProperty =
+		DependencyProperty.Register(
+			nameof(FocusedElement),
+			typeof(UIElement),
+			typeof(SystemFocusVisual),
+			new FrameworkPropertyMetadata(default, OnFocusedElementChanged));
 
-		private static void OnFocusedElementChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
+	internal void Redraw() => SetLayoutProperties();
+
+	private static void OnFocusedElementChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
+	{
+		var focusVisual = (SystemFocusVisual)dependencyObject;
+
+		focusVisual._focusedElementSubscriptions.Disposable = null;
+
+		if (args.NewValue is FrameworkElement element)
 		{
-			var focusVisual = (SystemFocusVisual)dependencyObject;
+			element.EnsureFocusVisualBrushDefaults();
+			element.SizeChanged += focusVisual.FocusedElementSizeChanged;
+#if !UNO_HAS_ENHANCED_LIFECYCLE
+			element.LayoutUpdated += focusVisual.FocusedElementLayoutUpdated;
+#endif
+			element.EffectiveViewportChanged += focusVisual.FocusedElementEffectiveViewportChanged;
+			element.Unloaded += focusVisual.FocusedElementUnloaded;
 
-			focusVisual._focusedElementSubscriptions.Disposable = null;
+			var visibilityToken = element.RegisterPropertyChangedCallback(VisibilityProperty, focusVisual.FocusedElementVisibilityChanged);
 
-			if (args.NewValue is FrameworkElement element)
+			focusVisual.AttachVisualPartial();
+
+			focusVisual._lastRect = Rect.Empty;
+			focusVisual.SetLayoutProperties();
+			var parentViewport = element.GetParentViewport(); // the parent Viewport is used, similar to PropagateEffectiveViewportChange
+			focusVisual.ApplyClipping(parentViewport.Effective);
+
+			focusVisual._focusedElementSubscriptions.Disposable = Disposable.Create(() =>
 			{
-				element.EnsureFocusVisualBrushDefaults();
-				element.SizeChanged += focusVisual.FocusedElementSizeChanged;
-				element.LayoutUpdated += focusVisual.FocusedElementLayoutUpdated;
-				element.Unloaded += focusVisual.FocusedElementUnloaded;
+				element.SizeChanged -= focusVisual.FocusedElementSizeChanged;
+#if !UNO_HAS_ENHANCED_LIFECYCLE
+				element.LayoutUpdated -= focusVisual.FocusedElementLayoutUpdated;
+#endif
+				element.EffectiveViewportChanged -= focusVisual.FocusedElementEffectiveViewportChanged;
+				element.UnregisterPropertyChangedCallback(VisibilityProperty, visibilityToken);
 
-				var visibilityToken = element.RegisterPropertyChangedCallback(VisibilityProperty, focusVisual.FocusedElementVisibilityChanged);
-
-				focusVisual.SetLayoutProperties();
-
-				focusVisual._focusedElementSubscriptions.Disposable = Disposable.Create(() =>
-				{
-					element.SizeChanged -= focusVisual.FocusedElementSizeChanged;
-					element.LayoutUpdated -= focusVisual.FocusedElementLayoutUpdated;
-					element.UnregisterPropertyChangedCallback(VisibilityProperty, visibilityToken);
-				});
-			}
+				focusVisual.DetachVisualPartial();
+			});
 		}
+	}
 
-		private void WindowSizeChanged(object sender, WindowSizeChangedEventArgs e) => SetLayoutProperties();
+	partial void AttachVisualPartial();
 
-		private void FocusedElementUnloaded(object sender, RoutedEventArgs e) => FocusedElement = null;
+	partial void DetachVisualPartial();
 
-		private void FocusedElementVisibilityChanged(DependencyObject sender, DependencyProperty dp) => SetLayoutProperties();
+	partial void SetLayoutPropertiesPartial();
 
-		private void FocusedElementLayoutUpdated(object? sender, object e) => SetLayoutProperties();
+	private void XamlRootChanged(object sender, XamlRootChangedEventArgs e) => SetLayoutProperties();
 
-		private void FocusedElementSizeChanged(object sender, SizeChangedEventArgs args) => SetLayoutProperties();
+	private void FocusedElementUnloaded(object sender, RoutedEventArgs e) => FocusedElement = null;
 
-		private void SetLayoutProperties()
+	private void FocusedElementVisibilityChanged(DependencyObject sender, DependencyProperty dp) => SetLayoutProperties();
+
+#if !UNO_HAS_ENHANCED_LIFECYCLE
+	private void FocusedElementLayoutUpdated(object? sender, object e) => SetLayoutProperties();
+#endif
+
+	private void FocusedElementSizeChanged(object sender, SizeChangedEventArgs args) => SetLayoutProperties();
+
+	private void FocusedElementEffectiveViewportChanged(FrameworkElement sender, EffectiveViewportChangedEventArgs args)
+	{
+		SetLayoutProperties();
+		ApplyClipping(args.EffectiveViewport);
+	}
+
+	private void SetLayoutProperties()
+	{
+		if (XamlRoot is null ||
+			FocusedElement is null ||
+			FocusedElement.Visibility == Visibility.Collapsed ||
+			(FocusedElement is Control control && !control.IsEnabled && !control.AllowFocusWhenDisabled))
 		{
-			if (FocusedElement == null ||
-				FocusedElement.Visibility == Visibility.Collapsed ||
-				(FocusedElement is Control control && !control.IsEnabled && !control.AllowFocusWhenDisabled))
-			{
-				Visibility = Visibility.Collapsed;
-				return;
-			}
-
-			Visibility = Visibility.Visible;
-			var transformToRoot = FocusedElement.TransformToVisual(Windows.UI.Xaml.Window.Current.Content);
-			var point = transformToRoot.TransformPoint(new Windows.Foundation.Point(0, 0));
-			var newRect = new Rect(point.X, point.Y, FocusedElement.ActualSize.X, FocusedElement.ActualSize.Y);
-
-			if (newRect != _lastRect)
-			{
-				Width = FocusedElement.ActualSize.X;
-				Height = FocusedElement.ActualSize.Y;
-
-				Canvas.SetLeft(this, point.X);
-				Canvas.SetTop(this, point.Y);
-
-				_lastRect = newRect;
-			}
+			Visibility = Visibility.Collapsed;
+			return;
 		}
+
+		var parentElement = VisualTreeHelper.GetParent(FocusedElement) as UIElement;
+		if (parentElement is null)
+		{
+			Visibility = Visibility.Collapsed;
+			return;
+		}
+
+		RenderTransform = FocusedElement.RenderTransform;
+		RenderTransformOrigin = FocusedElement.RenderTransformOrigin;
+		Visibility = Visibility.Visible;
+
+		var parentTransform = parentElement.TransformToVisual(XamlRoot.VisualTree.RootElement);
+		var parentPoint = parentTransform.TransformPoint(new Windows.Foundation.Point(0, 0));
+
+		var point = new Windows.Foundation.Point
+		{
+			X = parentPoint.X + FocusedElement.ActualOffset.X,
+			Y = parentPoint.Y + FocusedElement.ActualOffset.Y
+		};
+
+		var newRect = new Rect(point.X, point.Y, FocusedElement.ActualSize.X, FocusedElement.ActualSize.Y);
+
+		if (newRect != _lastRect)
+		{
+			Width = FocusedElement.ActualSize.X;
+			Height = FocusedElement.ActualSize.Y;
+
+			// FocusVisual and Element has same position and width
+			Canvas.SetLeft(this, point.X);
+			Canvas.SetTop(this, point.Y);
+
+			_lastRect = newRect;
+		}
+
+		SetLayoutPropertiesPartial();
+	}
+
+	private void ApplyClipping(Rect effectiveViewport)
+	{
+		if (FocusedElement is not FrameworkElement fe)
+		{
+			return;
+		}
+
+		var height = Height - fe.FocusVisualMargin.Top - fe.FocusVisualMargin.Bottom;
+		var width = Width - fe.FocusVisualMargin.Left - fe.FocusVisualMargin.Right;
+
+		RectangleGeometry clip;
+
+		if (effectiveViewport.IsEmpty)
+		{
+			clip = new RectangleGeometry
+			{
+				Rect = new Rect(
+					0,
+					0,
+					0,
+					0
+				)
+			};
+		}
+		else
+		{
+			var clipTop = Math.Max(fe.FocusVisualMargin.Top, effectiveViewport.Top - fe.FocusVisualMargin.Top);
+			var clipLeft = Math.Max(fe.FocusVisualMargin.Left, effectiveViewport.Left + fe.FocusVisualMargin.Left);
+			var clipBottom = Math.Max(0, height - (effectiveViewport.Height + effectiveViewport.Top + fe.FocusVisualMargin.Bottom));
+			var clipRight = Math.Max(0, width - (effectiveViewport.Width + effectiveViewport.Left + fe.FocusVisualMargin.Right));
+
+			clip = new RectangleGeometry
+			{
+				Rect = new Rect(
+					Math.Min(width, clipLeft),
+					Math.Min(height, clipTop),
+					Math.Max(0, width - clipRight - clipLeft),
+					Math.Max(0, height - clipBottom - clipTop)
+				)
+			};
+		}
+
+		Clip = clip;
 	}
 }

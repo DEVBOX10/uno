@@ -1,8 +1,8 @@
-﻿#if !NET6_0
+﻿#if !NET6_0_OR_GREATER
 using System;
 using System.Threading;
 using Windows.Foundation;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 using Airbnb.Lottie;
 using Foundation;
 using System.Threading.Tasks;
@@ -13,13 +13,15 @@ using _ViewContentMode = UIKit.UIViewContentMode;
 using _ViewContentMode = Airbnb.Lottie.LOTViewContentMode;
 #endif
 
+#if HAS_UNO_WINUI
+namespace CommunityToolkit.WinUI.Lottie
+#else
 namespace Microsoft.Toolkit.Uwp.UI.Lottie
+#endif
 {
 	partial class LottieVisualSourceBase
 	{
 		private LOTAnimationView? _animation;
-
-		public bool UseHardwareAcceleration { get; set; } = true;
 
 		private Uri? _lastSource;
 		private (double fromProgress, double toProgress, bool looped)? _playState;
@@ -45,6 +47,8 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 					_lastSource = sourceUri;
 					if ((await TryLoadDownloadJson(sourceUri, ct)) is { } jsonStream)
 					{
+						var tcs = new TaskCompletionSource<bool>();
+
 						var cacheKey = sourceUri.OriginalString;
 						_animationDataSubscription.Disposable = null;
 						_animationDataSubscription.Disposable =
@@ -56,17 +60,15 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 							var animation = LOTAnimationView.AnimationFromJSON(jsonData);
 							SetAnimation(animation);
 
-							if (_playState != null)
-							{
-								var (fromProgress, toProgress, looped) = _playState.Value;
-								Play(fromProgress, toProgress, looped);
-							}
+							tcs.TrySetResult(true);
 						}
+
+						await tcs.Task;
 					}
 					else
 					{
 						var path = sourceUri?.PathAndQuery ?? "";
-						if (path.StartsWith("/"))
+						if (path.StartsWith("/", StringComparison.Ordinal))
 						{
 							path = path.Substring(1);
 						}
@@ -102,16 +104,16 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 
 				switch (player.Stretch)
 				{
-					case Windows.UI.Xaml.Media.Stretch.None:
+					case Microsoft.UI.Xaml.Media.Stretch.None:
 						_animation.ContentMode = _ViewContentMode.Center;
 						break;
-					case Windows.UI.Xaml.Media.Stretch.Uniform:
+					case Microsoft.UI.Xaml.Media.Stretch.Uniform:
 						_animation.ContentMode = _ViewContentMode.ScaleAspectFit;
 						break;
-					case Windows.UI.Xaml.Media.Stretch.Fill:
+					case Microsoft.UI.Xaml.Media.Stretch.Fill:
 						_animation.ContentMode = _ViewContentMode.ScaleToFill;
 						break;
-					case Windows.UI.Xaml.Media.Stretch.UniformToFill:
+					case Microsoft.UI.Xaml.Media.Stretch.UniformToFill:
 						_animation.ContentMode = _ViewContentMode.ScaleAspectFill;
 						break;
 				}
@@ -218,64 +220,6 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 		}
 
 		private Size CompositionSize => _animation?.IntrinsicContentSize ?? default;
-	}
-}
-#else
-using System;
-using System.Threading;
-using Windows.Foundation;
-using Windows.UI.Xaml.Controls;
-using Foundation;
-using System.Threading.Tasks;
-using Uno.Disposables;
-
-namespace Microsoft.Toolkit.Uwp.UI.Lottie
-{
-	partial class LottieVisualSourceBase
-	{
-		public bool UseHardwareAcceleration { get; set; } = true;
-
-		async Task InnerUpdate(CancellationToken ct)
-		{
-
-		}
-
-		public void Play(double fromProgress, double toProgress, bool looped)
-		{
-			throw new NotImplementedException();
-		}
-
-		public void Stop()
-		{
-			throw new NotImplementedException();
-		}
-
-		public void Pause()
-		{
-			throw new NotImplementedException();
-		}
-
-		public void Resume()
-		{
-			throw new NotImplementedException();
-		}
-
-		public void SetProgress(double progress)
-		{
-			throw new NotImplementedException();
-		}
-
-		public void Load()
-		{
-			throw new NotImplementedException();
-		}
-
-		public void Unload()
-		{
-			throw new NotImplementedException();
-		}
-
-		private Size CompositionSize => default;
 	}
 }
 #endif

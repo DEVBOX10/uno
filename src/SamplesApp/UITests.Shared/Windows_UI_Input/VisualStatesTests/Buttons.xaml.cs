@@ -2,15 +2,15 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Uno.Extensions;
 using Uno.UI.Extensions;
 using Uno.UI.Samples.Controls;
 
 namespace UITests.Shared.Windows_UI_Input.VisualStatesTests
 {
-	[SampleControlInfo("Gesture recognizer", "VisualStates Buttons")]
+	[SampleControlInfo("Gesture Recognizer", "VisualStates Buttons")]
 	public sealed partial class Buttons : Page
 	{
 		public Buttons()

@@ -7,17 +7,11 @@ using System.Runtime.CompilerServices;
 using Uno.Collections;
 using Uno.Extensions;
 using Uno.UI.DataBinding;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Data;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Data;
 
-#if XAMARIN_IOS_UNIFIED
 using Foundation;
 using UIKit;
-#elif XAMARIN_IOS
-using MonoTouch.Foundation;
-using MonoTouch.UIKit;
-using MonoTouch.CoreGraphics;
-#endif
 
 namespace Uno.UI.Controls
 {
@@ -34,6 +28,9 @@ namespace Uno.UI.Controls
 
 	public partial class StatePresenter : UIControl, DependencyObject
 	{
+		internal Action Loaded;
+		internal Action Unloaded;
+
 		public RoutedEventHandler<StateChangedEventArgs> StateChanged;
 
 		private bool _highlighted;
@@ -43,6 +40,20 @@ namespace Uno.UI.Controls
 		public StatePresenter()
 		{
 			InitializeBinder();
+		}
+
+		public override void MovedToWindow()
+		{
+			base.MovedToWindow();
+
+			if (this.Window != null)
+			{
+				Loaded?.Invoke();
+			}
+			else
+			{
+				Unloaded?.Invoke();
+			}
 		}
 
 		public override bool Enabled
@@ -90,7 +101,7 @@ namespace Uno.UI.Controls
 			{
 				foreach (var subview in Subviews)
 				{
-                    subview.RemoveFromSuperview();
+					subview.RemoveFromSuperview();
 				}
 				value.Frame = Frame;
 				value.AutoresizingMask = UIViewAutoresizing.FlexibleWidth | UIViewAutoresizing.FlexibleHeight;
@@ -139,10 +150,13 @@ namespace Uno.UI.Controls
 
 			public VisualStateManager(StatePresenter presenter)
 			{
-				presenter.RegisterLoadActions(
-					loaded: () => presenter.StateChanged += GoToState,
-					unloaded: () => presenter.StateChanged -= GoToState
-				);
+				if (presenter.Window != null)
+				{
+					presenter.StateChanged += GoToState;
+				}
+
+				presenter.Loaded += () => presenter.StateChanged += GoToState;
+				presenter.Unloaded += () => presenter.StateChanged -= GoToState;
 			}
 
 			private void GoToState(object sender, StateChangedEventArgs e)

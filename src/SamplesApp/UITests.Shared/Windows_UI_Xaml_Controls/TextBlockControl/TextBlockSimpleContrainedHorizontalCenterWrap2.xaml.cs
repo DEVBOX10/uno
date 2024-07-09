@@ -1,9 +1,9 @@
 ﻿using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Uno.UI.Samples.Content.UITests.TextBlockControl
 {
-	[SampleControlInfo("TextBlockControl", "TextBlockSimpleContrainedHorizontalCenterWrap2")]
+	[SampleControlInfo("TextBlock", "TextBlockSimpleContrainedHorizontalCenterWrap2")]
 	public sealed partial class TextBlockSimpleContrainedHorizontalCenterWrap2 : UserControl
 	{
 		public TextBlockSimpleContrainedHorizontalCenterWrap2()

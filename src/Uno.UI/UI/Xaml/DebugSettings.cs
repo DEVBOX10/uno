@@ -1,10 +1,14 @@
 ﻿using Windows.Foundation;
 using Windows.Foundation.Metadata;
 
-namespace Windows.UI.Xaml
+namespace Microsoft.UI.Xaml
 {
 	public sealed partial class DebugSettings
 	{
+#if HAS_UNO_WINUI
+		public LayoutCycleTracingLevel LayoutCycleTracingLevel { get; set; }
+#endif
+
 		[Uno.NotImplemented]
 		public bool EnableFrameRateCounter { get; set; }
 
@@ -20,11 +24,8 @@ namespace Windows.UI.Xaml
 		[Uno.NotImplemented]
 		public bool IsTextPerformanceVisualizationEnabled { get; set; }
 
+#pragma warning disable CS0067 // The event 'DebugSettings.BindingFailed' is never used
 		public event BindingFailedEventHandler BindingFailed;
-
-		private void OnBindingFailed(BindingFailedEventArgs args)
-		{
-			BindingFailed?.Invoke(this, args);
-		}
+#pragma warning restore CS0067 // The event 'DebugSettings.BindingFailed' is never used
 	}
 }

@@ -1,12 +1,12 @@
 ﻿using System.Collections.Generic;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Input;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Uno.UI.Samples.Controls;
 
 namespace UITests.Shared.Windows_UI_Xaml_Controls.Button
 {
-	[SampleControlInfo("Button", "Overlapped_Buttons")]
+	[SampleControlInfo("Buttons", "Overlapped_Buttons")]
 	public sealed partial class Overlapped_Buttons : Page
 	{
 		private Dictionary<string, int> clicks = new Dictionary<string, int>();

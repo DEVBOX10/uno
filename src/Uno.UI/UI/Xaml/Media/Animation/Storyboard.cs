@@ -4,18 +4,20 @@ using System.Collections.Generic;
 using System.Text;
 using System.Collections.Specialized;
 using System.Linq;
-using Windows.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Data;
 using Uno.Diagnostics.Eventing;
-using Windows.UI.Xaml.Markup;
+using Microsoft.UI.Xaml.Markup;
 using System.Threading;
 using Windows.UI.Core;
 using Uno.Disposables;
 using System.Diagnostics;
+using System.Globalization;
+using Windows.Graphics.Printing.PrintSupport;
 
-namespace Windows.UI.Xaml.Media.Animation
+namespace Microsoft.UI.Xaml.Media.Animation
 {
 	[ContentProperty(Name = "Children")]
-	public sealed partial class Storyboard : Timeline, ITimeline, IAdditionalChildrenProvider, IThemeChangeAware
+	public sealed partial class Storyboard : Timeline, ITimeline, IAdditionalChildrenProvider, ITimelineListener
 	{
 		private static readonly IEventProvider _trace = Tracing.Get(TraceProvider.Id);
 		private EventActivity _traceActivity;
@@ -32,9 +34,9 @@ namespace Windows.UI.Xaml.Media.Animation
 
 		private readonly Stopwatch _activeDuration = new Stopwatch();
 		private int _replayCount = 1;
-		private int _runningChildren = 0;
-		private bool _hasFillingChildren = false;
-		private Dictionary<ITimeline, IDisposable> _childrenSubscriptions = new Dictionary<ITimeline, IDisposable>();
+		private int _runningChildren;
+		private bool _hasFillingChildren;
+		private bool _hasScheduledCompletion;
 
 		public Storyboard()
 		{
@@ -44,29 +46,29 @@ namespace Windows.UI.Xaml.Media.Animation
 		public TimelineCollection Children { get; }
 
 		#region TargetName Attached Property
-		public static string GetTargetName(Timeline timeline) => (string)timeline.GetValue(TargetNameProperty);
+		public static string GetTargetName(Timeline element) => (string)element.GetValue(TargetNameProperty);
 
-		public static void SetTargetName(Timeline timeline, string value) => timeline.SetValue(TargetNameProperty, value);
+		public static void SetTargetName(Timeline element, string name) => element.SetValue(TargetNameProperty, name);
 
 		// Using a DependencyProperty as the backing store for TargetName.  This enables animation, styling, binding, etc...
-		public static DependencyProperty TargetNameProperty { get ; } =
-			DependencyProperty.RegisterAttached("TargetName", typeof(string), typeof(Storyboard), new FrameworkPropertyMetadata(null));
+		public static DependencyProperty TargetNameProperty { get; } =
+			DependencyProperty.RegisterAttached("TargetName", typeof(string), typeof(Storyboard), new FrameworkPropertyMetadata(string.Empty));
 		#endregion
 
 		#region TargetProperty Attached Property
-		public static string GetTargetProperty(Timeline timeline) => (string)timeline.GetValue(TargetPropertyProperty);
+		public static string GetTargetProperty(Timeline element) => (string)element.GetValue(TargetPropertyProperty);
 
-		public static void SetTargetProperty(Timeline timeline, string value) => timeline.SetValue(TargetPropertyProperty, value);
+		public static void SetTargetProperty(Timeline element, string path) => element.SetValue(TargetPropertyProperty, path);
 
 		// Using a DependencyProperty as the backing store for TargetProperty.  This enables animation, styling, binding, etc...
-		public static DependencyProperty TargetPropertyProperty { get ; } =
-			DependencyProperty.RegisterAttached("TargetProperty", typeof(string), typeof(Storyboard), new FrameworkPropertyMetadata(null));
+		public static DependencyProperty TargetPropertyProperty { get; } =
+			DependencyProperty.RegisterAttached("TargetProperty", typeof(string), typeof(Storyboard), new FrameworkPropertyMetadata(string.Empty));
 		#endregion
 
 		public static void SetTarget(Timeline timeline, DependencyObject target) => timeline.Target = target;
 
 		/// <summary>
-		/// Explicitly sets the target using an ElementNameSubject, in case of lazy 
+		/// Explicitly sets the target using an ElementNameSubject, in case of lazy
 		/// evaluation of the target element.
 		/// </summary>
 		public static void SetTarget(Timeline timeline, ElementNameSubject target) => timeline.SetElementNameTarget(target);
@@ -77,11 +79,7 @@ namespace Windows.UI.Xaml.Media.Animation
 		/// <param name="child"></param>
 		private void DisposeChildRegistrations(ITimeline child)
 		{
-			if(_childrenSubscriptions.TryGetValue(child, out var disposable))
-			{
-				disposable.Dispose();
-				_childrenSubscriptions.Remove(child);
-			}
+			child.UnregisterListener(this);
 		}
 
 		/// <summary>
@@ -103,7 +101,7 @@ namespace Windows.UI.Xaml.Media.Animation
 					EventOpcode.Start,
 					payload: new[] {
 						this.GetParent()?.GetType().Name,
-						this.GetParent()?.GetDependencyObjectId().ToString(),
+						this.GetParent()?.GetDependencyObjectId().ToString(CultureInfo.InvariantCulture),
 					}
 				);
 			}
@@ -118,7 +116,8 @@ namespace Windows.UI.Xaml.Media.Animation
 
 		private void Play()
 		{
-			if (Children != null && Children.Count > 0)
+			_runningChildren = Children?.Count ?? 0;
+			if (_runningChildren > 0)
 			{
 				for (int i = 0; i < Children.Count; i++)
 				{
@@ -126,25 +125,24 @@ namespace Windows.UI.Xaml.Media.Animation
 
 					DisposeChildRegistrations(child);
 
-					_runningChildren++;
-					child.Completed += Child_Completed;
-					child.Failed += Child_Failed;
-
-					_childrenSubscriptions.Add(
-						child,
-						Disposable.Create(() => {
-							child.Completed -= Child_Completed;
-							child.Failed -= Child_Failed;
-						})
-					);
+					child.RegisterListener(this);
 
 					child.Begin();
 				}
 			}
 			else
 			{
-				Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+				_hasScheduledCompletion = true;
+				_ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
 				{
+					_hasScheduledCompletion = false;
+					if (State == TimelineState.Stopped)
+					{
+						// If the storyboard was force-stopped,
+						// we don't stop again and don't trigger Completed.
+						return;
+					}
+
 					// No children, so we complete immediately
 					State = TimelineState.Stopped;
 					OnCompleted();
@@ -158,7 +156,7 @@ namespace Windows.UI.Xaml.Media.Animation
 			{
 				_trace.WriteEventActivity(
 					eventId: TraceProvider.StoryBoard_Stop,
-					opCode: EventOpcode.Stop, 
+					opCode: EventOpcode.Stop,
 					activity: _traceActivity,
 					payload: new object[] { Target?.GetType().ToString(), PropertyInfo?.Path }
 				);
@@ -192,6 +190,11 @@ namespace Windows.UI.Xaml.Media.Animation
 				);
 			}
 
+			if (_hasScheduledCompletion)
+			{
+				return;
+			}
+
 			if (Children != null && Children.Count > 0)
 			{
 				State = TimelineState.Active;
@@ -215,6 +218,11 @@ namespace Windows.UI.Xaml.Media.Animation
 					activity: _traceActivity,
 					payload: new object[] { Target?.GetType().ToString(), PropertyInfo?.Path }
 				);
+			}
+
+			if (_hasScheduledCompletion)
+			{
+				return;
 			}
 
 			State = TimelineState.Paused;
@@ -330,13 +338,8 @@ namespace Windows.UI.Xaml.Media.Animation
 			throw new NotImplementedException();
 		}
 
-		private void Child_Failed(object sender, object e)
+		void ITimelineListener.ChildFailed(Timeline child)
 		{
-			if (!(sender is Timeline child))
-			{
-				return;
-			}
-
 			DisposeChildRegistrations(child);
 
 			Interlocked.Decrement(ref _runningChildren);
@@ -345,13 +348,8 @@ namespace Windows.UI.Xaml.Media.Animation
 			// child, where completed relates to all children being completed.
 		}
 
-		private void Child_Completed(object sender, object e)
+		void ITimelineListener.ChildCompleted(Timeline child)
 		{
-			if (!(sender is Timeline child))
-			{
-				return;
-			}
-
 			DisposeChildRegistrations(child);
 
 			Interlocked.Decrement(ref _runningChildren);
@@ -373,7 +371,7 @@ namespace Windows.UI.Xaml.Media.Animation
 			}
 		}
 
-		protected override void Dispose(bool disposing)
+		private protected override void Dispose(bool disposing)
 		{
 			base.Dispose(disposing);
 
@@ -388,7 +386,7 @@ namespace Windows.UI.Xaml.Media.Animation
 
 		IEnumerable<DependencyObject> IAdditionalChildrenProvider.GetAdditionalChildObjects() => Children;
 
-		void IThemeChangeAware.OnThemeChanged()
+		private protected override void OnThemeChanged()
 		{
 			if (State == TimelineState.Filling)
 			{

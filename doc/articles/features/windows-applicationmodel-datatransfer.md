@@ -1,30 +1,12 @@
-# Uno Support for Windows.ApplicationModel.DataTransfer
+---
+uid: Uno.Features.WAMDataTransfer
+---
 
-## `Clipboard`
+# Sharing Content
 
-| Feature        | Android | iOS | macOS | WASM |
-|----------------|---------|-----|-------|------|
-| SetContent     | ✅      | ✅ | ✅    | ✅ |
-| GetContent     | ✅      | ✅ | ✅    | ✅ |
-| Flush          | ✅      | ✅ | ✅    | ✅ |
-| Clear          | ✅      | ✅ | ✅    | ✅ |
-| ContentChanged | ✅      | ✅ | ✅    | ✅ |
+The data transfer manager allows sharing content from your application using the OS sharing dialog. To check whether sharing is supported at runtime, use `IsSupported()` method:
 
-### Limitations
-
-`SetContent` and `GetContent` APIs currently support textual data on all platforms. On Android, they also support URI and HTML formats, but clipboard can hold only one item. Setting multiple items at once does not work reliably.
-
-`Flush` operation has an empty implementation. In contrast to UWP, on other platforms data automatically remain in the clipboard even after application is closed.
-
-`ContentChanged` event can observe clipboard changes only when the application is in the foreground.
-
-On macOS, the `ContentChanged` event checks for clipboard changes by polling the current `NSPasteboard` change count in 1 second intervals. The polling starts only after first subscriber attaches to `ContentChanged` event and stops after the last subscriber unsubscribes.
-
-## `DataTransferManager`
-
-Data transfer manager allows sharing content from your application using the OS sharing dialog. To check whether sharing is supported at runtime, use `IsSupported()` method:
-
-```
+```csharp
 if (DataTransferManager.IsSupported())
 {
     // Sharing is supported    
@@ -33,25 +15,25 @@ if (DataTransferManager.IsSupported())
 
 Currently, the following types of content can be shared:
 
-| Type of content   | Android | iOS | macOS | WASM | Tizen |
-|-------------------|---------|-----|-------|------| ----- |
-| Text              | ✅      | ✅ | ✅    | ✅  | ✅    |
-| Uri               | ✅      | ✅ | ✅    | ✅  |✅     |
-| File              | ❌      | ❌ | ❌    | ❌  |❌     |   
+| Type of content | Android | iOS | macOS | WASM | Tizen |
+|-----------------|---------|-----|-------|------|-------|
+| Text            | ✔       | ✔   | ✔     | ✔    | ✔     |
+| Uri             | ✔       | ✔   | ✔     | ✔    | ✔     |
+| File            | ✖       | ✖   | ✖     | ✖    | ✖     |
 
 To set up the `DataTransferManager` use the following snippet:
 
-```
+```csharp
 var dataTransferManager = DataTransferManager.GetForCurrentView();
 dataTransferManager.DataRequested += DataRequested;
-dataTransferManager.ShowShareUI();
+DataTransferManager.ShowShareUI();
 ```
 
 Make sure to unregister the `DataRequested` event after finished sharing.
 
 In the `DataRequested` method, you can set the data to be shared in the `DataRequestedEventArgs`:
 
-```
+```csharp
 private void DataRequested(DataTransferManager sender, DataRequestedEventArgs args)
 {        
     args.Request.Data.Properties.Title = "Sharing dialog title";
@@ -64,7 +46,7 @@ private void DataRequested(DataTransferManager sender, DataRequestedEventArgs ar
 
 If you need to prepare the data asynchronously, you can use a deferral:
 
-```
+```csharp
 private async void DataRequested(DataTransferManager sender, DataRequestedEventArgs args)
 {        
     var deferral = args.Request.GetDeferral();
@@ -81,4 +63,14 @@ private async void DataRequested(DataTransferManager sender, DataRequestedEventA
 
 To control the location where the sharing dialog shows up on iOS and macOS, use the `ShowShareUI(ShareUIOptions)` overload. `ShareUIOptions.SelectionRect` denotes the area the user is interacting with and will be taken into account by the OS. On iOS, you can also specify `ShareUIOptions.Theme` to make the dialog dark/light based on your app's preference. On other Uno targets, these properties have no effect.
 
-On Tizen, the `"http://tizen.org/privilege/appmanager.launch` privilege must be declared in the application manifest to allow sharing.
+On Tizen, the `http://tizen.org/privilege/appmanager.launch` privilege must be declared in the application manifest to allow sharing.
+
+```xml
+<privileges>
+    <privilege>http://tizen.org/privilege/appmanager.launch</privilege>
+</privileges>
+```
+
+## Windows App SDK Usage
+
+In the case of Windows App SDK, a different initialization approach is currently unfortunately required due to the multi-window capabilities of the framework. Please, follow the [official documentation](https://learn.microsoft.com/windows/apps/develop/ui-input/display-ui-objects#winui-3-with-c-also-wpfwinforms-with-net-6-or-later-1) and wrap the Windows-specific code in `#if WINDOWS` blocks.

@@ -1,12 +1,12 @@
-// Copyright (c) Microsoft Corporation. All rights reserved.
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
-namespace Microsoft.UI.Xaml.Controls
+namespace Microsoft/* UWP don't rename */.UI.Xaml.Controls
 {
 	internal partial class ChildrenInTabFocusOrderIterable : IEnumerable<DependencyObject>
 	{
@@ -24,7 +24,7 @@ namespace Microsoft.UI.Xaml.Controls
 		private class ChildrenInTabFocusOrderIterator : IEnumerator<DependencyObject>
 		{
 			private readonly List<KeyValuePair<int /* index */, UIElement>> m_realizedChildren;
-			private int m_index = 0;
+			private int m_index = -1;
 
 			public ChildrenInTabFocusOrderIterator(ItemsRepeater repeater)
 			{
@@ -75,7 +75,7 @@ namespace Microsoft.UI.Xaml.Controls
 				}
 			}
 
-			public void Reset() { }
+			public void Reset() => m_index = -1;
 			public void Dispose() { }
 		}
 	}

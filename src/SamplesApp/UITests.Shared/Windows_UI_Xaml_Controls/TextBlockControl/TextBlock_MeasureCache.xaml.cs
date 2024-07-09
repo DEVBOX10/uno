@@ -1,11 +1,11 @@
 ﻿using System.Threading.Tasks;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 using Uno.UI.Samples.Controls;
 using Uno.UI;
 
 namespace UITests.Windows_UI_Xaml_Controls.TextBlockControl
 {
-	[Sample]
+	[Sample("TextBlock")]
 	public sealed partial class TextBlock_MeasureCache : Page
 	{
 		public TextBlock_MeasureCache()

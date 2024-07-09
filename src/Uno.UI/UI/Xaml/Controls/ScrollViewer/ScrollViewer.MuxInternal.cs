@@ -1,31 +1,51 @@
 ﻿#nullable enable
 
 using System;
-using System.Collections.Generic;
-using System.Text;
-using Windows.Foundation;
-using Windows.UI.Xaml.Automation.Peers;
 using DirectUI;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using Uno.Disposables;
 using Uno.UI.DataBinding;
 using Uno.UI.Xaml.Controls;
+using Uno.UI.Xaml.Core;
+using Uno.UI.Xaml.Input;
+using Windows.Foundation;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	partial class ScrollViewer
 	{
 		private IDisposable? _directManipulationHandlerSubscription;
 
+		private bool m_isPointerLeftButtonPressed;
+
 		internal bool m_templatedParentHandlesMouseButton;
 
 		// Indicates whether ScrollViewer should ignore mouse wheel scroll events (not zoom).
-		internal bool ArePointerWheelEventsIgnored { get; set; } = false;
+		internal bool ArePointerWheelEventsIgnored { get; set; }
 		internal bool IsInManipulation => IsInDirectManipulation || m_isInConstantVelocityPan;
 
 		/// <summary>
 		/// Gets or set whether the <see cref="ScrollViewer"/> will allow scrolling outside of the ScrollViewer's Child bound.
-		/// </summary>		
-		internal bool ForceChangeToCurrentView { get; set; } = false;
+		/// </summary>
+		///
+		private bool _forceChangeToCurrentView;
+		internal bool ForceChangeToCurrentView
+		{
+			get => _forceChangeToCurrentView;
+			set
+			{
+				_forceChangeToCurrentView = value;
+
+#if __WASM__ || __SKIA__
+				if (_presenter != null)
+				{
+					_presenter.ForceChangeToCurrentView = value;
+				}
+#endif
+			}
+		}
 		internal bool IsInDirectManipulation { get; }
 		internal bool TemplatedParentHandlesScrolling { get; set; }
 		internal Func<AutomationPeer>? AutomationPeerFactoryIndex { get; set; }
@@ -72,6 +92,63 @@ namespace Windows.UI.Xaml.Controls
 					h.NotifyStateChange(DMManipulationState.DMManipulationCompleted, default, default, default, default, default, default, default, default);
 				}
 			}
+		}
+
+		protected override void OnPointerPressed(PointerRoutedEventArgs pArgs)
+		{
+			// If our templated parent is handling mouse button, we should not take
+			// focus away.  They're handling it, not us.
+			if (m_templatedParentHandlesMouseButton)
+			{
+				return;
+			}
+
+			var spPointerPoint = pArgs.GetCurrentPoint(this);
+			var spPointerProperties = spPointerPoint.Properties;
+			m_isPointerLeftButtonPressed = spPointerProperties.IsLeftButtonPressed;
+
+			// Don't handle PointerPressed event to raise up
+		}
+
+		protected override void OnPointerReleased(PointerRoutedEventArgs args)
+		{
+			if (m_isPointerLeftButtonPressed)
+			{
+				m_isPointerLeftButtonPressed = false;
+
+				var isFocusedOnLightDismissPopupOfFlyout = ScrollContentControl_SetFocusOnFlyoutLightDismissPopupByPointer(this);
+				if (isFocusedOnLightDismissPopupOfFlyout)
+				{
+					args.Handled = true;
+				}
+				else
+				{
+					args.Handled = Focus(FocusState.Pointer);
+				}
+			}
+		}
+
+		private static bool ScrollContentControl_SetFocusOnFlyoutLightDismissPopupByPointer(UIElement pScrollContentControl)
+		{
+			PopupRoot? pPopupRoot = null;
+			Popup? pPopup = null;
+
+			if (pScrollContentControl.GetRootOfPopupSubTree() is not null)
+			{
+				pPopupRoot = VisualTree.GetPopupRootForElement(pScrollContentControl);
+				if (pPopupRoot is not null)
+				{
+					pPopup = pPopupRoot.GetTopmostPopup(PopupRoot.PopupFilter.LightDismissOnly);
+					// Uno-specific: We don't yet have GetSavedFocusState()
+					if (pPopup is not null && FocusSelection.ShouldUpdateFocus(pPopup.Child, pPopup.FocusState/*.GetSavedFocusState()*/) && pPopup.IsForFlyout)
+					{
+						bool wasFocusUpdated = pPopup.Focus(FocusState.Pointer, false /*animateIfBringIntoView*/);
+						return wasFocusUpdated;
+					}
+				}
+			}
+
+			return false;
 		}
 	}
 

@@ -6,12 +6,12 @@ using Uno.UI.Samples.Controls;
 
 namespace MUXControlsTestApp
 {
-	[Sample("NavigationView", "WinUI")]
-    public sealed partial class NavigationViewMenuItemStretchPage : TestPage
+	[Sample("NavigationView", "MUX")]
+	public sealed partial class NavigationViewMenuItemStretchPage : TestPage
 	{
-        public NavigationViewMenuItemStretchPage()
-        {
-            this.InitializeComponent();
-        }
-    }
+		public NavigationViewMenuItemStretchPage()
+		{
+			this.InitializeComponent();
+		}
+	}
 }

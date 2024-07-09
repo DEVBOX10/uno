@@ -1,11 +1,11 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Windows.UI.Core;
 using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Uno.UI.Samples.Content.UITests.TextBlockControl
 {
-	[SampleControlInfo("TextBlockControl", "SimpleText_MaxLines_Two_With_Wrap", description: "This sample shows a very long line that should wrap on a maximum of two lines.")]
+	[SampleControlInfo("TextBlock", "SimpleText_MaxLines_Two_With_Wrap", description: "This sample shows a very long line that should wrap on a maximum of two lines.")]
 	public sealed partial class SimpleText_MaxLines_Two_With_Wrap : Page
 	{
 		public SimpleText_MaxLines_Two_With_Wrap()

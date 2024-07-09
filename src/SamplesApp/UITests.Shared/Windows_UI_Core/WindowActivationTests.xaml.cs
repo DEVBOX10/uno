@@ -4,26 +4,29 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using Uno.Disposables;
 using Uno.UI.Samples.Controls;
 using Uno.UI.Samples.UITests.Helpers;
+using Windows.ApplicationModel.Core;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
 using Windows.UI.Core;
 using Windows.UI.WebUI;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Navigation;
-using XamlWindow = Windows.UI.Xaml.Window;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Navigation;
+using XamlWindow = Microsoft.UI.Xaml.Window;
 
 namespace UITests.Windows_UI_Core
 {
-	[SampleControlInfo("Windows.UI.Core", viewModelType: typeof(WindowActivationViewModel))]
+	[SampleControlInfo("Windows.UI.Core", controlName: "Application/Window lifecycle events", viewModelType: typeof(WindowActivationViewModel), isManualTest: true)]
 	public sealed partial class WindowActivationTests : Page
 	{
 		public WindowActivationTests()
@@ -47,27 +50,52 @@ namespace UITests.Windows_UI_Core
 		private CoreWindowActivationMode? _coreWindowActivationMode = Window.Current.CoreWindow.ActivationMode;
 		private string _windowVisibility = Window.Current.Visible ? "Visible" : "Hidden";
 
-		public WindowActivationViewModel(CoreDispatcher dispatcher) : base(dispatcher)
+		public WindowActivationViewModel(Private.Infrastructure.UnitTestDispatcherCompat dispatcher) : base(dispatcher)
 		{
-			CoreWindow.GetForCurrentThread().Activated += CoreWindowActivated;
+			var coreWindow = CoreWindow.GetForCurrentThread();
+			if (coreWindow is not null)
+			{
+				coreWindow.Activated += CoreWindowActivated;
+			}
 			XamlWindow.Current.Activated += WindowActivated;
 			XamlWindow.Current.VisibilityChanged += WindowVisibilityChanged;
+#if !WINAPPSDK
 			Application.Current.EnteredBackground += AppEnteredBackground;
 			Application.Current.LeavingBackground += AppLeavingBackground;
+			Application.Current.Suspending += ApplicationSuspending;
+			Application.Current.Resuming += ApplicationResuming;
+#endif
+			CoreApplication.EnteredBackground += CoreApplicationEnteredBackground;
+			CoreApplication.LeavingBackground += CoreApplicationLeavingBackground;
+			CoreApplication.Suspending += CoreApplicationSuspending;
+			CoreApplication.Resuming += CoreApplicationResuming;
 
 			Disposables.Add(() =>
 			{
-				CoreWindow.GetForCurrentThread().Activated -= CoreWindowActivated;
+				if (coreWindow is not null)
+				{
+					coreWindow.Activated -= CoreWindowActivated;
+				}
 				XamlWindow.Current.Activated -= WindowActivated;
 				XamlWindow.Current.VisibilityChanged -= WindowVisibilityChanged;
+#if !WINAPPSDK
 				Application.Current.EnteredBackground -= AppEnteredBackground;
 				Application.Current.LeavingBackground -= AppLeavingBackground;
+				Application.Current.Suspending -= ApplicationSuspending;
+				Application.Current.Resuming -= ApplicationResuming;
+#endif
+				CoreApplication.EnteredBackground -= CoreApplicationEnteredBackground;
+				CoreApplication.LeavingBackground -= CoreApplicationLeavingBackground;
+				CoreApplication.Suspending -= CoreApplicationSuspending;
+				CoreApplication.Resuming -= CoreApplicationResuming;
 			});
 		}
 
 		public ObservableCollection<string> History { get; } = new ObservableCollection<string>();
 
 		public ICommand ClearHistoryCommand => GetOrCreateCommand(() => History.Clear());
+
+		public ICommand CopyToClipboardCommand => GetOrCreateCommand(() => CopyToClipboard());
 
 		public CoreWindowActivationState? CoreWindowActivationState
 		{
@@ -88,6 +116,8 @@ namespace UITests.Windows_UI_Core
 				RaisePropertyChanged();
 			}
 		}
+
+		public bool SimulateDeferrals { get; set; }
 
 		public string WindowVisibility
 		{
@@ -117,32 +147,110 @@ namespace UITests.Windows_UI_Core
 		}
 
 		private void WindowActivated(object sender,
-#if HAS_UNO_WINUI
-			Microsoft.UI.Xaml.WindowActivatedEventArgs e
+#if HAS_UNO_WINUI || WINAPPSDK
+			Microsoft/* UWP don't rename */.UI.Xaml.WindowActivatedEventArgs e
 #else
 			Windows.UI.Core.WindowActivatedEventArgs e
 #endif
 			)
 		{
+#if !WINAPPSDK
 			CoreWindowActivationState = e.WindowActivationState;
+#endif
 			AddHistory("Window.Activated");
 		}
 
+#if WINAPPSDK
+		private void WindowVisibilityChanged(object sender, WindowVisibilityChangedEventArgs e)
+#else
 		private void WindowVisibilityChanged(object sender, VisibilityChangedEventArgs e)
+#endif
 		{
 			WindowVisibility = XamlWindow.Current.Visible ? "Visible" : "Hidden";
 			AddHistory("Window.VisibilityChanged");
 		}
 
 
-		private void AppLeavingBackground(object sender, Windows.ApplicationModel.LeavingBackgroundEventArgs e)
+		private async void AppLeavingBackground(object sender, Windows.ApplicationModel.LeavingBackgroundEventArgs e)
 		{
-			AddHistory("Application.LeavingBackground");
+			AddHistory("Application.LeavingBackground started");
+			if (SimulateDeferrals)
+			{
+				var deferral = e.GetDeferral();
+				await Task.Delay(500);
+				deferral.Complete();
+			}
+			AddHistory("Application.LeavingBackground ended");
 		}
 
-		private void AppEnteredBackground(object sender, Windows.ApplicationModel.EnteredBackgroundEventArgs e)
+		private async void CoreApplicationLeavingBackground(object sender, Windows.ApplicationModel.LeavingBackgroundEventArgs e)
 		{
-			AddHistory("Application.EnteredBackground");
+			AddHistory("CoreApplication.LeavingBackground started");
+			if (SimulateDeferrals)
+			{
+				var deferral = e.GetDeferral();
+				await Task.Delay(500);
+				deferral.Complete();
+			}
+			AddHistory("CoreApplication.LeavingBackground ended");
+		}
+
+		private async void AppEnteredBackground(object sender, Windows.ApplicationModel.EnteredBackgroundEventArgs e)
+		{
+			AddHistory("Application.EnteredBackground started");
+			if (SimulateDeferrals)
+			{
+				var deferral = e.GetDeferral();
+				await Task.Delay(500);
+				deferral.Complete();
+			}
+			AddHistory("Application.EnteredBackground ended");
+		}
+
+		private async void CoreApplicationEnteredBackground(object sender, Windows.ApplicationModel.EnteredBackgroundEventArgs e)
+		{
+			AddHistory("CoreApplication.EnteredBackground started");
+			if (SimulateDeferrals)
+			{
+				var deferral = e.GetDeferral();
+				await Task.Delay(500);
+				deferral.Complete();
+			}
+			AddHistory("CoreApplication.EnteredBackground ended");
+		}
+
+		private void ApplicationResuming(object sender, object e)
+		{
+			AddHistory("Application.Resuming");
+		}
+
+		private void CoreApplicationResuming(object sender, object e)
+		{
+			AddHistory("CoreApplication.Resuming");
+		}
+
+		private async void CoreApplicationSuspending(object sender, Windows.ApplicationModel.SuspendingEventArgs e)
+		{
+			AddHistory("CoreApplication.Suspending started");
+			if (SimulateDeferrals)
+			{
+				var deferral = e.SuspendingOperation.GetDeferral();
+				await Task.Delay(500);
+				deferral.Complete();
+			}
+			AddHistory("CoreApplication.Suspending ended");
+		}
+
+		private async void ApplicationSuspending(object sender, Windows.ApplicationModel.SuspendingEventArgs e)
+		{
+			AddHistory("Application.Suspending started");
+			if (SimulateDeferrals)
+			{
+				var deferral = e.SuspendingOperation.GetDeferral();
+				await Task.Delay(500);
+				deferral.Complete();
+			}
+			AddHistory("Application.Suspending ended");
 		}
 
 		private void AddHistory(string eventName)
@@ -150,8 +258,15 @@ namespace UITests.Windows_UI_Core
 			ChangeTime = DateTime.Now.ToLongTimeString();
 			var historyItem =
 				$"{DateTime.Now.ToLongTimeString()} | {eventName} | State: {CoreWindowActivationState} " +
-				$"| Mode: {CoreWindow.GetForCurrentThread().ActivationMode} | Visibility: {XamlWindow.Current.Visible}";
+				$"| Mode: {CoreWindow.GetForCurrentThread()?.ActivationMode} | Visibility: {XamlWindow.Current.Visible}";
 			History.Insert(0, historyItem);
+		}
+
+		private void CopyToClipboard()
+		{
+			var dataPackage = new DataPackage();
+			dataPackage.SetText(string.Join(Environment.NewLine, History));
+			Clipboard.SetContent(dataPackage);
 		}
 	}
 }

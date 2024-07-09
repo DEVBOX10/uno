@@ -1,18 +1,16 @@
 ﻿using Foundation;
 using Uno.Extensions;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using UIKit;
 using Windows.UI.Core;
 using System.Threading.Tasks;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	public partial class SinglelineTextBoxDelegate : UITextFieldDelegate
 	{
-		private WeakReference<TextBox> _textBox;
+		private readonly WeakReference<TextBox> _textBox;
 
 		public SinglelineTextBoxDelegate(WeakReference<TextBox> textbox)
 		{
@@ -27,18 +25,31 @@ namespace Windows.UI.Xaml.Controls
 
 		public override bool ShouldChangeCharacters(UITextField textField, NSRange range, string replacementString)
 		{
-			var textBoxView = textField as SinglelineTextBoxView;
-			if (textBoxView != null)
+			if (textField is SinglelineTextBoxView textBoxView)
 			{
-                if(_textBox.GetTarget()?.OnKey(replacementString.FirstOrDefault()) ?? false)
-                {
-                    return false;
-                }
-
-                if (_textBox.GetTarget()?.MaxLength > 0)
+				if (_textBox.GetTarget() is not TextBox textBox)
 				{
+					return false;
+				}
+
+				// Both IsReadOnly = true and IsTabStop = false can prevent editing
+				if (textBox.IsReadOnly || !textBox.IsTabStop)
+				{
+					return false;
+				}
+
+				if (textBox.OnKey(replacementString.FirstOrDefault()))
+				{
+					return false;
+				}
+
+				if (textBox.MaxLength > 0)
+				{
+					// When replacing text from pasting (multiple characters at once)
+					// we should only allow it (return true) when the new text length
+					// is lower or equal to the allowed length (TextBox.MaxLength)
 					var newLength = textBoxView.Text.Length + replacementString.Length - range.Length;
-					return newLength <= _textBox.GetTarget()?.MaxLength;
+					return newLength <= textBox.MaxLength;
 				};
 			}
 
@@ -49,7 +60,7 @@ namespace Windows.UI.Xaml.Controls
 		{
 			if (IsKeyboardHiddenOnEnter)
 			{
-				CoreDispatcher.Main.RunAsync(CoreDispatcherPriority.Normal,
+				_ = CoreDispatcher.Main.RunAsync(CoreDispatcherPriority.Normal,
 					async () =>
 					{
 						// Delay losing focus to avoid concurrent interactions when transferring focus to another control. See 101152
@@ -61,18 +72,13 @@ namespace Windows.UI.Xaml.Controls
 			var textBox = textField as SinglelineTextBoxView;
 			if (textBox != null)
 			{
-                if (_textBox.GetTarget()?.OnKey('\n') ?? false)
-                {
-                    return false;
-                }
+				if (_textBox.GetTarget()?.OnKey('\n') ?? false)
+				{
+					return false;
+				}
 			}
 
 			return true;
-		}
-
-		public override bool ShouldBeginEditing(UITextField textField)
-		{
-			return !_textBox.GetTarget()?.IsReadOnly ?? false;
 		}
 
 		/// <summary>
@@ -80,8 +86,10 @@ namespace Windows.UI.Xaml.Controls
 		/// </summary>
 		public override void EditingStarted(UITextField textField)
 		{
-			// Using FocusState.Pointer by default until need to distinguish between Pointer, Programmatic and Keyboard.
-			_textBox.GetTarget()?.Focus(FocusState.Pointer);
+			if (_textBox.GetTarget() is TextBox textBox && textBox.FocusState == FocusState.Unfocused)
+			{
+				textBox.Focus(FocusState.Pointer);
+			}
 		}
 
 		/// <summary>
@@ -89,8 +97,10 @@ namespace Windows.UI.Xaml.Controls
 		/// </summary>
 		public override void EditingEnded(UITextField textField)
 		{
-			// TODO: Remove when Focus is implemented correctly
-			_textBox.GetTarget()?.Unfocus();
+			if (_textBox.GetTarget() is TextBox { FocusState: not FocusState.Unfocused, IsKeepingFocusOnEndEditing: false } textBox)
+			{
+				textBox.Unfocus();
+			}
 		}
 	}
 }

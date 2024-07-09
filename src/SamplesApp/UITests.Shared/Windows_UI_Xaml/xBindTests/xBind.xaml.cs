@@ -1,9 +1,10 @@
 ﻿using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
+using Private.Infrastructure;
 
 namespace UITests.Shared.Windows_UI_Xaml.xBind
 {
-	[SampleControlInfo("XBind", "xBind")]
+	[SampleControlInfo("x:Bind", "xBind")]
 	public sealed partial class xBind : UserControl
 	{
 		internal XbindViewModel ViewModel { get; set; }
@@ -12,7 +13,7 @@ namespace UITests.Shared.Windows_UI_Xaml.xBind
 		{
 			this.InitializeComponent();
 
-			ViewModel = new XbindViewModel(Dispatcher);
+			ViewModel = new XbindViewModel(UnitTestDispatcherCompat.From(this));
 		}
 	}
 }

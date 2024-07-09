@@ -6,19 +6,19 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
 using Windows.UI;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Media.Imaging;
-using Windows.UI.Xaml.Navigation;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml.Navigation;
 using Uno.UI.Samples.Controls;
 
 namespace UITests.Windows_UI_Xaml_Media.ImageBrushTests
 {
-	[Sample("ImageBrushTestControl", "WriteableBitmap", IgnoreInSnapshotTests = true)]
+	[Sample("Brushes", "WriteableBitmap", IgnoreInSnapshotTests = true)]
 	public sealed partial class ImageBrush_WriteableBitmap : Page
 	{
 		public ImageBrush_WriteableBitmap()

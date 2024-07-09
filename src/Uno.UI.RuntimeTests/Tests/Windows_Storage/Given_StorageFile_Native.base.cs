@@ -33,7 +33,7 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_Storage
 		}
 
 		[TestMethod]
-#if WINDOWS_UWP
+#if WINAPPSDK
 		[Ignore("On UWP, DisplayName sometimes returns the name with, and sometimes without the extension.")]
 #endif
 		public async Task When_CreateFile_DisplayName_Matches()
@@ -202,7 +202,7 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_Storage
 		}
 
 		[TestMethod]
-#if WINDOWS_UWP
+#if WINAPPSDK
 		[Ignore("UWP is unable to handle going up a level for picked folders")]
 #endif
 		public async Task When_GetParent()
@@ -276,7 +276,7 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_Storage
 
 				try
 				{
-					stream.FlushAsync();
+					await stream.FlushAsync();
 				}
 				catch (Exception ex)
 				{

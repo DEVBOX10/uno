@@ -7,18 +7,18 @@ using System.Threading.Tasks;
 using Windows.ApplicationModel.Appointments;
 using Windows.Foundation;
 using Windows.UI;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Media;
 using FluentAssertions.Execution;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Private.Infrastructure;
 using Uno.Extensions;
 using DependencyObjectExtensions = Uno.UI.Extensions.DependencyObjectExtensions;
 using static Private.Infrastructure.TestServices.WindowHelper;
-using Windows.UI.Xaml.Shapes;
+using Microsoft.UI.Xaml.Shapes;
 using Uno.UI.RuntimeTests.Helpers;
 
 #if __IOS__
@@ -31,11 +31,11 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 {
 	public partial class Given_UIElement
 	{
-#if __SKIA__
-		[Ignore("https://github.com/unoplatform/uno/issues/7271")]
-#endif
 		[TestMethod]
 		[RunsOnUIThread]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
 		public async Task When_TransformToVisual_WithMargin()
 		{
 			FrameworkElement inner = new Border { Width = 100, Height = 100, Background = new SolidColorBrush(Colors.DarkBlue) };
@@ -43,9 +43,9 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 			FrameworkElement container = new Border
 			{
 				Child = inner,
-				Margin = ThicknessHelper.FromLengths(1, 3, 5, 7),
-				Padding = ThicknessHelper.FromLengths(11, 13, 17, 19),
-				BorderThickness = ThicknessHelper.FromUniformLength(23),
+				Margin = new Thickness(1, 3, 5, 7),
+				Padding = new Thickness(11, 13, 17, 19),
+				BorderThickness = new Thickness(23),
 				HorizontalAlignment = HorizontalAlignment.Right,
 				VerticalAlignment = VerticalAlignment.Bottom,
 				Background = new SolidColorBrush(Colors.DarkSalmon)
@@ -53,8 +53,8 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 			FrameworkElement outer = new Border
 			{
 				Child = container,
-				Padding = ThicknessHelper.FromUniformLength(8),
-				BorderThickness = ThicknessHelper.FromUniformLength(2),
+				Padding = new Thickness(8),
+				BorderThickness = new Thickness(2),
 				Width = 300,
 				Height = 300,
 				Background = new SolidColorBrush(Colors.MediumSeaGreen)
@@ -74,9 +74,13 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 			Assert.AreEqual("111;105;174;178|145;141;100;100", str);
 		}
 
-#if !WINDOWS_UWP // Cannot create a DataTemplate on UWP
+#if !WINAPPSDK // Cannot create a DataTemplate on UWP
 		[TestMethod]
 		[RunsOnUIThread]
+
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
 		public async Task When_TransformToVisual_ThroughListView()
 		{
 			var listView = new ListView
@@ -108,8 +112,8 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 
 			AssertItem(0); // Top item, fully visible
 			AssertItem(2); // Bottom item, partially visible
-			// AssertItem(5); // Overflowing item, not materialized => No container for this
-			// AssertItem(9); // Last item, definitely not materialized => No container for this
+						   // AssertItem(5); // Overflowing item, not materialized => No container for this
+						   // AssertItem(9); // Last item, definitely not materialized => No container for this
 
 			void AssertItem(int index)
 			{
@@ -150,6 +154,9 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 #endif
 		[TestMethod]
 		[RunsOnUIThread]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
 		public async Task When_TransformToVisual_Through_ListView_Scrolled()
 		{
 			var listView = new ListView
@@ -202,6 +209,9 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 
 		[TestMethod]
 		[RunsOnUIThread]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282! epic")]
+#endif
 		public async Task When_TransformToVisual_WithTransformOrigin()
 		{
 			var sut = new Border
@@ -231,6 +241,9 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 
 		[TestMethod]
 		[RunsOnUIThread]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
 		public async Task When_TransformToVisual_From_ScrollViewer()
 		{
 			var innerBorder = new Border
@@ -309,6 +322,9 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 
 		[TestMethod]
 		[RunsOnUIThread]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282! epic")]
+#endif
 		#region DataRows
 		[DataRow(HorizontalAlignment.Left, VerticalAlignment.Top, 0, 0)]
 		[DataRow(HorizontalAlignment.Left, VerticalAlignment.Top, 10, 0)]
@@ -409,6 +425,9 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 
 		[TestMethod]
 		[RunsOnUIThread]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
 		#region DataRows
 		[DataRow(HorizontalAlignment.Left, VerticalAlignment.Top, 0, 0, false, false)]
 		[DataRow(HorizontalAlignment.Left, VerticalAlignment.Top, 10, 0, false, false)]
@@ -716,6 +735,9 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 
 		[TestMethod]
 		[RunsOnUIThread]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
 		#region DataRows
 		[DataRow(HorizontalAlignment.Left, VerticalAlignment.Top, 0, 0, false, false)]
 		[DataRow(HorizontalAlignment.Left, VerticalAlignment.Top, 10, 0, false, false)]
@@ -1025,6 +1047,7 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 						Margin = new Thickness(margin),
 						BorderBrush = new SolidColorBrush(Colors.Red),
 						BorderThickness = new Thickness(border),
+						Background = new SolidColorBrush(Colors.Pink),
 						Width = 300,
 						Height = 300,
 						HorizontalAlignment = hAlign,
@@ -1044,7 +1067,7 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 				sv.ChangeView(offset.x, offset.y, zoomFactor: null, disableAnimation: true);
 
 				await RetryAssert(
-					$"scrolled to ({offset.x},{offset.y})",
+					$"after scrolled to ({offset.x},{offset.y}), actual rect is ",
 					() =>
 					{
 						var expected = new Rect(margin - offset.x, margin - offset.y, sut.Width, sut.Height);
@@ -1077,6 +1100,195 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 				}
 			}
 		}
+
+		[TestMethod]
+		[RunsOnUIThread]
+		public async Task When_Not_InLiveVisualTree()
+		{
+			var inner = new Rectangle
+			{
+				Margin = new Thickness(10),
+				Width = 150,
+				Height = 150,
+				Fill = new SolidColorBrush(Microsoft.UI.Colors.Green)
+			};
+			var outer = new Border
+			{
+				HorizontalAlignment = HorizontalAlignment.Right,
+				Child = inner
+			};
+			var root = new Grid
+			{
+				Width = 200,
+				Margin = new Thickness(10),
+				Children =
+				{
+					outer
+				}
+			};
+			await UITestHelper.Load(root);
+
+			Assert.IsFalse(((MatrixTransform)inner.TransformToVisual(null)).Matrix.IsIdentity);
+			Assert.IsFalse(((MatrixTransform)outer.TransformToVisual(null)).Matrix.IsIdentity);
+			Assert.IsFalse(((MatrixTransform)root.TransformToVisual(null)).Matrix.IsIdentity);
+			Assert.IsFalse(((MatrixTransform)inner.TransformToVisual(outer)).Matrix.IsIdentity);
+			Assert.IsFalse(((MatrixTransform)outer.TransformToVisual(root)).Matrix.IsIdentity);
+			Assert.IsFalse(((MatrixTransform)root.TransformToVisual((UIElement)root.Parent)).Matrix.IsIdentity);
+
+			WindowContent = null;
+
+			Assert.IsTrue(((MatrixTransform)inner.TransformToVisual(null)).Matrix.IsIdentity);
+			Assert.IsTrue(((MatrixTransform)outer.TransformToVisual(null)).Matrix.IsIdentity);
+			Assert.IsTrue(((MatrixTransform)root.TransformToVisual(null)).Matrix.IsIdentity);
+			Assert.IsTrue(((MatrixTransform)inner.TransformToVisual(outer)).Matrix.IsIdentity);
+			Assert.IsTrue(((MatrixTransform)outer.TransformToVisual(root)).Matrix.IsIdentity);
+			Assert.IsTrue(((MatrixTransform)root.TransformToVisual((UIElement)root.Parent)).Matrix.IsIdentity);
+		}
+
+		[TestMethod]
+		[RunsOnUIThread]
+		[RequiresFullWindow]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
+		public async Task When_Basic_Triple_Nesting()
+		{
+			var setup = await SetupTripleScrollViewerScenarioAsync();
+
+			var innerPoint = GetTransformedPoint(setup.item, setup.inner);
+			var middlePoint = GetTransformedPoint(setup.item, setup.middle);
+			var outerPoint = GetTransformedPoint(setup.item, setup.outer);
+
+			Assert.AreEqual(new Point(60, 60), innerPoint);
+			Assert.AreEqual(new Point(80, 80), middlePoint);
+			Assert.AreEqual(new Point(100, 100), outerPoint);
+		}
+
+		[TestMethod]
+		[RunsOnUIThread]
+		[RequiresFullWindow]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
+		public async Task When_Triple_Nesting_Margin_Item()
+		{
+			var setup = await SetupTripleScrollViewerScenarioAsync();
+
+			setup.item.Margin = new Thickness(0, 500, 0, 0);
+
+			await WaitForIdle();
+
+			var innerPoint = GetTransformedPoint(setup.item, setup.inner);
+			var middlePoint = GetTransformedPoint(setup.item, setup.middle);
+			var outerPoint = GetTransformedPoint(setup.item, setup.outer);
+
+			Assert.AreEqual(new Point(60, 520), innerPoint);
+			Assert.AreEqual(new Point(80, 540), middlePoint);
+			Assert.AreEqual(new Point(100, 560), outerPoint);
+		}
+
+		[TestMethod]
+		[RunsOnUIThread]
+		[RequiresFullWindow]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
+		public async Task When_Triple_Nesting_Scroll_Paddings()
+		{
+			var setup = await SetupTripleScrollViewerScenarioAsync();
+
+			setup.item.Margin = new Thickness(0, 500, 0, 0);
+			setup.middle.Padding = new Thickness(30, 300, 0, 0);
+			setup.outer.Padding = new Thickness(0, 200, 10, 0);
+
+			await WaitForIdle();
+
+			var innerPoint = GetTransformedPoint(setup.item, setup.inner);
+			var middlePoint = GetTransformedPoint(setup.item, setup.middle);
+			var outerPoint = GetTransformedPoint(setup.item, setup.outer);
+
+			Assert.AreEqual(new Point(80, 520), innerPoint);
+			Assert.AreEqual(new Point(110, 820), middlePoint);
+			Assert.AreEqual(new Point(110, 1020), outerPoint);
+		}
+
+		[TestMethod]
+		[RunsOnUIThread]
+		[RequiresFullWindow]
+#if __MACOS__
+		[Ignore("Currently fails on macOS, part of #9282 epic")]
+#endif
+		public async Task When_Double_Nesting_Scroll_Offsets()
+		{
+			var outer = new ScrollViewer()
+			{
+				Padding = new Thickness(20),
+				Width = 300,
+				Height = 300,
+				Background = new SolidColorBrush(Colors.Red)
+			};
+			var inner = new ScrollViewer()
+			{
+				Padding = new Thickness(20),
+				Width = 400,
+				Height = 400,
+				Background = new SolidColorBrush(Colors.Yellow)
+			};
+			var item = new Border()
+			{
+				Width = 500,
+				Height = 500,
+				Background = new SolidColorBrush(Colors.Green)
+			};
+			outer.Content = inner;
+			inner.Content = item;
+
+			WindowContent = outer;
+
+			await WaitForLoaded(outer);
+			await WaitForIdle();
+
+			inner.ChangeView(0, 100, null, true);
+
+			var innerPoint = GetTransformedPoint(item, inner);
+			var outerPoint = GetTransformedPoint(item, outer);
+
+			Assert.AreEqual(new Point(20, -80), innerPoint);
+			Assert.AreEqual(new Point(40, -60), outerPoint);
+		}
+
+#if __ANDROID__
+		[TestMethod]
+		[RequiresFullWindow]
+		[RunsOnUIThread]
+		public async Task When_Offset_Within_Native_View()
+		{
+			var item = new Border()
+			{
+				Width = 100,
+				Height = 100,
+				Background = new SolidColorBrush(Colors.Red)
+			};
+
+			var innerNativeContainer = new Android.Widget.LinearLayout(ContextHelper.Current);
+			innerNativeContainer.SetPadding(33, 22, 0, 0);
+			innerNativeContainer.AddChild(item);
+
+			var outerNativeContainer = new Android.Widget.LinearLayout(ContextHelper.Current);
+			outerNativeContainer.SetPadding(7, 8, 0, 0);
+			outerNativeContainer.AddChild(innerNativeContainer);
+
+			var root = new ContentControl { Content = outerNativeContainer };
+
+			WindowContent = root;
+			await WaitForLoaded(root);
+			await WaitForIdle();
+
+			var point = item.TransformToVisual(root).TransformPoint(default);
+
+			Assert.AreEqual(new Point(40, 30), point);
+		}
+#endif
 
 		private static double X(HorizontalAlignment alignment, double available, double used, double margin)
 			=> alignment switch
@@ -1114,7 +1326,7 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 
 					break;
 				}
-				catch (Exception e)
+				catch (Exception)
 				{
 					if (attempt++ >= 30)
 					{
@@ -1124,6 +1336,49 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml
 					await Task.Delay(10);
 				}
 			}
+		}
+
+		private async Task<(ScrollViewer outer, ScrollViewer middle, ScrollViewer inner, Border item)> SetupTripleScrollViewerScenarioAsync()
+		{
+			var outer = new ScrollViewer()
+			{
+				Padding = new Thickness(20),
+				Width = 300,
+				Height = 300,
+				Background = new SolidColorBrush(Colors.Red)
+			};
+			var middle = new ScrollViewer()
+			{
+				Padding = new Thickness(20),
+				Background = new SolidColorBrush(Colors.Orange)
+			};
+			var inner = new ScrollViewer()
+			{
+				Padding = new Thickness(20),
+				Background = new SolidColorBrush(Colors.Yellow)
+			};
+			var item = new Border()
+			{
+				Width = 100,
+				Height = 100,
+				Background = new SolidColorBrush(Colors.Green)
+			};
+			outer.Content = middle;
+			middle.Content = inner;
+			inner.Content = item;
+
+			WindowContent = outer;
+
+			await WaitForLoaded(outer);
+			await WaitForIdle();
+
+			return (outer, middle, inner, item);
+		}
+
+		private Point GetTransformedPoint(UIElement from, UIElement to)
+		{
+			var transform = from.TransformToVisual(to);
+			return transform.TransformPoint(default(Point));
 		}
 	}
 }

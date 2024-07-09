@@ -1,17 +1,23 @@
-﻿using System;
+﻿#if !NET6_0_OR_GREATER
+using System;
 using System.Threading;
 using Android.Animation;
 using Android.Widget;
-using Com.Airbnb.Lottie;
 using Windows.Foundation;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 using Android.Views;
 using Uno.Disposables;
 using Uno.UI;
 using ViewHelper = Uno.UI.ViewHelper;
 using System.Threading.Tasks;
 
+using Com.Airbnb.Lottie;
+
+#if HAS_UNO_WINUI
+namespace CommunityToolkit.WinUI.Lottie
+#else
 namespace Microsoft.Toolkit.Uwp.UI.Lottie
+#endif
 {
 	partial class LottieVisualSourceBase
 	{
@@ -38,8 +44,6 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 
 			public override void OnAnimationStart(Animator? animation) => _lottieVisualSource.SetIsPlaying(true);
 		}
-
-		public bool UseHardwareAcceleration { get; set; } = true;
 
 		private Uri? _lastSource;
 		private (double fromProgress, double toProgress, bool looped)? _playState;
@@ -75,7 +79,7 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 			async Task SetProperties()
 			{
 				var sourceUri = UriSource;
-				if(_lastSource == null || !_lastSource.Equals(sourceUri))
+				if (_lastSource == null || !_lastSource.Equals(sourceUri))
 				{
 					_lastSource = sourceUri;
 
@@ -109,7 +113,7 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 					else
 					{
 						var path = sourceUri?.PathAndQuery ?? "";
-						if (path.StartsWith("/"))
+						if (path.StartsWith("/", StringComparison.Ordinal))
 						{
 							path = path.Substring(1);
 						}
@@ -132,16 +136,16 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 
 				switch (player.Stretch)
 				{
-					case Windows.UI.Xaml.Media.Stretch.None:
+					case Microsoft.UI.Xaml.Media.Stretch.None:
 						_animation.SetScaleType(ImageView.ScaleType.Center);
 						break;
-					case Windows.UI.Xaml.Media.Stretch.Uniform:
+					case Microsoft.UI.Xaml.Media.Stretch.Uniform:
 						_animation.SetScaleType(ImageView.ScaleType.CenterInside);
 						break;
-					case Windows.UI.Xaml.Media.Stretch.Fill:
+					case Microsoft.UI.Xaml.Media.Stretch.Fill:
 						_animation.SetScaleType(ImageView.ScaleType.FitCenter);
 						break;
-					case Windows.UI.Xaml.Media.Stretch.UniformToFill:
+					case Microsoft.UI.Xaml.Media.Stretch.UniformToFill:
 						_animation.SetScaleType(ImageView.ScaleType.CenterCrop);
 						break;
 				}
@@ -180,12 +184,8 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 			SetIsPlaying(true);
 			if (_animation is { } animation)
 			{
-#if __ANDROID_26__
 				animation.RepeatCount =
 					looped ? ValueAnimator.Infinite : 0; // Repeat count doesn't include first time.
-#else
-				animation.Loop(looped);
-#endif
 				animation.SetMinProgress((float)fromProgress);
 				animation.SetMaxProgress((float)toProgress);
 				animation.PlayAnimation();
@@ -199,6 +199,7 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 			{
 				return;
 			}
+			_playState = null;
 			_animation?.CancelAnimation();
 		}
 
@@ -223,6 +224,7 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 			//Will be overridden in the Play method
 			_animation.SetMinAndMaxProgress(0f, 1f);
 			_animation.Progress = (float)progress;
+			Stop();
 		}
 
 		public void Load()
@@ -260,3 +262,4 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 		}
 	}
 }
+#endif

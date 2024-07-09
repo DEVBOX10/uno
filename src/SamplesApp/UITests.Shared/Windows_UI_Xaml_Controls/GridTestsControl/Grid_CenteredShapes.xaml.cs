@@ -1,9 +1,9 @@
 ﻿using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Uno.UI.Samples.Content.UITests.GridTestsControl
 {
-	[SampleControlInfo]
+	[Sample("Grid")]
 	public sealed partial class Grid_CenteredShapes : Page
 	{
 		public Grid_CenteredShapes()

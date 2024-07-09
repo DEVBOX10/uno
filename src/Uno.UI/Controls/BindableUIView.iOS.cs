@@ -5,20 +5,16 @@ using System.Linq;
 using System.Text;
 using System.Runtime.CompilerServices;
 using System.Drawing;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using Uno.Collections;
 using Uno.Disposables;
 using Uno.Extensions;
 using Uno.UI.DataBinding;
+using ObjCRuntime;
 
-#if XAMARIN_IOS_UNIFIED
 using Foundation;
 using UIKit;
-#elif XAMARIN_IOS
-using MonoTouch.Foundation;
-using MonoTouch.UIKit;
-#endif
 
 namespace Uno.UI.Controls
 {
@@ -79,7 +75,7 @@ namespace Uno.UI.Controls
 			ClipsToBounds = false;
 		}
 
-		public BindableUIView(IntPtr handle)
+		public BindableUIView(NativeHandle handle)
 			: base(handle)
 		{
 			Initialize();

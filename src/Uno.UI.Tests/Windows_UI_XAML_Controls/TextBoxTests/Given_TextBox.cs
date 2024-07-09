@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Data;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 
 namespace Uno.UI.Tests.TextBoxTests
 {
@@ -39,11 +39,19 @@ namespace Uno.UI.Tests.TextBoxTests
 			textBox.Text = "Rhubarb";
 			Assert.AreEqual("Rhubarb", textBox.Text);
 			Assert.AreEqual(1, callbackCount);
-			
+
+#if !HAS_UNO_WINUI
+			// Setting TextBox.Text to null throws an exception in UWP but not WinUI.
 			Assert.ThrowsException<ArgumentNullException>(() => textBox.Text = null);
+#endif
 
 			Assert.AreEqual("Rhubarb", textBox.Text);
 			Assert.AreEqual(1, callbackCount);
+
+#if HAS_UNO_WINUI
+			textBox.Text = null;
+			Assert.AreEqual("", textBox.Text);
+#endif
 		}
 
 		[TestMethod]
@@ -141,6 +149,59 @@ namespace Uno.UI.Tests.TextBoxTests
 			Assert.AreEqual("Hello", textBox.Text);
 		}
 
+		[TestMethod]
+		public void When_SelectedText_StartZero()
+		{
+			var sut = new TextBox();
+			sut.Text = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+			sut.SelectionStart = 0;
+			sut.SelectionLength = 0;
+			sut.SelectedText = "1234";
+
+			Assert.AreEqual("1234ABCDEFGHIJKLMNOPQRSTUVWXYZ", sut.Text);
+		}
+
+		[TestMethod]
+		public void When_SelectedText_EndOfText()
+		{
+			var sut = new TextBox();
+			sut.Text = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+			sut.SelectionStart = 26;
+			sut.SelectedText = "1234";
+
+			Assert.AreEqual("ABCDEFGHIJKLMNOPQRSTUVWXYZ1234", sut.Text);
+		}
+
+		[TestMethod]
+		public void When_SelectedText_MiddleOfText()
+		{
+			var sut = new TextBox();
+			sut.Text = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+			sut.SelectionStart = 2;
+			sut.SelectionLength = 22;
+			sut.SelectedText = "1234";
+
+			Assert.AreEqual("AB1234YZ", sut.Text);
+		}
+
+		[TestMethod]
+		public void When_SelectedText_AllTextToEmpty()
+		{
+			var sut = new TextBox();
+			sut.Text = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+			sut.SelectionStart = 0;
+			sut.SelectionLength = 26;
+			sut.SelectedText = String.Empty;
+
+			Assert.AreEqual(String.Empty, sut.Text);
+			Assert.AreEqual(0, sut.SelectionStart);
+			Assert.AreEqual(0, sut.SelectionLength);
+		}
+
 		public class MySource : System.ComponentModel.INotifyPropertyChanged
 		{
 			private string _sourceText;
@@ -153,7 +214,7 @@ namespace Uno.UI.Tests.TextBoxTests
 					if (_sourceText != value)
 					{
 						_sourceText = value;
-						OnPropertyChanged(); 
+						OnPropertyChanged();
 					}
 				}
 			}

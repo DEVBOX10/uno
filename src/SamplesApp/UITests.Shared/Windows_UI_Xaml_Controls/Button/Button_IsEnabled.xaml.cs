@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Windows.Input;
 using Uno.UI.Samples.Controls;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Uno.UI.Samples.Presentation.SamplePages;
 
 using ICommand = System.Windows.Input.ICommand;
@@ -10,7 +10,7 @@ using EventHandler = System.EventHandler;
 
 namespace Uno.UI.Samples.Content.UITests.ButtonTestsControl
 {
-	[SampleControlInfo("Button", "Button_IsEnabled", typeof(ButtonTestsViewModel), ignoreInSnapshotTests: true)]
+	[SampleControlInfo("Buttons", "Button_IsEnabled", typeof(ButtonTestsViewModel), ignoreInSnapshotTests: true)]
 	public sealed partial class Button_IsEnabled : UserControl
 	{
 		public Button_IsEnabled()

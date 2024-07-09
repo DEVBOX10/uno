@@ -1,26 +1,27 @@
+﻿using System;
+using System.Runtime.InteropServices;
 using CoreGraphics;
-using Uno.UI.DataBinding;
-using Uno.UI.Views.Controls;
-using System;
-using System.Collections.Generic;
-using System.Text;
+using Foundation;
+using ObjCRuntime;
 using UIKit;
 using Uno.Extensions;
-using Uno.UI.Extensions;
-using Windows.UI.Xaml.Media;
 using Uno.UI.Controls;
+using Uno.UI.Extensions;
+using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 using Uno.Disposables;
+using Uno.Foundation.Logging;
+using Uno.UI;
+using Uno.UI.Xaml;
+using static Uno.UI.FeatureConfiguration;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	public partial class SinglelineTextBoxView : UITextField, ITextBoxView, DependencyObject, IFontScalable
 	{
 		private SinglelineTextBoxDelegate _delegate;
 		private readonly WeakReference<TextBox> _textBox;
-		private readonly SerialDisposable _foregroundChanged = new();
-
-		private string _restoreOnNextKeyStroke;
+		private Action _foregroundChanged;
 
 		public SinglelineTextBoxView(TextBox textBox)
 		{
@@ -30,26 +31,27 @@ namespace Windows.UI.Xaml.Controls
 			Initialize();
 		}
 
-		/// <inheritdoc />
-		public override bool SecureTextEntry
-		{
-			get => base.SecureTextEntry;
-			set
-			{
-				if (base.SecureTextEntry != value)
-				{
-					if (value)
-					{
-						// When we enable the "secure" mode, iOS will auto-magically clear the value on next key stroke
-						// (Without invoking the "ShouldClear" nor any callback except "DidChangeSelection" multiple times).
-						// The only way is to keep ref of the current text and restore it on next text change (expected to be an empty string).
-						_restoreOnNextKeyStroke = base.Text;
-					}
+		public override void Paste(NSObject sender) => HandlePaste(() => base.Paste(sender));
 
-					base.SecureTextEntry = value;
-				}
+		public override void PasteAndGo(NSObject sender) => HandlePaste(() => base.PasteAndGo(sender));
+
+		public override void PasteAndMatchStyle(NSObject sender) => HandlePaste(() => base.PasteAndMatchStyle(sender));
+
+		public override void PasteAndSearch(NSObject sender) => HandlePaste(() => base.PasteAndSearch(sender));
+
+		public override void Paste(NSItemProvider[] itemProviders) => HandlePaste(() => base.Paste(itemProviders));
+
+		private void HandlePaste(Action baseAction)
+		{
+			var args = new TextControlPasteEventArgs();
+			TextBox?.RaisePaste(args);
+			if (!args.Handled)
+			{
+				baseAction.Invoke();
 			}
 		}
+
+		internal TextBox TextBox => _textBox.GetTarget();
 
 		public override string Text
 		{
@@ -68,15 +70,7 @@ namespace Windows.UI.Xaml.Controls
 
 		private void OnEditingChanged(object sender, EventArgs e)
 		{
-			if (_restoreOnNextKeyStroke is { Length: > 0 } text)
-			{
-				base.Text = text + base.Text;
-				_restoreOnNextKeyStroke = default;
-			}
-			else
-			{
-				OnTextChanged();
-			}
+			OnTextChanged();
 		}
 
 		private void OnTextChanged()
@@ -100,19 +94,33 @@ namespace Windows.UI.Xaml.Controls
 			{
 				IsKeyboardHiddenOnEnter = true
 			};
+		}
 
-			RegisterLoadActions(
-				() =>
-				{
-					this.EditingChanged += OnEditingChanged;
-					this.EditingDidEnd += OnEditingChanged;
-				},
-				() =>
-				{
-					this.EditingChanged -= OnEditingChanged;
-					this.EditingDidEnd -= OnEditingChanged;
-				}
-			);
+		partial void OnLoadedPartial()
+		{
+			this.EditingChanged += OnEditingChanged;
+			this.EditingDidEnd += OnEditingChanged;
+		}
+
+		partial void OnUnloadedPartial()
+		{
+			this.EditingChanged -= OnEditingChanged;
+			this.EditingDidEnd -= OnEditingChanged;
+		}
+
+		//Forces the secure UITextField to maintain its current value upon regaining focus
+		public override bool BecomeFirstResponder()
+		{
+			var result = base.BecomeFirstResponder();
+
+			if (SecureTextEntry)
+			{
+				var text = Text;
+				Text = string.Empty;
+				InsertText(text);
+			}
+
+			return result;
 		}
 
 		public override CGSize SizeThatFits(CGSize size)
@@ -161,7 +169,7 @@ namespace Windows.UI.Xaml.Controls
 
 			if (textBox != null)
 			{
-				var newFont = UIFontHelper.TryGetFont((float)textBox.FontSize, textBox.FontWeight, textBox.FontStyle, textBox.FontFamily);
+				var newFont = FontHelper.TryGetFont(new((float)textBox.FontSize, textBox.FontWeight, textBox.FontStyle, textBox.FontStretch), textBox.FontFamily);
 
 				if (newFont != null)
 				{
@@ -177,7 +185,7 @@ namespace Windows.UI.Xaml.Controls
 			set { SetValue(ForegroundProperty, value); }
 		}
 
-		public static DependencyProperty ForegroundProperty { get ; } =
+		public static DependencyProperty ForegroundProperty { get; } =
 			DependencyProperty.Register(
 				"Foreground",
 				typeof(Brush),
@@ -191,22 +199,16 @@ namespace Windows.UI.Xaml.Controls
 
 		public void OnForegroundChanged(Brush oldValue, Brush newValue)
 		{
-			_foregroundChanged.Disposable = null;
 			var textBox = _textBox.GetTarget();
-
 			if (textBox != null)
 			{
-				var scb = newValue as SolidColorBrush;
-
-				if (scb != null)
+				if (newValue is SolidColorBrush scb)
 				{
-					_foregroundChanged.Disposable = Brush.AssignAndObserveBrush(scb, _ => ApplyColor());
-					ApplyColor();
+					Brush.SetupBrushChanged(oldValue, newValue, ref _foregroundChanged, () => ApplyColor());
 
 					void ApplyColor()
 					{
 						TextColor = scb.Color;
-						TintColor = scb.Color;
 					}
 				}
 			}
@@ -228,21 +230,31 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		public void Select(int start, int length)
-			=> SelectedTextRange = this.GetTextRange(start: start, end: start + length);
+			=> SelectedTextRange = this.GetTextRange(start: start, end: start + length).GetHandle();
 
-		public override UITextRange SelectedTextRange
+		/// <summary>
+		/// Workaround for https://github.com/unoplatform/uno/issues/9430
+		/// </summary>
+		[DllImport(Constants.ObjectiveCLibrary, EntryPoint = "objc_msgSendSuper")]
+		static internal extern IntPtr IntPtr_objc_msgSendSuper(IntPtr receiver, IntPtr selector);
+
+		[DllImport(Constants.ObjectiveCLibrary, EntryPoint = "objc_msgSendSuper")]
+		static internal extern void void_objc_msgSendSuper(IntPtr receiver, IntPtr selector, IntPtr arg);
+
+		[Export("selectedTextRange")]
+		public new IntPtr SelectedTextRange
 		{
 			get
 			{
-				return base.SelectedTextRange;
+				return IntPtr_objc_msgSendSuper(SuperHandle, Selector.GetHandle("selectedTextRange"));
 			}
 			set
 			{
-				var textBox = _textBox.GetTarget();
+				var textBox = TextBox;
 
-				if (textBox != null && base.SelectedTextRange != value)
+				if (textBox != null && SelectedTextRange != value)
 				{
-					base.SelectedTextRange = value;
+					void_objc_msgSendSuper(SuperHandle, Selector.GetHandle("setSelectedTextRange:"), value);
 					textBox.OnSelectionChanged();
 				}
 			}

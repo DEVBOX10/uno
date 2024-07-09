@@ -6,18 +6,22 @@ using Uno.Disposables;
 using System.Text;
 using Uno.Extensions;
 using System.Collections.Specialized;
-using Windows.UI.Xaml.Navigation;
-using Windows.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Navigation;
+using Microsoft.UI.Xaml.Media.Animation;
 using Uno;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media;
 using Uno.UI;
 using System.Runtime.CompilerServices;
+using Microsoft.UI.Xaml.Input;
+using Uno.UI.Xaml.Core;
+using Uno.UI.Helpers;
+using Uno.Foundation.Logging;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	public partial class Frame : ContentControl
 	{
-		private bool _isNavigating = false;
+		private bool _isNavigating;
 
 		private string _navigationState;
 
@@ -53,6 +57,13 @@ namespace Windows.UI.Xaml.Controls
 			{
 				CurrentEntry = null;
 			}
+			else if (CurrentEntry is not null)
+			{
+				// This is to support hot reload scenarios - the PageStackEntry 
+				// is used when navigating back to this page as it's maintained in the BackStack
+				CurrentEntry.Instance = newValue as Page;
+				CurrentEntry.SourcePageType = newValue.GetType();
+			}
 		}
 
 		#region BackStackDepth DependencyProperty
@@ -64,7 +75,7 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		// Using a DependencyProperty as the backing store for BackStackDepth.  This enables animation, styling, binding, etc...
-		public static DependencyProperty BackStackDepthProperty { get ; } =
+		public static DependencyProperty BackStackDepthProperty { get; } =
 			DependencyProperty.Register("BackStackDepth", typeof(int), typeof(Frame), new FrameworkPropertyMetadata(0, (s, e) => ((Frame)s)?.OnBackStackDepthChanged(e)));
 
 
@@ -84,7 +95,7 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		// Using a DependencyProperty as the backing store for BackStack.  This enables animation, styling, binding, etc...
-		public static DependencyProperty BackStackProperty { get ; } =
+		public static DependencyProperty BackStackProperty { get; } =
 			DependencyProperty.Register("BackStack", typeof(IList<PageStackEntry>), typeof(Frame), new FrameworkPropertyMetadata(null, (s, e) => ((Frame)s)?.OnBackStackChanged(e)));
 
 		private void OnBackStackChanged(DependencyPropertyChangedEventArgs e)
@@ -102,7 +113,7 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		// Using a DependencyProperty as the backing store for CacheSize.  This enables animation, styling, binding, etc...
-		public static DependencyProperty CacheSizeProperty { get ; } =
+		public static DependencyProperty CacheSizeProperty { get; } =
 			DependencyProperty.Register("CacheSize", typeof(int), typeof(Frame), new FrameworkPropertyMetadata(0, (s, e) => ((Frame)s)?.OnCacheSizeChanged(e)));
 
 
@@ -121,7 +132,7 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		// Using a DependencyProperty as the backing store for CanGoBack.  This enables animation, styling, binding, etc...
-		public static DependencyProperty CanGoBackProperty { get ; } =
+		public static DependencyProperty CanGoBackProperty { get; } =
 			DependencyProperty.Register("CanGoBack", typeof(bool), typeof(Frame), new FrameworkPropertyMetadata(false, (s, e) => ((Frame)s)?.OnCanGoBackChanged(e)));
 
 
@@ -140,7 +151,7 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		// Using a DependencyProperty as the backing store for CanGoForward.  This enables animation, styling, binding, etc...
-		public static DependencyProperty CanGoForwardProperty { get ; } =
+		public static DependencyProperty CanGoForwardProperty { get; } =
 			DependencyProperty.Register("CanGoForward", typeof(bool), typeof(Frame), new FrameworkPropertyMetadata(true, (s, e) => ((Frame)s)?.OnCanGoForwardChanged(e)));
 
 
@@ -155,7 +166,7 @@ namespace Windows.UI.Xaml.Controls
 
 		public Type CurrentSourcePageType => (Type)GetValue(CurrentSourcePageTypeProperty);
 
-		public static DependencyProperty CurrentSourcePageTypeProperty { get ; } =
+		public static DependencyProperty CurrentSourcePageTypeProperty { get; } =
 			DependencyProperty.Register(nameof(CurrentSourcePageType), typeof(Type), typeof(Frame), new FrameworkPropertyMetadata(null, (s, e) => ((Frame)s)?.OnCurrentSourcePageTypeChanged(e)));
 
 
@@ -175,7 +186,7 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		// Using a DependencyProperty as the backing store for ForwardStack.  This enables animation, styling, binding, etc...
-		public static DependencyProperty ForwardStackProperty { get ; } =
+		public static DependencyProperty ForwardStackProperty { get; } =
 			DependencyProperty.Register("ForwardStack", typeof(IList<PageStackEntry>), typeof(Frame), new FrameworkPropertyMetadata(null, (s, e) => ((Frame)s)?.OnForwardStackChanged(e)));
 
 
@@ -193,7 +204,7 @@ namespace Windows.UI.Xaml.Controls
 			set => SetValue(SourcePageTypeProperty, value);
 		}
 
-		public static DependencyProperty SourcePageTypeProperty { get ; } =
+		public static DependencyProperty SourcePageTypeProperty { get; } =
 			DependencyProperty.Register(nameof(SourcePageType), typeof(Type), typeof(Frame), new FrameworkPropertyMetadata(null, (s, e) => ((Frame)s)?.OnSourcePageTypeChanged(e)));
 
 		private void OnSourcePageTypeChanged(DependencyPropertyChangedEventArgs e)
@@ -270,14 +281,27 @@ namespace Windows.UI.Xaml.Controls
 
 		public bool Navigate(Type sourcePageType, object parameter, NavigationTransitionInfo infoOverride)
 		{
-			var entry = new PageStackEntry(sourcePageType, parameter, infoOverride);
+			var entry = new PageStackEntry(sourcePageType.GetReplacementType(), parameter, infoOverride);
 			return InnerNavigate(entry, NavigationMode.New);
 		}
 
 		private bool InnerNavigate(PageStackEntry entry, NavigationMode mode)
 		{
+			if (_isNavigating)
+			{
+				if (this.Log().IsEnabled(LogLevel.Warning))
+				{
+					this.Log().LogWarning(
+						"Frame is already navigating, ignoring the navigation request." +
+						"Please delay the navigation with await Task.Yield().");
+				}
+				return false;
+			}
+
 			try
 			{
+				_isNavigating = true;
+
 				return InnerNavigateUnsafe(entry, mode);
 			}
 			catch (Exception exception)
@@ -305,8 +329,6 @@ namespace Windows.UI.Xaml.Controls
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private bool InnerNavigateUnsafe(PageStackEntry entry, NavigationMode mode)
 		{
-			_isNavigating = true;
-
 			// Navigating
 			var navigatingFromArgs = new NavigatingCancelEventArgs(
 				mode,
@@ -345,15 +367,15 @@ namespace Windows.UI.Xaml.Controls
 
 			if (CurrentEntry.Instance == null)
 			{
-				var page = CreatePageInstanceCached(entry.SourcePageType);
-				if (page == null)
+				if (EnsurePageInitialized(entry) is not { } page)
 				{
 					return false;
 				}
 
-				page.Frame = this;
 				CurrentEntry.Instance = page;
 			}
+
+			MoveFocusFromCurrentContent();
 
 			Content = CurrentEntry.Instance;
 
@@ -394,10 +416,10 @@ namespace Windows.UI.Xaml.Controls
 			SetValue(SourcePageTypeProperty, entry.SourcePageType);
 			SetValue(CurrentSourcePageTypeProperty, entry.SourcePageType);
 
+			Navigated?.Invoke(this, navigationEvent);
+
 			previousEntry?.Instance.OnNavigatedFrom(navigationEvent);
 			CurrentEntry.Instance.OnNavigatedTo(navigationEvent);
-
-			Navigated?.Invoke(this, navigationEvent);
 
 			return true;
 		}
@@ -428,6 +450,18 @@ namespace Windows.UI.Xaml.Controls
 
 		public void SetNavigationState(string navigationState) => _navigationState = navigationState;
 
+		internal Page EnsurePageInitialized(PageStackEntry entry)
+		{
+			if (entry is { Instance: null } &&
+				CreatePageInstanceCached(entry.SourcePageType) is { } page)
+			{
+				page.Frame = this;
+				entry.Instance = page;
+			}
+
+			return entry?.Instance;
+		}
+
 		private static Page CreatePageInstanceCached(Type sourcePageType) => _pool.DequeuePage(sourcePageType);
 
 		internal static Page CreatePageInstance(Type sourcePageType)
@@ -455,6 +489,53 @@ namespace Windows.UI.Xaml.Controls
 						entry.SourcePageType,
 						null
 					));
+		}
+
+		/// <summary>
+		/// In case the current page contains a focused element,
+		/// we need to move the focus out of the page.
+		/// </summary>
+		/// <remarks>
+		/// In UWP this is done automatically as the elements are unloaded,
+		/// but due to the control lifecycle differences in Uno the focus move multiple times
+		/// as controls are unloaded in "layers" and it could also not move outside this Frame,
+		/// as the Parent would already be unassigned during the OnUnloaded execution.
+		/// </remarks>
+		private void MoveFocusFromCurrentContent()
+		{
+			if (Content is not UIElement uiElement)
+			{
+				return;
+			}
+			uiElement.IsLeavingFrame = true;
+			try
+			{
+				var focusManager = VisualTree.GetFocusManagerForElement(this);
+				if (focusManager?.FocusedElement is not { } focusedElement)
+				{
+					return;
+				}
+
+				var parent = VisualTreeHelper.GetParent(focusedElement);
+				while (parent is not null && parent != this)
+				{
+					parent = VisualTreeHelper.GetParent(parent);
+				}
+
+				var inCurrentPage = parent == this;
+
+				if (inCurrentPage)
+				{
+					// Set the focus on the next focusable element.
+					focusManager.SetFocusOnNextFocusableElement(FocusState.Programmatic, true);
+
+					(focusedElement as Control)?.UpdateFocusState(FocusState.Unfocused);
+				}
+			}
+			finally
+			{
+				uiElement.IsLeavingFrame = false;
+			}
 		}
 	}
 }

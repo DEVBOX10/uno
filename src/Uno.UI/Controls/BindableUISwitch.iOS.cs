@@ -1,19 +1,15 @@
-using System;
+﻿using System;
 using Uno.Disposables;
 using System.Runtime.CompilerServices;
-using Windows.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Data;
 using Uno.UI.DataBinding;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using Windows.UI;
+using ObjCRuntime;
 
-#if XAMARIN_IOS_UNIFIED
 using Foundation;
 using UIKit;
-#elif XAMARIN_IOS
-using MonoTouch.Foundation;
-using MonoTouch.UIKit;
-#endif
 
 namespace Uno.UI.Views.Controls
 {
@@ -48,7 +44,7 @@ namespace Uno.UI.Views.Controls
 			InitializeBinder();
 		}
 
-		public BindableUISwitch(IntPtr handle)
+		public BindableUISwitch(NativeHandle handle)
 			: base(handle)
 		{
 			InitializeBinder();
@@ -65,7 +61,7 @@ namespace Uno.UI.Views.Controls
 			set { this.SetValue(ThumbTintColorBrushProperty, value); }
 		}
 
-		public static DependencyProperty ThumbTintColorBrushProperty { get ; } =
+		public static DependencyProperty ThumbTintColorBrushProperty { get; } =
 			DependencyProperty.Register("ThumbTintColorBrush", typeof(Brush), typeof(BindableUISwitch), new FrameworkPropertyMetadata(null, (s, e) => ((BindableUISwitch)s).OnThumbTintColorBrushChanged((Brush)e.NewValue)));
 
 		private void OnThumbTintColorBrushChanged(Brush newValue)
@@ -108,7 +104,7 @@ namespace Uno.UI.Views.Controls
 			set { this.SetValue(OnTintColorBrushProperty, value); }
 		}
 
-		public static DependencyProperty OnTintColorBrushProperty { get ; } =
+		public static DependencyProperty OnTintColorBrushProperty { get; } =
 			DependencyProperty.Register("OnTintColorBrush", typeof(Brush), typeof(BindableUISwitch), new FrameworkPropertyMetadata(null, (s, e) => ((BindableUISwitch)s).OnOnTintColorBrushChanged((Brush)e.NewValue)));
 
 		private void OnOnTintColorBrushChanged(Brush newValue)
@@ -119,14 +115,14 @@ namespace Uno.UI.Views.Controls
 			}
 		}
 
-        #endregion
+		#endregion
 
-        #region Background Alias Property
+		#region Background Alias Property
 
-        /// <summary>
-        /// An alias to the OnTintColorBrush property, in order to avoid binary breaking change.
-        /// </summary>
-        public Brush Background
+		/// <summary>
+		/// An alias to the OnTintColorBrush property, in order to avoid binary breaking change.
+		/// </summary>
+		public Brush Background
 		{
 			get { return OnTintColorBrush; }
 			set
@@ -151,7 +147,7 @@ namespace Uno.UI.Views.Controls
 			set { this.SetValue(TintColorBrushProperty, value); }
 		}
 
-		public static DependencyProperty TintColorBrushProperty { get ; } =
+		public static DependencyProperty TintColorBrushProperty { get; } =
 			DependencyProperty.Register("TintColorBrush", typeof(Brush), typeof(BindableUISwitch), new FrameworkPropertyMetadata(null, (s, e) => ((BindableUISwitch)s).OnTintColorBrushChanged((Brush)e.NewValue)));
 
 		private void OnTintColorBrushChanged(Brush newValue)
@@ -172,7 +168,7 @@ namespace Uno.UI.Views.Controls
 			set { SetValue(IsOnProperty, value); }
 		}
 
-		public static DependencyProperty IsOnProperty { get ; } =
+		public static DependencyProperty IsOnProperty { get; } =
 			DependencyProperty.Register("IsOn", typeof(bool), typeof(BindableUISwitch), new FrameworkPropertyMetadata(default(bool), (s, e) => ((BindableUISwitch)s)?.OnIsOnChanged(e)));
 
 

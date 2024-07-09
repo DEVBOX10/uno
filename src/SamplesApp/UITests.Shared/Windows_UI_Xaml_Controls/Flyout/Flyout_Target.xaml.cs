@@ -1,12 +1,12 @@
 ﻿using Uno.UI.Samples.Controls;
 using Windows.UI;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace Uno.UI.Samples.Content.UITests.Flyout
 {
-	[SampleControlInfo("Flyout", "Flyout_Target")]
+	[SampleControlInfo("Flyouts", "Flyout_Target")]
 	public sealed partial class Flyout_Target : UserControl
 	{
 		public Flyout_Target()
@@ -19,7 +19,7 @@ namespace Uno.UI.Samples.Content.UITests.Flyout
 		{
 			result.Text = "";
 
-			var flyout = new Windows.UI.Xaml.Controls.Flyout()
+			var flyout = new Microsoft.UI.Xaml.Controls.Flyout()
 			{
 				Content = new Border
 				{
@@ -43,7 +43,7 @@ namespace Uno.UI.Samples.Content.UITests.Flyout
 			result.Text = "";
 			var target = s as FrameworkElement;
 
-			var flyout = new Windows.UI.Xaml.Controls.Flyout()
+			var flyout = new Microsoft.UI.Xaml.Controls.Flyout()
 			{
 				Content = new Border
 				{
@@ -52,7 +52,7 @@ namespace Uno.UI.Samples.Content.UITests.Flyout
 					Width = 100,
 					Background = new SolidColorBrush(Colors.Red)
 				},
-				Placement = Windows.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Full
+				Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Full
 			};
 
 			flyout.ShowAt(target);

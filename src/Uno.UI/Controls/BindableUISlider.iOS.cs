@@ -4,8 +4,9 @@ using System.ComponentModel;
 using System.Text;
 using Foundation;
 using UIKit;
-using Windows.UI.Xaml;
+using Microsoft.UI.Xaml;
 using CoreGraphics;
+using ObjCRuntime;
 
 namespace Uno.UI.Controls
 {
@@ -34,7 +35,7 @@ namespace Uno.UI.Controls
 			Initialize();
 		}
 
-		public BindableUISlider(IntPtr handle)
+		public BindableUISlider(NativeHandle handle)
 			: base(handle)
 		{
 			Initialize();

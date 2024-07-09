@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Android.App;
+using Android.Content.Res;
 using Android.Graphics;
 using Android.Runtime;
 using Android.Text;
@@ -18,15 +19,16 @@ using Uno.Foundation.Logging;
 using Uno.UI;
 using Uno.UI.DataBinding;
 using Uno.UI.Extensions;
+using Windows.System;
 using Windows.UI.Core;
 using Windows.UI.Text;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using static Android.Widget.TextView;
 using Math = System.Math;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	public partial class TextBox : View.IOnFocusChangeListener, IOnEditorActionListener
 	{
@@ -34,7 +36,6 @@ namespace Windows.UI.Xaml.Controls
 		private TextBoxView _textBoxView;
 		private readonly SerialDisposable _keyboardDisposable = new SerialDisposable();
 		private Factory _editableFactory;
-		private IKeyListener _listener;
 
 		/// <summary>
 		/// If true, and <see cref="IsSpellCheckEnabled"/> is false, take vigorous measures to ensure that spell-check (ie predictive text) is
@@ -49,28 +50,28 @@ namespace Windows.UI.Xaml.Controls
 		[Uno.UnoOnly]
 		public bool ShouldForceDisableSpellCheck { get; set; } = true;
 
+		internal TextBoxView TextBoxView => _textBoxView;
+
+		/// <summary>
+		/// Both IsReadOnly = true and IsTabStop = false make the native TextBoxView read-only.
+		/// </summary>
+		internal bool IsNativeViewReadOnly => IsReadOnly || !IsTabStop;
+
 		public bool PreventKeyboardDisplayOnProgrammaticFocus
 		{
-			get
-			{
-				return (bool)this.GetValue(PreventKeyboardDisplayOnProgrammaticFocusProperty);
-			}
-			set
-			{
-				this.SetValue(PreventKeyboardDisplayOnProgrammaticFocusProperty, value);
-			}
+			get => (bool)GetValue(PreventKeyboardDisplayOnProgrammaticFocusProperty);
+			set => SetValue(PreventKeyboardDisplayOnProgrammaticFocusProperty, value);
 		}
 
 		public static DependencyProperty PreventKeyboardDisplayOnProgrammaticFocusProperty { get; } =
-		DependencyProperty.Register(
-			"PreventKeyboardDisplayOnProgrammaticFocus", typeof(bool),
-			typeof(TextBox),
-			new FrameworkPropertyMetadata(false));
+			DependencyProperty.Register(
+				nameof(PreventKeyboardDisplayOnProgrammaticFocus),
+				typeof(bool),
+				typeof(TextBox),
+				new FrameworkPropertyMetadata(false));
 
-		private protected override void OnUnloaded()
+		partial void OnUnloadedPartial()
 		{
-			base.OnUnloaded();
-
 			if (_textBoxView != null)
 			{
 				_textBoxView.OnFocusChangeListener = null;
@@ -82,12 +83,6 @@ namespace Windows.UI.Xaml.Controls
 				// more details.
 				ProcessFocusChanged(false);
 			}
-		}
-
-		private protected override void OnLoaded()
-		{
-			base.OnLoaded();
-			SetupTextBoxView();
 		}
 
 		partial void InitializePropertiesPartial()
@@ -133,7 +128,7 @@ namespace Windows.UI.Xaml.Controls
 				)
 			);
 
-		private static object CoerceImeOptions(DependencyObject dependencyObject, object baseValue)
+		private static object CoerceImeOptions(DependencyObject dependencyObject, object baseValue, DependencyPropertyValuePrecedences _)
 		{
 			return dependencyObject is TextBox textBox && textBox.InputScope?.GetFirstInputScopeNameValue() == InputScopeNameValue.Search
 				? ImeAction.Search
@@ -169,6 +164,15 @@ namespace Windows.UI.Xaml.Controls
 					using (focusState == FocusState.Programmatic ? PreventKeyboardDisplayIfSet() : null)
 					{
 						_textBoxView.RequestFocus();
+
+						var selectionStart = this.SelectionStart;
+
+						if (selectionStart == 0)
+						{
+							int cursorPosition = selectionStart + _textBoxView?.Text?.Length ?? 0;
+
+							this.Select(cursorPosition, 0);
+						}
 					}
 				}
 			}
@@ -212,15 +216,13 @@ namespace Windows.UI.Xaml.Controls
 		{
 		}
 
-		partial void OnInputScopeChangedPartial(DependencyPropertyChangedEventArgs e)
+		partial void OnInputScopeChangedPartial(InputScope newValue)
 		{
 			this.CoerceValue(ImeOptionsProperty);
 
-			if (e.NewValue != null)
+			if (newValue != null)
 			{
-				var inputScope = (InputScope)e.NewValue;
-
-				UpdateInputScope(inputScope);
+				UpdateInputScope(newValue);
 			}
 		}
 
@@ -228,8 +230,7 @@ namespace Windows.UI.Xaml.Controls
 		{
 			if (_textBoxView != null)
 			{
-				_textBoxView.InputType = types;
-				_textBoxView.SetRawInputType(types);
+				_textBoxView.SetInputTypes(types, types);
 
 				if (!types.HasPasswordFlag())
 				{
@@ -346,13 +347,22 @@ namespace Windows.UI.Xaml.Controls
 					// InputScopes like multi-line works on Android only for InputType property, not SetRawInputType.
 					// For CurrencyAmount (and others), both works but there is a behavioral difference documented in UseLegacyInputScope.
 					// The behavior that matches UWP is achieved by SetRawInputType.
-					_textBoxView.InputType = AdjustInputTypes(InputTypes.ClassText, inputScope);
-					_textBoxView.SetRawInputType(inputType);
+					var adjustedInputType = AdjustInputTypes(InputTypes.ClassText, inputScope);
+					_textBoxView.SetInputTypes(adjustedInputType, inputType);
 				}
 			}
 		}
 
-		partial void OnIsSpellCheckEnabledChangedPartial(DependencyPropertyChangedEventArgs e)
+		partial void OnSelectionHighlightColorChangedPartial(SolidColorBrush brush)
+		{
+			if (_textBoxView != null)
+			{
+				var color = brush.ColorWithOpacity;
+				_textBoxView.SetHighlightColor(color);
+			}
+		}
+
+		partial void OnIsSpellCheckEnabledChangedPartial(bool newValue)
 		{
 			if (_textBoxView != null)
 			{
@@ -360,33 +370,30 @@ namespace Windows.UI.Xaml.Controls
 			}
 		}
 
-		partial void OnAcceptsReturnChangedPartial(DependencyPropertyChangedEventArgs e)
+		partial void OnAcceptsReturnChangedPartial(bool newValue)
 		{
-			var acceptsReturn = (bool)e.NewValue;
-			_textBoxView?.SetHorizontallyScrolling(!acceptsReturn);
-			_textBoxView?.SetMaxLines(acceptsReturn ? int.MaxValue : 1);
+			_textBoxView?.SetHorizontallyScrolling(!newValue);
+			_textBoxView?.UpdateSingleLineMode();
 
 			UpdateInputScope(InputScope);
 		}
 
-		partial void OnTextWrappingChangedPartial(DependencyPropertyChangedEventArgs e)
+		partial void OnTextWrappingChangedPartial()
 		{
-			//TODO : see bug #8178
+			_textBoxView?.UpdateSingleLineMode();
 		}
 
 		partial void UpdateFontPartial()
 		{
 			if (Parent != null && _textBoxView != null)
 			{
-				var style = GetTypefaceStyle(FontStyle, FontWeight);
-				var typeface = FontHelper.FontFamilyToTypeFace(FontFamily, FontWeight);
-
-				_textBoxView.SetTypeface(typeface, style);
+				var typeface = FontHelper.FontFamilyToTypeFace(FontFamily, FontWeight, FontStyle, FontStretch);
+				_textBoxView.Typeface = typeface;
 				_textBoxView.SetTextSize(ComplexUnitType.Px, (float)Math.Round(ViewHelper.LogicalToPhysicalFontPixels((float)FontSize)));
 			}
 		}
 
-		private protected override void OnIsEnabledChanged(IsEnabledChangedEventArgs e)
+		partial void OnIsEnabledChangedPartial(IsEnabledChangedEventArgs e)
 		{
 			if (_textBoxView != null)
 			{
@@ -394,48 +401,41 @@ namespace Windows.UI.Xaml.Controls
 			}
 		}
 
-		private static TypefaceStyle GetTypefaceStyle(FontStyle fontStyle, FontWeight fontWeight)
+		partial void OnIsReadonlyChangedPartial() => UpdateTextBoxViewReadOnly();
+
+		partial void OnIsTabStopChangedPartial() => UpdateTextBoxViewReadOnly();
+
+
+		private IKeyListener _listener;
+
+		private void UpdateTextBoxViewReadOnly()
 		{
-			var style = TypefaceStyle.Normal;
-
-			if (fontWeight.Weight > 500)
+			if (_textBoxView == null)
 			{
-				style |= TypefaceStyle.Bold;
+				return;
 			}
 
-			if (fontStyle == FontStyle.Italic)
+			// If read only state actually changes, we need to set or unset
+			// the KeyListener to prevent the user from typing in the TextBox.
+			// We also need to reset the InputTypes afterwards, as the KeyListener
+			// will have changed them.
+			if (IsNativeViewReadOnly && _textBoxView.KeyListener is not null)
 			{
-				style |= TypefaceStyle.Italic;
+				_listener = _textBoxView.KeyListener;
+				_textBoxView.KeyListener = null;
+				_textBoxView.ResetInputTypes();
+			}
+			else if (!IsNativeViewReadOnly && _textBoxView.KeyListener is null)
+			{
+				_textBoxView.KeyListener = _listener;
+				_textBoxView.ResetInputTypes();
 			}
 
-			return style;
-		}
-
-		partial void OnIsReadonlyChangedPartial(DependencyPropertyChangedEventArgs e)
-		{
-			if (_textBoxView != null)
-			{
-				var isReadOnly = IsReadOnly;
-
-				_textBoxView.Focusable = !isReadOnly;
-				_textBoxView.FocusableInTouchMode = !isReadOnly;
-				_textBoxView.Clickable = !isReadOnly;
-				_textBoxView.LongClickable = !isReadOnly;
-				_textBoxView.SetCursorVisible(!isReadOnly);
-
-				if (isReadOnly)
-				{
-					_listener = _textBoxView.KeyListener;
-					_textBoxView.KeyListener = null;
-				}
-				else
-				{
-					if (_listener != null)
-					{
-						_textBoxView.KeyListener = _listener;
-					}
-				}
-			}
+			_textBoxView.Focusable = IsTabStop;
+			_textBoxView.FocusableInTouchMode = IsTabStop;
+			_textBoxView.Clickable = IsTabStop;
+			_textBoxView.LongClickable = IsTabStop;
+			_textBoxView.Invalidate();
 		}
 
 		private void SetupTextBoxView()
@@ -461,11 +461,10 @@ namespace Windows.UI.Xaml.Controls
 			//We get the view token early to avoid nullvalues when the view has already been detached
 			var viewWindowToken = _textBoxView.WindowToken;
 
-			_keyboardDisposable.Disposable = Uno.UI.Dispatching.CoreDispatcher.Main
+			_keyboardDisposable.Disposable = Uno.UI.Dispatching.NativeDispatcher.Main
 				//The delay is required because the OnFocusChange method is called when the focus is being changed, not when it has changed.
 				//If the focus is moved from one TextBox to another, the CurrentFocus will be null, meaning we would hide the keyboard when we shouldn't.
-				.RunAsync(
-					Uno.UI.Dispatching.CoreDispatcherPriority.Normal,
+				.EnqueueOperation(
 					async () =>
 					{
 						await Task.Delay(TimeSpan.FromMilliseconds(_keyboardAccessDelay));
@@ -513,17 +512,15 @@ namespace Windows.UI.Xaml.Controls
 				);
 		}
 
-		partial void OnTextAlignmentChangedPartial(DependencyPropertyChangedEventArgs e)
+		partial void OnTextAlignmentChangedPartial(TextAlignment newValue)
 		{
 			if (_textBoxView == null)
 			{
 				return;
 			}
 
-			var textAlignment = (TextAlignment)e.NewValue;
-
 			// Only works if text direction is left-to-right
-			switch (textAlignment)
+			switch (newValue)
 			{
 				case TextAlignment.Center:
 					_textBoxView.Gravity = GravityFlags.CenterHorizontal;
@@ -537,7 +534,7 @@ namespace Windows.UI.Xaml.Controls
 				case TextAlignment.Justify:
 				case TextAlignment.DetectFromContent:
 				default:
-					this.Log().Warn($"TextBox doesn't support TextAlignment.{textAlignment}");
+					this.Log().Warn($"TextBox doesn't support TextAlignment.{newValue}");
 					_textBoxView.Gravity = GravityFlags.Start; // Defaulting to Left
 					break;
 			}
@@ -547,24 +544,23 @@ namespace Windows.UI.Xaml.Controls
 		{
 			//We need to force a keypress event on editor action.
 			//the key press event is not triggered if we press the enter key depending on the ime.options
-
-			OnKeyPress(v, new KeyEventArgs(true, Keycode.Enter, new KeyEvent(KeyEventActions.Up, Keycode.Enter)));
+			var modifiers = e is not null ? VirtualKeyHelper.FromModifiers(e.Modifiers) : VirtualKeyModifiers.None;
+			RaiseEvent(KeyDownEvent, new KeyRoutedEventArgs(this, global::Windows.System.VirtualKey.Enter, modifiers));
+			RaiseEvent(KeyUpEvent, new KeyRoutedEventArgs(this, global::Windows.System.VirtualKey.Enter, modifiers));
 
 			// Action will be ImeNull if AcceptsReturn is true, in which case we return false to allow the new line to register.
 			// Otherwise we return true to allow the focus to change correctly.
 			return actionId != ImeAction.ImeNull;
 		}
 
-		partial void OnTextCharacterCasingChangedPartial(DependencyPropertyChangedEventArgs e)
+		partial void OnTextCharacterCasingChangedPartial(CharacterCasing newValue)
 		{
 			if (_textBoxView == null)
 			{
 				return;
 			}
 
-			var casing = (CharacterCasing)e.NewValue;
-
-			UpdateCasing(casing);
+			UpdateCasing(newValue);
 		}
 
 		private void UpdateCasing(CharacterCasing characterCasing)

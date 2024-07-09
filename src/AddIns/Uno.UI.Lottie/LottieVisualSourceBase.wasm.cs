@@ -1,15 +1,22 @@
 ﻿using System;
 using System.Globalization;
 using System.Threading;
+using System.Runtime.InteropServices.JavaScript;
+using Microsoft/* UWP don't rename */.UI.Xaml.Controls;
 using Uno.Foundation;
 using Windows.Foundation;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
 using Uno.Extensions;
 using System.Threading.Tasks;
 using Uno.Disposables;
 
+#pragma warning disable CA1305 // Specify IFormatProvider
+
+#if HAS_UNO_WINUI
+namespace CommunityToolkit.WinUI.Lottie
+#else
 namespace Microsoft.Toolkit.Uwp.UI.Lottie
+#endif
 {
 	partial class LottieVisualSourceBase
 	{
@@ -23,10 +30,18 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 
 		private readonly SerialDisposable _animationDataSubscription = new SerialDisposable();
 
+		~LottieVisualSourceBase()
+		{
+			if (_initializedPlayer is { })
+			{
+				NativeMethods.Kill(_initializedPlayer.HtmlId);
+			}
+		}
+
 		async Task InnerUpdate(CancellationToken ct)
 		{
 			var player = _player;
-			if(_initializedPlayer != player)
+			if (_initializedPlayer != player)
 			{
 				_initializedPlayer = player;
 				player?.RegisterHtmlCustomEventHandler("lottie_state", OnStateChanged, isDetailJson: false);
@@ -38,13 +53,11 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 				return;
 			}
 
-			string[] js;
-
 			var sourceUri = UriSource;
 			if (_lastSource == null || !_lastSource.Equals(sourceUri))
 			{
 				_lastSource = sourceUri;
-				
+
 				if ((await TryLoadDownloadJson(sourceUri, ct)) is { } jsonStream)
 				{
 					var firstLoad = true;
@@ -70,25 +83,18 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 
 						firstLoad = false;
 
-						js = new[]
-						{
-							"Uno.UI.Lottie.setAnimationProperties({",
-							"elementId:",
-							player.HtmlId.ToString(),
-							",jsonPath: null,autoplay:",
-							play ? "true" : "false",
-							",stretch:\"",
+						_isUpdating = true;
+
+						NativeMethods.SetAnimationProperties(
+							player.HtmlId,
+							null,
+							play,
 							player.Stretch.ToString(),
-							"\",rate:",
-							player.PlaybackRate.ToStringInvariant(),
-							",cacheKey:\"",
+							player.PlaybackRate,
 							updatedCacheKey,
-							"\"},",
-							updatedJson,
-							");"
-						};
-						
-						ExecuteJs(js);
+							updatedJson);
+
+						_isUpdating = false;
 
 						if (_playState != null && _domLoaded)
 						{
@@ -99,27 +105,21 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 				}
 				else
 				{
-					var documentPath = Windows.Storage.Helpers.AssetsPathBuilder.BuildAssetUri(UriSource?.PathAndQuery);
-					_domLoaded = false;
+					var documentPath = UriSource.Scheme.Equals("http") || UriSource.Scheme.Equals("https")
+					? UriSource.OriginalString
+					: Windows.Storage.Helpers.AssetsPathBuilder.BuildAssetUri(UriSource?.PathAndQuery);
 
-					js = new[]
-					{
-						"Uno.UI.Lottie.setAnimationProperties({",
-						"elementId:",
-						player.HtmlId.ToString(),
-						",jsonPath:\"",
-						documentPath ?? "",
-						"\",autoplay:",
-						player.AutoPlay ? "true" : "false",
-						",stretch:\"",
+					_isUpdating = true;
+
+					NativeMethods.SetAnimationProperties(
+						player.HtmlId,
+						documentPath ?? string.Empty,
+						player.AutoPlay,
 						player.Stretch.ToString(),
-						"\",rate:",
-						player.PlaybackRate.ToStringInvariant(),
-						",cacheKey:\"",
-						documentPath ?? "-n-",
-						"\"});"
-					};
-					ExecuteJs(js);
+						player.PlaybackRate,
+						documentPath ?? "-n-");
+
+					_isUpdating = false;
 
 					if (player.AutoPlay)
 					{
@@ -132,15 +132,6 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 				}
 
 				ApplyPlayState();
-			}
-
-			void ExecuteJs(string[] js)
-			{
-				_isUpdating = true;
-
-				InvokeJs(js);
-
-				_isUpdating = false;
 			}
 		}
 
@@ -197,20 +188,7 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 				return;
 			}
 
-			var js = new[]
-			{
-				"Uno.UI.Lottie.play(",
-				_player.HtmlId.ToString(),
-				",",
-				fromProgress.ToStringInvariant(),
-				",",
-				toProgress.ToStringInvariant(),
-				",",
-				looped ? "true" : "false",
-				");"
-			};
-
-			InvokeJs(js);
+			NativeMethods.Play(_player.HtmlId, fromProgress, toProgress, looped);
 		}
 
 		void IAnimatedVisualSource.Stop()
@@ -222,14 +200,7 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 				return;
 			}
 
-			var js = new[]
-			{
-				"Uno.UI.Lottie.stop(",
-				_player.HtmlId.ToString(),
-				");"
-			};
-
-			InvokeJs(js);
+			NativeMethods.Stop(_player.HtmlId);
 		}
 
 		void IAnimatedVisualSource.Pause()
@@ -239,14 +210,7 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 				return;
 			}
 
-			var js = new[]
-			{
-				"Uno.UI.Lottie.pause(",
-				_player.HtmlId.ToString(),
-				");"
-			};
-
-			InvokeJs(js);
+			NativeMethods.Pause(_player.HtmlId);
 		}
 
 		void IAnimatedVisualSource.Resume()
@@ -256,14 +220,7 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 				return;
 			}
 
-			var js = new[]
-			{
-				"Uno.UI.Lottie.resume(",
-				_player.HtmlId.ToString(),
-				");"
-			};
-
-			InvokeJs(js);
+			NativeMethods.Resume(_player.HtmlId);
 		}
 
 		public void SetProgress(double progress)
@@ -273,16 +230,7 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 				return;
 			}
 
-			var js = new[]
-			{
-				"Uno.UI.Lottie.setProgress(",
-				_player.HtmlId.ToString(),
-				",",
-				progress.ToStringInvariant(),
-				");"
-			};
-
-			InvokeJs(js);
+			NativeMethods.SetProgress(_player.HtmlId, progress);
 		}
 
 		void IAnimatedVisualSource.Load()
@@ -299,17 +247,8 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 
 			ApplyPlayState();
 
-			var js = new[]
-			{
-					"Uno.UI.Lottie.resume(",
-					_player.HtmlId.ToString(),
-					");"
-				};
-
-			InvokeJs(js);
+			NativeMethods.Resume(_player.HtmlId);
 		}
-
-		private static string InvokeJs(string[] js) => WebAssemblyRuntime.InvokeJS(string.Concat(js));
 
 		void IAnimatedVisualSource.Unload()
 		{
@@ -318,16 +257,38 @@ namespace Microsoft.Toolkit.Uwp.UI.Lottie
 				return;
 			}
 
-			var js = new[]
-			{
-					"Uno.UI.Lottie.pause(",
-					_player.HtmlId.ToString(),
-					");"
-				};
-
-			InvokeJs(js);
+			NativeMethods.Pause(_player.HtmlId);
 		}
 
 		private Size CompositionSize => _compositionSize;
+
+		internal static partial class NativeMethods
+		{
+			private const string JsType = "globalThis.Uno.UI.Lottie";
+
+			[JSImport($"{JsType}.pause")]
+			internal static partial void Pause(nint htmlId);
+
+			[JSImport($"{JsType}.play")]
+			internal static partial void Play(nint htmlId, double from, double to, bool loop);
+
+			[JSImport($"{JsType}.resume")]
+			internal static partial void Resume(nint htmlId);
+
+			[JSImport($"{JsType}.setAnimationPropertiesNative")]
+			internal static partial void SetAnimationProperties(nint htmlId, string? jsonPath, bool autoplay, string stretch, double playbackRate, string cacheKey);
+
+			[JSImport($"{JsType}.setAnimationPropertiesNative")]
+			internal static partial void SetAnimationProperties(nint htmlId, string? jsonPath, bool autoplay, string stretch, double playbackRate, string cacheKey, string data);
+
+			[JSImport($"{JsType}.setProgress")]
+			internal static partial void SetProgress(nint htmlId, double progress);
+
+			[JSImport($"{JsType}.stop")]
+			internal static partial void Stop(nint htmlId);
+
+			[JSImport($"{JsType}.kill")]
+			internal static partial void Kill(nint Handle);
+		}
 	}
 }

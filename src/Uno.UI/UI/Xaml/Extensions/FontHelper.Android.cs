@@ -10,32 +10,37 @@ using Uno;
 using Uno.UI;
 using System.Linq;
 using Android.OS;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media;
 using Windows.UI.Text;
 using Uno.Foundation.Logging;
+using Windows.Storage;
+using Uno.UI.Xaml.Media;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 
-namespace Windows.UI.Xaml
+namespace Microsoft.UI.Xaml
 {
 	internal partial class FontHelper
-	{ 
+	{
 		private static bool _assetsListed;
 		private static readonly string DefaultFontFamilyName = "sans-serif";
 
-		internal static Typeface? FontFamilyToTypeFace(FontFamily? fontFamily, FontWeight fontWeight, TypefaceStyle style = TypefaceStyle.Normal)
-		{  
-			var entry = new FontFamilyToTypeFaceDictionary.Entry(fontFamily?.Source, fontWeight, style);
-			 
-			if (!_fontFamilyToTypeFaceDictionary.TryGetValue(entry , out var typeFace))
+		internal static Typeface? FontFamilyToTypeFace(FontFamily? fontFamily, FontWeight fontWeight, FontStyle fontStyle, FontStretch fontStretch)
+		{
+			var italic = fontStyle is FontStyle.Italic or FontStyle.Oblique;
+			var entry = new FontFamilyToTypeFaceDictionary.Entry(fontFamily?.Source, fontWeight, italic, fontStretch);
+
+			if (!_fontFamilyToTypeFaceDictionary.TryGetValue(entry, out var typeFace))
 			{
-				typeFace = InternalFontFamilyToTypeFace(fontFamily, fontWeight, style);
+				typeFace = InternalFontFamilyToTypeFace(fontFamily, fontWeight, italic, fontStretch);
 				_fontFamilyToTypeFaceDictionary.Add(entry, typeFace);
 			}
 
 			return typeFace;
 		}
 
-		internal static Typeface? InternalFontFamilyToTypeFace(FontFamily? fontFamily, FontWeight fontWeight, TypefaceStyle style)
+		internal static Typeface? InternalFontFamilyToTypeFace(FontFamily? fontFamily, FontWeight fontWeight, bool italic, FontStretch fontStretch)
 		{
 			if (fontFamily?.Source == null || fontFamily.Equals(FontFamily.Default))
 			{
@@ -56,37 +61,29 @@ namespace Windows.UI.Xaml
 				{
 					var source = fontFamily.Source;
 
-					// The lookup is always performed in the assets folder, even if its required to specify it
-					// with UWP.
-					source = source.TrimStart("ms-appx://", StringComparison.OrdinalIgnoreCase);
-					source = source.TrimStart("/assets/", StringComparison.OrdinalIgnoreCase);
-					source = FontFamilyHelper.RemoveHashFamilyName(source);
+					source = source.TrimStart("ms-appx://", ignoreCase: true);
 
-					if (typeof(FontHelper).Log().IsEnabled(Uno.Foundation.Logging.LogLevel.Debug))
+					if (!TryLoadFromPath(fontWeight.Weight, fontStretch, italic, source, out typeface))
 					{
-						typeof(FontHelper).Log().Debug($"Searching for font as asset [{source}]");
-					}
+						// The lookup used to be performed without the assets folder, even if its required to specify it
+						// with UWP. Keep this behavior for backward compatibility.
+						var legacySource = source.TrimStart("/assets/", ignoreCase: true);
 
-					// We need to lookup assets manually, as assets are stored this way by android, but windows
-					// is case insensitive.
-					string actualAsset = AssetsHelper.FindAssetFile(source);
-					if (actualAsset != null)
-					{
-						typeface = Android.Graphics.Typeface.CreateFromAsset(Android.App.Application.Context.Assets, actualAsset);
-
-						if (style != typeface?.Style)
+						// The path for AndroidAssets is not encoded, unlike assets processed by the RetargetAssets tool.
+						if (!TryLoadFromPath(fontWeight.Weight, fontStretch, italic, legacySource, out typeface, encodePath: false))
 						{
-							typeface = Typeface.Create(typeface, style);
+							throw new InvalidOperationException($"Unable to find [{fontFamily.Source}] from the application's assets.");
 						}
-					}
-					else
-					{
-						throw new InvalidOperationException($"Unable to find [{fontFamily.Source}] from the application's assets.");
 					}
 				}
 				else
 				{
+					var style = TypefaceStyleHelper.GetTypefaceStyle(italic, fontWeight);
 					typeface = Android.Graphics.Typeface.Create(fontFamily.Source, style);
+					if (typeface is not null && typeface.Weight != fontWeight.Weight)
+					{
+						typeface = Android.Graphics.Typeface.Create(typeface, fontWeight.Weight, italic);
+					}
 				}
 
 				return typeface;
@@ -111,6 +108,76 @@ namespace Windows.UI.Xaml
 
 				return null;
 			}
+		}
+
+		private static string FontStretchToPercentage(FontStretch fontStretch)
+		{
+			return fontStretch switch
+			{
+				FontStretch.UltraCondensed => "50",
+				FontStretch.ExtraCondensed => "62.5",
+				FontStretch.Condensed => "75",
+				FontStretch.SemiCondensed => "87.5",
+				FontStretch.Normal => "100",
+				FontStretch.SemiExpanded => "112.5",
+				FontStretch.Expanded => "125",
+				FontStretch.ExtraExpanded => "150",
+				FontStretch.UltraExpanded => "200",
+				_ => "100",
+			};
+		}
+
+		private static bool TryLoadFromPath(int weight, FontStretch stretch, bool italic, string source, out Typeface? typeface, bool encodePath = true)
+		{
+			source = FontFamilyHelper.RemoveHashFamilyName(source);
+
+			if (typeof(FontHelper).Log().IsEnabled(Uno.Foundation.Logging.LogLevel.Debug))
+			{
+				typeof(FontHelper).Log().Debug($"Searching for font as asset [{source}]");
+			}
+
+			var encodedSource = encodePath
+				? AndroidResourceNameEncoder.EncodeFileSystemPath(source, prefix: "")
+				: source;
+
+			// We need to lookup assets manually, as assets are stored this way by android, but windows
+			// is case insensitive.
+			string actualAsset = AssetsHelper.FindAssetFile(encodedSource);
+			if (actualAsset != null)
+			{
+				var builder = new Android.Graphics.Typeface.Builder(Android.App.Application.Context.Assets!, actualAsset);
+				// NOTE: We are unable to use 'ital' axis here. If that axis doesn't exist in the
+				// font file, italic will break badly. However, if it exists, we will render "reasonable" (but not ideal) italic text.
+				builder.SetFontVariationSettings($"'wght' {weight}, 'wdth' {FontStretchToPercentage(stretch)}");
+				typeface = builder.Build();
+
+				if (typeface is not null)
+				{
+					if (typeface.Weight != weight || typeface.IsItalic != italic)
+					{
+						typeface = Typeface.Create(typeface, weight, italic);
+					}
+
+					return true;
+				}
+				else
+				{
+					if (typeof(FontHelper).Log().IsEnabled(Uno.Foundation.Logging.LogLevel.Debug))
+					{
+						typeof(FontHelper).Log().Debug($"Font [{source}] could not be created from asset [{actualAsset}]");
+					}
+				}
+			}
+			else
+			{
+				if (typeof(FontHelper).Log().IsEnabled(Uno.Foundation.Logging.LogLevel.Debug))
+				{
+					typeof(FontHelper).Log().Debug($"Font [{source}] could not be found in app assets using [{encodedSource}]");
+				}
+			}
+
+			typeface = null;
+			return false;
 		}
 
 		private static FontFamily GetDefaultFontFamily(FontWeight fontWeight)
@@ -151,7 +218,7 @@ namespace Windows.UI.Xaml
 		/// <returns></returns>
 		public static double GetFontRatio()
 		{
-			return ViewHelper.FontScale / ViewHelper.Scale;	
+			return ViewHelper.FontScale / ViewHelper.Scale;
 		}
 	}
 }

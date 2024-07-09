@@ -1,11 +1,11 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using Uno.Extensions;
 using Uno.Foundation.Logging;
 using Windows.Foundation;
 using Windows.Foundation.Metadata;
 
-namespace Windows.UI.Xaml
+namespace Microsoft.UI.Xaml
 {
 	public partial class StateTriggerBase : DependencyObject
 	{
@@ -15,16 +15,16 @@ namespace Windows.UI.Xaml
 
 			IsAutoPropertyInheritanceEnabled = false;
 
-			this.RegisterParentChangedCallback(
+			this.RegisterParentChangedCallbackStrong(
 				key: this,
 				handler: (instance, key, handler)
 					=> OnOwnerChanged()
 			);
 		}
 
-		protected void SetActive(bool active)
+		protected void SetActive(bool IsActive)
 		{
-			SetActivePrecedence(active ? StateTriggerPrecedence.CustomTrigger : StateTriggerPrecedence.Inactive);
+			SetActivePrecedence(IsActive ? StateTriggerPrecedence.CustomTrigger : StateTriggerPrecedence.Inactive);
 		}
 
 		internal void SetActivePrecedence(StateTriggerPrecedence precedence)
@@ -49,13 +49,24 @@ namespace Windows.UI.Xaml
 			Owner?.Owner?.RefreshStateTriggers();
 		}
 
-		internal StateTriggerPrecedence CurrentPrecedence { get; set; } = 0;
+		internal StateTriggerPrecedence CurrentPrecedence { get; set; }
 
 		internal VisualState Owner => this.GetParent() as VisualState;
 
 		internal virtual void OnOwnerChanged()
 		{
+		}
 
+		internal virtual void OnOwnerElementChanged()
+		{
+		}
+
+		internal virtual void OnOwnerElementLoaded()
+		{
+		}
+
+		internal virtual void OnOwnerElementUnloaded()
+		{
 		}
 	}
 }

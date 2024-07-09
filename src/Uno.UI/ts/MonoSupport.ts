@@ -11,6 +11,7 @@ namespace MonoSupport {
 		private static registrations: Map<string, any> = new Map<string, any>();
 		private static methodMap: { [id: string]: any } = {};
 		private static _isUnoRegistered : boolean;
+		private static dispatcherCallback: () => void;
 
 		/**
 		 * Registers a instance for a specified identier
@@ -28,10 +29,10 @@ namespace MonoSupport {
 			}
 			else {
 				if (!jsCallDispatcher._isUnoRegistered) {
-					jsCallDispatcher.registerScope("UnoStatic", Uno.UI.WindowManager);
 					jsCallDispatcher.registerScope("UnoStatic_Windows_Storage_StorageFolder", Windows.Storage.StorageFolder);
 					jsCallDispatcher.registerScope("UnoStatic_Windows_Storage_ApplicationDataContainer", Windows.Storage.ApplicationDataContainer);
 					jsCallDispatcher.registerScope("UnoStatic_Windows_ApplicationModel_DataTransfer_DragDrop_Core_DragDropExtension", Windows.ApplicationModel.DataTransfer.DragDrop.Core.DragDropExtension);
+					jsCallDispatcher.registerScope("UnoStatic_Windows_UI_Xaml_UIElement", Microsoft.UI.Xaml.UIElement);
 					jsCallDispatcher._isUnoRegistered = true;
 				}
 
@@ -87,8 +88,30 @@ namespace MonoSupport {
 		private static getMethodMapId(methodHandle: number) {
 			return methodHandle + "";
 		}
+	
+		public static invokeOnMainThread() {
+
+			if (!jsCallDispatcher.dispatcherCallback) {
+				jsCallDispatcher.dispatcherCallback = (<any>globalThis).DotnetExports.UnoUIDispatching.Uno.UI.Dispatching.NativeDispatcher.DispatcherCallback;
+			}
+
+			// Use setImmediate to return avoid blocking the background thread
+			// on a sync call.
+			(<any>window).setImmediate(() => {
+				try {
+					jsCallDispatcher.dispatcherCallback();
+				}
+				catch (e) {
+					console.error(`Unhandled dispatcher exception: ${e} (${e.stack})`);
+					throw e;
+				}
+			});
+		}
 	}
 }
 
 // Export the DotNet helper for WebAssembly.JSInterop.InvokeJSUnmarshalled
 (<any>window).DotNet = MonoSupport;
+
+// Export the main thread invoker for threading support
+(<any>MonoSupport).invokeOnMainThread = MonoSupport.jsCallDispatcher.invokeOnMainThread;

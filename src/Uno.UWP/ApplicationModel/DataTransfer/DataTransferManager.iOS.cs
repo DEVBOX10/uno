@@ -44,15 +44,15 @@ namespace Windows.ApplicationModel.DataTransfer
 			}
 
 			var uri = await GetSharedUriAsync(dataPackageView);
-			if (uri != null)
+			if (uri != null && NSUrl.FromString(uri.OriginalString) is { } nsUrl)
 			{
-				sharedData.Add(new DataActivityItemSource(NSUrl.FromString(uri.OriginalString), title));
+				sharedData.Add(new DataActivityItemSource(nsUrl, title));
 			}
 
 			var activityViewController = new UIActivityViewController(sharedData.ToArray(), null);
-			
+
 			if (activityViewController.PopoverPresentationController != null && rootViewController.View != null)
-			{				
+			{
 				activityViewController.PopoverPresentationController.SourceView = rootViewController.View;
 
 				if (options.SelectionRect != null)
@@ -61,7 +61,7 @@ namespace Windows.ApplicationModel.DataTransfer
 				}
 				else
 				{
-					activityViewController.PopoverPresentationController.SourceRect = new CGRect(rootViewController.View.Bounds.Width / 2, rootViewController.View.Bounds.Height / 2, 0, 0);				
+					activityViewController.PopoverPresentationController.SourceRect = new CGRect(rootViewController.View.Bounds.Width / 2, rootViewController.View.Bounds.Height / 2, 0, 0);
 					activityViewController.PopoverPresentationController.PermittedArrowDirections = 0;
 				}
 			}

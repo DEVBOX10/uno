@@ -10,9 +10,9 @@ namespace SamplesApp.UITests
 	public partial class Constants
 	{
 		public const string WebAssemblyDefaultUri = "https://localhost:44375/";
-		public const string iOSAppName = "uno.platform.uitestsample";
+		public const string iOSAppName = "uno.platform.samplesdev";
 		public const string AndroidAppName = "uno.platform.unosampleapp";
-		public const string iOSDeviceNameOrId = "iPad Pro (12.9-inch) (4th generation)";
+		public const string iOSDeviceNameOrId = "iPad Pro (12.9-inch) (5th generation)";
 
 		// Default active platform when running under Visual Studio test runner
 		public const Platform CurrentPlatform =

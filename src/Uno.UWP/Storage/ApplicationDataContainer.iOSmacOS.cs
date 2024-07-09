@@ -1,4 +1,3 @@
-#if __IOS__ || __MACOS__
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -72,7 +71,7 @@ namespace Windows.Storage
 					throw new ArgumentException("An item with the same key has already been added.");
 				}
 				if (value != null)
-				{					
+				{
 					var nativeObject = NSObject.FromObject(DataTypeSerializer.Serialize(value));
 					NSUserDefaults.StandardUserDefaults.SetValueForKey(nativeObject, (NSString)key);
 				}
@@ -89,7 +88,7 @@ namespace Windows.Storage
 				}
 			}
 
-			public bool Contains(KeyValuePair<string, object> item) 
+			public bool Contains(KeyValuePair<string, object> item)
 				=> throw new NotSupportedException();
 
 			public bool ContainsKey(string key)
@@ -108,6 +107,11 @@ namespace Windows.Storage
 
 			public bool Remove(string key)
 			{
+				if (!ContainsKey(key))
+				{
+					return false;
+				}
+
 				NSUserDefaults.StandardUserDefaults.RemoveObject((NSString)key);
 				NSUserDefaults.StandardUserDefaults.Synchronize();
 
@@ -132,4 +136,3 @@ namespace Windows.Storage
 		}
 	}
 }
-#endif

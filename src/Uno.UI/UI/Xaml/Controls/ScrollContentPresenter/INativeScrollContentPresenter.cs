@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Linq;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	internal interface INativeScrollContentPresenter
 	{
@@ -10,6 +10,9 @@ namespace Windows.UI.Xaml.Controls
 
 		bool CanHorizontallyScroll { get; set; }
 		bool CanVerticallyScroll { get; set; }
+
+		double ExtentWidth { get; set; }
+		double ExtentHeight { get; set; }
 
 		object Content { get; set; }
 

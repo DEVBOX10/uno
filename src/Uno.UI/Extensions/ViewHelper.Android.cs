@@ -4,7 +4,7 @@ using Windows.Foundation;
 using Uno.Foundation.Logging;
 using Uno.Extensions;
 using Android.App;
-using Windows.UI.Xaml;
+using Microsoft.UI.Xaml;
 using SizeF = System.Drawing.SizeF;
 using System.Runtime.CompilerServices;
 using Android.Views;
@@ -150,13 +150,11 @@ namespace Uno.UI
 			}
 			else
 			{
-#if __ANDROID_18__
 				if (Android.OS.Build.VERSION.SdkInt >= Android.OS.BuildVersionCodes.JellyBeanMr2)
 				{
 					return view.WindowId != null;
 				}
 				else
-#endif
 				{
 					return view.WindowToken != null;
 				}
@@ -272,6 +270,17 @@ namespace Uno.UI
 				left: LogicalToPhysicalPixels(size.Left),
 				right: LogicalToPhysicalPixels(size.Right),
 				bottom: LogicalToPhysicalPixels(size.Bottom)
+			);
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static Thickness PhysicalToLogicalPixels(this Thickness size)
+		{
+			return new Thickness(
+				top: PhysicalToLogicalPixels(size.Top),
+				left: PhysicalToLogicalPixels(size.Left),
+				right: PhysicalToLogicalPixels(size.Right),
+				bottom: PhysicalToLogicalPixels(size.Bottom)
 			);
 		}
 
@@ -466,6 +475,10 @@ namespace Uno.UI
 				// This ensures it's disabled for everything using ScaledDensity (e.g. TextBlock, TextBox, AppBarButton, etc.)
 				// https://developer.xamarin.com/api/property/Android.Util.DisplayMetrics.ScaledDensity/
 				displayMetrics.ScaledDensity = displayMetrics.Density;
+			}
+			else if (FeatureConfiguration.Font.MaximumTextScaleFactor is float scaleFactor)
+			{
+				displayMetrics.ScaledDensity = Math.Min(displayMetrics.ScaledDensity, scaleFactor);
 			}
 		}
 	}

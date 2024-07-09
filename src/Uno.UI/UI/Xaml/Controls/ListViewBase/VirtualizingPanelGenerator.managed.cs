@@ -1,4 +1,6 @@
-﻿#if !NET461
+﻿#nullable enable
+
+#if !IS_UNIT_TESTS
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,22 +10,36 @@ using System.Text;
 using Uno.Extensions;
 using Uno.Foundation.Logging;
 #if __ANDROID__ || __IOS__
-using _VirtualizingPanelLayout = Windows.UI.Xaml.Controls.ManagedVirtualizingPanelLayout;
+using _VirtualizingPanelLayout = Microsoft.UI.Xaml.Controls.ManagedVirtualizingPanelLayout;
 #else
-using _VirtualizingPanelLayout = Windows.UI.Xaml.Controls.VirtualizingPanelLayout;
+using _VirtualizingPanelLayout = Microsoft.UI.Xaml.Controls.VirtualizingPanelLayout;
 #endif
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	/// <summary>
 	/// Handles creation, recycling and binding of items for an <see cref="IVirtualizingPanel"/>.
 	/// </summary>
 	internal class VirtualizingPanelGenerator
 	{
-		private const int CacheLimit = 10;
+		/// <summary>
+		/// Maxmimum number of cached items per DataTemplate group.
+		/// </summary>
+		private const int MaxCacheLimit = 1024;
+
+		/// <summary>
+		/// Minimum number of cached items per DataTemplate group.
+		/// </summary>
+		private const int MinCacheLimit = 10;
+
 		private const int NoTemplateItemId = -1;
 		private const int IsOwnContainerItemId = -2;
 		private readonly _VirtualizingPanelLayout _owner;
+
+		/// <summary>
+		/// Current cache limit, to be adjusted based on the extent size
+		/// </summary>
+		private int _cacheLimit = 10;
 		/// <summary>
 		/// Recycled item containers that can be reused as needed. This is actually multiple caches indexed by template id.
 		/// </summary>
@@ -40,7 +56,7 @@ namespace Windows.UI.Xaml.Controls
 		/// </summary>
 		private readonly Dictionary<int, FrameworkElement> _scrapCache = new Dictionary<int, FrameworkElement>();
 
-		private ItemsControl ItemsControl => _owner.ItemsControl;
+		private ItemsControl? ItemsControl => _owner.ItemsControl;
 
 		public VirtualizingPanelGenerator(_VirtualizingPanelLayout owner)
 		{
@@ -48,14 +64,43 @@ namespace Windows.UI.Xaml.Controls
 		}
 
 		/// <summary>
+		/// Sets the items cache limit per DataTemplate group
+		/// </summary>
+		internal int CacheLimit
+		{
+			get => _cacheLimit;
+			set
+			{
+				_cacheLimit = Math.Max(Math.Min(value, MaxCacheLimit), MinCacheLimit);
+
+				PurgeCache();
+			}
+		}
+
+		private void PurgeCache()
+		{
+			foreach (var cache in _itemContainerCache)
+			{
+				while (cache.Value.Count > _cacheLimit)
+				{
+					DiscardContainer(cache.Value.Pop());
+				}
+			}
+		}
+
+		/// <summary>
 		/// Returns a container view bound to the item at <paramref name="index"/>, recycling an available view if possible, or creating a new container if not.
 		/// </summary>
-		public FrameworkElement DequeueViewForItem(int index)
+		public FrameworkElement? DequeueViewForItem(int index)
 		{
 			//Try scrap first to save rebinding view
 			var scrapped = TryGetScrappedContainer(index);
 			if (scrapped != null)
 			{
+				if (this.Log().IsEnabled(LogLevel.Debug))
+				{
+					this.Log().Debug($"DequeueViewForItem: Using scrapped for index:{index}");
+				}
 				return scrapped;
 			}
 
@@ -68,10 +113,21 @@ namespace Windows.UI.Xaml.Controls
 			}
 			if (container == null)
 			{
-				container = ItemsControl.GetContainerForIndex(index) as FrameworkElement;
+				if (this.Log().IsEnabled(LogLevel.Debug))
+				{
+					this.Log().Debug($"DequeueViewForItem: Creating for index:{index}");
+				}
+				container = ItemsControl?.GetContainerForIndex(index) as FrameworkElement;
+			}
+			else
+			{
+				if (this.Log().IsEnabled(LogLevel.Debug))
+				{
+					this.Log().Debug($"DequeueViewForItem: Using cached for index:{index}");
+				}
 			}
 
-			ItemsControl.PrepareContainerForIndex(container, index);
+			ItemsControl?.PrepareContainerForIndex(container, index);
 
 			return container;
 		}
@@ -79,7 +135,7 @@ namespace Windows.UI.Xaml.Controls
 		/// <summary>
 		/// Try to retrieve a cached container for a given template <paramref name="id"/>. Returns null if none is available.
 		/// </summary>
-		private FrameworkElement TryDequeueCachedContainer(int id)
+		private FrameworkElement? TryDequeueCachedContainer(int id)
 		{
 			if (id == IsOwnContainerItemId)
 			{
@@ -103,7 +159,7 @@ namespace Windows.UI.Xaml.Controls
 		/// <summary>
 		/// Try to retrieve a temporarily-scrapped container for given item <paramref name="index"/>. Returns null if none is available.
 		/// </summary>
-		private FrameworkElement TryGetScrappedContainer(int index)
+		private FrameworkElement? TryGetScrappedContainer(int index)
 		{
 			if (_scrapCache.TryGetValue(index, out var container))
 			{
@@ -120,7 +176,8 @@ namespace Windows.UI.Xaml.Controls
 		/// </summary>
 		/// <param name="container">The item container to recycle.</param>
 		/// <param name="index">The item index that the container was being used for.</param>
-		public void RecycleViewForItem(FrameworkElement container, int index)
+		/// <param name="clearContainer">Clears the container DataContext, used when the container is associated when an item is removed</param>
+		public void RecycleViewForItem(FrameworkElement container, int index, bool clearContainer)
 		{
 			var id = GetItemId(index);
 
@@ -136,6 +193,21 @@ namespace Windows.UI.Xaml.Controls
 				if (cache.Count < CacheLimit)
 				{
 					cache.Push(container);
+
+					if (clearContainer)
+					{
+						ItemsControl?.CleanUpContainer(container);
+					}
+					else
+					{
+						// https://github.com/unoplatform/uno/issues/11957
+						container.PrepareForRecycle();
+					}
+
+					if (container.Parent is Panel parent)
+					{
+						parent.Children.Remove(container);
+					}
 				}
 				else
 				{
@@ -160,11 +232,13 @@ namespace Windows.UI.Xaml.Controls
 		/// <summary>
 		/// Completely remove an item container that will not be reused again.
 		/// </summary>
-		private static void DiscardContainer(FrameworkElement container)
+		private void DiscardContainer(FrameworkElement container)
 		{
-			var parent = (container.Parent) as Panel;
-			if (parent != null)
+			if (container.Parent is Panel parent)
 			{
+				// Clear the container's Content and DataContext
+				ItemsControl?.CleanUpContainer(container);
+
 				parent.Children.Remove(container);
 			}
 		}
@@ -186,7 +260,7 @@ namespace Windows.UI.Xaml.Controls
 		{
 			foreach (var kvp in _scrapCache)
 			{
-				RecycleViewForItem(kvp.Value, kvp.Key);
+				RecycleViewForItem(kvp.Value, kvp.Key, clearContainer: false);
 			}
 
 			_scrapCache.Clear();
@@ -226,7 +300,8 @@ namespace Windows.UI.Xaml.Controls
 				{
 					// Item has been removed, take out container from scrap so that we don't reuse it without rebinding.
 					// Note: we update scrap before _idCache, so we can access the correct, cached template id in RecycleViewForItem()
-					RecycleViewForItem(kvp.Value, kvp.Key);
+					// We also ensure that the container is cleared up so that we don't leak references
+					RecycleViewForItem(kvp.Value, kvp.Key, clearContainer: true);
 				}
 			}
 
@@ -261,7 +336,7 @@ namespace Windows.UI.Xaml.Controls
 			return id;
 		}
 
-		private string GetMethodTag([CallerMemberName] string caller = null)
+		private string GetMethodTag([CallerMemberName] string caller = "")
 			=> $"{nameof(VirtualizingPanelGenerator)}.{caller}()";
 
 		internal void ClearIdCache()

@@ -1,14 +1,14 @@
 name: "Pull Request Labeler"
-
 on:
-  schedule:
-  - cron: "*/30 * * * *"
+- pull_request_target
 
 jobs:
   triage:
+    permissions:
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/labeler@v2
-      if: github.repository == 'unoplatform/uno' 
+    - uses: actions/labeler@ac9175f8a1f3625fd0d4fb234536d26811351594 # v4
       with:
         repo-token: "${{ secrets.GITHUB_TOKEN }}"

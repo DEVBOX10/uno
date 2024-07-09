@@ -1,4 +1,4 @@
-using Windows.Foundation;
+﻿using Windows.Foundation;
 using Uno.UI.Xaml.Input;
 
 #if HAS_UNO_WINUI
@@ -8,14 +8,14 @@ using Windows.Devices.Input;
 using Windows.UI.Input;
 #endif
 
-namespace Windows.UI.Xaml.Input
+namespace Microsoft.UI.Xaml.Input
 {
 	public partial class ManipulationCompletedRoutedEventArgs : RoutedEventArgs, IHandleableRoutedEventArgs
 	{
 		public ManipulationCompletedRoutedEventArgs() { }
 
-		internal ManipulationCompletedRoutedEventArgs(UIElement container, ManipulationCompletedEventArgs args)
-			: base(container)
+		internal ManipulationCompletedRoutedEventArgs(UIElement source, UIElement container, ManipulationCompletedEventArgs args)
+			: base(source)
 		{
 			Container = container;
 
@@ -32,7 +32,7 @@ namespace Windows.UI.Xaml.Input
 		/// </summary>
 		/// <remarks>This collection might contains pointers that has been released.</remarks>
 		/// <remarks>All pointers are expected to have the same <see cref="PointerIdentifier.Type"/>.</remarks>
-		internal Windows.Devices.Input.PointerIdentifier[] Pointers { get; set; }
+		internal global::Windows.Devices.Input.PointerIdentifier[] Pointers { get; set; }
 
 		public bool Handled { get; set; }
 

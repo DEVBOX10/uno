@@ -1,9 +1,10 @@
-using CoreGraphics;
+﻿using CoreGraphics;
 using System;
 using Uno.Extensions;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using Uno.UI.Controls;
+using Uno.UI.Helpers;
 using Foundation;
 using System.Collections;
 using System.Linq;
@@ -12,14 +13,14 @@ using _TextField = AppKit.NSTextField;
 using Windows.UI;
 using Uno.Disposables;
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	internal partial class TextBoxView : _TextField, ITextBoxView, DependencyObject, IFontScalable
 	{
 		private TextBoxViewDelegate _delegate;
 		private readonly WeakReference<TextBox> _textBox;
 
-		private readonly SerialDisposable _foregroundChanged = new SerialDisposable();
+		private Action _foregroundChanged;
 
 		public TextBoxView(TextBox textBox)
 		{
@@ -55,7 +56,7 @@ namespace Windows.UI.Xaml.Controls
 				}
 				else if ((theEvent.ModifierFlags & NSEventModifierMask.DeviceIndependentModifierFlagsMask) == (NSEventModifierMask.CommandKeyMask | NSEventModifierMask.ShiftKeyMask))
 				{
-					if (theEvent.CharactersIgnoringModifiers.ToLowerInvariant() == "z")
+					if (theEvent.CharactersIgnoringModifiers.Equals("z", StringComparison.OrdinalIgnoreCase))
 					{
 						if (NSApplication.SharedApplication.SendAction(new ObjCRuntime.Selector("redo:"), null, this))
 						{
@@ -148,7 +149,17 @@ namespace Windows.UI.Xaml.Controls
 
 		public NSRange MarkedRange => throw new NotImplementedException();
 
-		public NSRange SelectedRange => throw new NotImplementedException();
+		public NSRange SelectedRange
+		{
+			get => CurrentEditor?.SelectedRange ?? new NSRange(start: 0, len: 0);
+			set
+			{
+				if (CurrentEditor != null)
+				{
+					CurrentEditor.SelectedRange = value;
+				}
+			}
+		}
 
 		public NSString[] ValidAttributesForMarkedText => null;
 
@@ -166,10 +177,7 @@ namespace Windows.UI.Xaml.Controls
 
 		public void OnForegroundChanged(Brush oldValue, Brush newValue)
 		{
-			_foregroundChanged.Disposable = null;
-
-			_foregroundChanged.Disposable = Brush.AssignAndObserveBrush(newValue, _ => ApplyColor());
-			ApplyColor();
+			Brush.SetupBrushChanged(oldValue, newValue, ref _foregroundChanged, () => ApplyColor());
 
 			void ApplyColor()
 			{
@@ -208,7 +216,10 @@ namespace Windows.UI.Xaml.Controls
 		{
 			UpdateCaretColor();
 
-			_textBox.GetTarget()?.Focus(FocusState.Pointer);
+			if (_textBox.GetTarget() is TextBox textBox && textBox.FocusState == FocusState.Unfocused)
+			{
+				textBox.Focus(FocusState.Pointer);
+			}
 
 			return base.BecomeFirstResponder();
 		}

@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
-namespace Windows.UI.Xaml.Documents
+namespace Microsoft.UI.Xaml.Documents
 {
 	partial class InlineCollection : IList<Inline>, IEnumerable<Inline>
 	{
@@ -13,6 +14,22 @@ namespace Windows.UI.Xaml.Documents
 		internal InlineCollection(UIElement containerElement)
 		{
 			_collection = new UIElementCollection(containerElement);
+			_collection.CollectionChanged += OnCollectionChanged;
+		}
+
+		private void OnCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+		{
+			switch (_collection.Owner)
+			{
+				case TextBlock textBlock:
+					textBlock.InvalidateInlines(true);
+					break;
+				case Inline inline:
+					inline.InvalidateInlines(true);
+					break;
+				default:
+					break;
+			}
 		}
 
 		/// <inheritdoc />
@@ -30,7 +47,7 @@ namespace Windows.UI.Xaml.Documents
 		public bool Contains(Inline item) => _collection.Contains(item);
 
 		/// <inheritdoc />
-		public void CopyTo(Inline[] array, int arrayIndex) => throw new NotSupportedException();
+		public void CopyTo(Inline[] array, int arrayIndex) => _collection.CopyTo(array, arrayIndex);
 
 		/// <inheritdoc />
 		public bool Remove(Inline item) => _collection.Remove(item);

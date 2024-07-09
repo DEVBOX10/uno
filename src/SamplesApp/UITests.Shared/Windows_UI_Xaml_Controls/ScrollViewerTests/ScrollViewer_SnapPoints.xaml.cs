@@ -1,10 +1,10 @@
-﻿using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
+﻿using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Uno.UI.Samples.Controls;
 
 namespace UITests.Windows_UI_Xaml_Controls.ScrollViewerTests
 {
-	[Sample("ScrollViewer")]
+	[Sample("Scrolling")]
 	public sealed partial class ScrollViewer_SnapPoints : Page
 	{
 		public ScrollViewer_SnapPoints()

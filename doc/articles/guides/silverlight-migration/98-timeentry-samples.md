@@ -1,3 +1,7 @@
+---
+uid: Uno.SilverlightMigration.TimeEntrySampleApps
+---
+
 # The TimeEntry Sample apps
 
 The sample application is made up of 3 solutions containing multiple projects and has a dependency on a SQL database. The source for the app can be found in the Uno.Platform Samples repository:
@@ -22,7 +26,7 @@ There are 3 solutions:
 * **TimeEntryUno** - this is the Uno client solution (VS 2019)
   * **TimeEntryUno.Shared** - the shared source project
   * **TimeEntryUno.Uwp** - the UWP head
-  * **TimeEntryUno.Wasm** - the web assembly head
+  * **TimeEntryUno.Wasm** - the WebAssembly head
 * **TimeEntryServices** - this is the web services solution for **TimeEntryUno** (VS 2019)
   * **IdentityServer** - a .NET Core 3.1 project hosting IdentityServer4
   * **TimeEntryApi** - a .NET 5 WebApi project hosting the app business services
@@ -84,11 +88,11 @@ The **TimeEntryRia** sample is a Visual Studio 2015 solution and is, of course, 
 1. Scroll to the bottom of the **Web.Config** file to locate the connection string. Update as required.
 
 ```xml
-    <connectionStrings>
-        <add name="TimeEntryEntities"
-             connectionString="metadata=res://*/TimeEntryModel.csdl|res://*/TimeEntryModel.ssdl|res://*/TimeEntryModel.msl;provider=System.Data.SqlClient;provider connection string=&quot;data source=.\SQLEXPRESS;initial catalog=TimeEntry;integrated security=True;multipleactiveresultsets=True;App=EntityFramework&quot;"
-             providerName="System.Data.EntityClient" />
-    </connectionStrings>
+<connectionStrings>
+    <add name="TimeEntryEntities"
+         connectionString="metadata=res://*/TimeEntryModel.csdl|res://*/TimeEntryModel.ssdl|res://*/TimeEntryModel.msl;provider=System.Data.SqlClient;provider connection string=&quot;data source=.\SQLEXPRESS;initial catalog=TimeEntry;integrated security=True;multipleactiveresultsets=True;App=EntityFramework&quot;"
+         providerName="System.Data.EntityClient" />
+</connectionStrings>
 ```
 
 ### Running the Silverlight sample

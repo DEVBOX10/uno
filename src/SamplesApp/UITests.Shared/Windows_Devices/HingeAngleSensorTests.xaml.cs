@@ -11,17 +11,18 @@ using Windows.Devices.Sensors;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
 using Windows.UI.Core;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Navigation;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Navigation;
+using Private.Infrastructure;
 
 namespace UITests.Shared.Windows_Devices
 {
-	[SampleControlInfo("Windows.Devices", "HingeAngleSensor", description: "Demonstrates use of Windows.Devices.Sensors.HingeAngleSensor", viewModelType: typeof(HingeAngleSensorTestsViewModel))]
+	[SampleControlInfo("Windows.Devices", "HingeAngleSensor", description: "Demonstrates use of Windows.Devices.Sensors.HingeAngleSensor", viewModelType: typeof(HingeAngleSensorTestsViewModel), ignoreInSnapshotTests: true)]
 	public sealed partial class HingeAngleSensorTests : UserControl
 	{
 		public HingeAngleSensorTests()
@@ -44,9 +45,9 @@ namespace UITests.Shared.Windows_Devices
 			private double _angle;
 			private string _timestamp;
 
-			public HingeAngleSensorTestsViewModel(CoreDispatcher dispatcher) : base(dispatcher)
+			public HingeAngleSensorTestsViewModel(Private.Infrastructure.UnitTestDispatcherCompat dispatcher) : base(dispatcher)
 			{
-				
+
 			}
 
 			public async Task InitializeAsync()
@@ -70,13 +71,13 @@ namespace UITests.Shared.Windows_Devices
 				}));
 			}
 
-			internal Command AttachReadingChangedCommand => new Command((p) =>
+			public Command AttachReadingChangedCommand => GetOrCreateCommand(() =>
 			{
 				_hinge.ReadingChanged += HingeAngleSensor_ReadingChanged;
 				ReadingChangedAttached = true;
 			});
 
-			internal Command DetachReadingChangedCommand => new Command((p) =>
+			public Command DetachReadingChangedCommand => GetOrCreateCommand(() =>
 			{
 				_hinge.ReadingChanged -= HingeAngleSensor_ReadingChanged;
 				ReadingChangedAttached = false;
@@ -126,7 +127,7 @@ namespace UITests.Shared.Windows_Devices
 
 			private async void HingeAngleSensor_ReadingChanged(HingeAngleSensor sender, HingeAngleSensorReadingChangedEventArgs args)
 			{
-				await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+				await Dispatcher.RunAsync(UnitTestDispatcherCompat.Priority.Normal, () =>
 				{
 					Angle = args.Reading.AngleInDegrees;
 					Timestamp = args.Reading.Timestamp.ToString("R");

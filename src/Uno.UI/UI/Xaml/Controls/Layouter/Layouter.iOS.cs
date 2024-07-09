@@ -7,18 +7,15 @@ using Uno;
 using Uno.UI;
 using Uno.Foundation.Logging;
 using Uno.Collections;
-using Windows.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using View = UIKit.UIView;
 using UIKit;
 using CoreGraphics;
 using Uno.Disposables;
-
-#if NET6_0_OR_GREATER
 using ObjCRuntime;
-#endif
 
-namespace Windows.UI.Xaml.Controls
+namespace Microsoft.UI.Xaml.Controls
 {
 	abstract partial class Layouter
 	{
@@ -36,14 +33,10 @@ namespace Windows.UI.Xaml.Controls
 
 			// With iOS, a child may return a size that fits that is larger than the suggested size.
 			// We don't want that with respects to the Xaml model, so we cap the size to the input constraints.
-			if (nfloat.IsNaN((nfloat)ret.Width) || nfloat.IsNaN((nfloat)ret.Height))
-			{
-				ret.ToString();
-			}
 
 			if (!(view is FrameworkElement) && view is IFrameworkElement ife)
 			{
-				if(!(view is Image)) // Except for Image
+				if (!(view is Image)) // Except for Image
 				{
 					// If the child is not a FrameworkElement, part of the "Measure"
 					// phase must be done by the parent element's layouter.
@@ -52,10 +45,10 @@ namespace Windows.UI.Xaml.Controls
 				}
 			}
 
-			var w = nfloat.IsNaN((nfloat)ret.Width) ? double.PositiveInfinity : Math.Min(slotSize.Width, ret.Width);
-			var h = nfloat.IsNaN((nfloat)ret.Height) ? double.PositiveInfinity : Math.Min(slotSize.Height, ret.Height);
+			ret.Width = double.IsNaN(ret.Width) ? double.PositiveInfinity : Math.Min(slotSize.Width, ret.Width);
+			ret.Height = double.IsNaN(ret.Height) ? double.PositiveInfinity : Math.Min(slotSize.Height, ret.Height);
 
-			return new Size(w, h);
+			return ret;
 		}
 
 		protected void ArrangeChildOverride(View view, Rect frame)

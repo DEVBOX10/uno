@@ -5,13 +5,13 @@ using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Navigation;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Navigation;
 using Uno.UI.Samples.Controls;
 
 namespace UITests.Windows_UI_Input.PointersTests
@@ -39,7 +39,7 @@ namespace UITests.Windows_UI_Input.PointersTests
 			_nested.PointerMoved += (snd, e) =>
 			{
 				// We filter out half of the events to validate that handled events are not always invalidly bubbled.
-				if (even) 
+				if (even)
 				{
 					containerMoveCount++;
 				}
@@ -57,28 +57,57 @@ namespace UITests.Windows_UI_Input.PointersTests
 			_container.PointerReleased += (snd, e) => _result.Text += $" | Released {(nestedMoveCount == containerMoveCount ? "SUCCESS" : "FAIL")}";
 
 
-			_container.AddHandler(
+			_sample2_container.AddHandler(
 				PointerEnteredEvent,
 				new PointerEventHandler((snd, e) =>
 				{
-					if (e.OriginalSource != _container)
+					if (ReferenceEquals(e.OriginalSource, _sample2_nested)
+						|| ReferenceEquals(e.OriginalSource, _sample2_intermediate2)
+						|| ReferenceEquals(e.OriginalSource, _sample2_intermediate))
 					{
-						_enterResult.Text = "FAILED";
+						_enterResult.Text += "FAILED (container)";
 					}
 				}),
 				handledEventsToo: true);
-			_nested.PointerEntered += (snd, e) => _enterResult.Text = "SUCCESS";
-			_container.AddHandler(
+			_sample2_intermediate.AddHandler(
+				PointerEnteredEvent,
+				new PointerEventHandler((snd, e) => _enterResult.Text += "SUCCESS"),
+				handledEventsToo: true);
+			_sample2_intermediate2.AddHandler(
+				PointerExitedEvent,
+				new PointerEventHandler((snd, e) => _exitResult.Text += "FAILED (intermediate 2)"),
+				handledEventsToo: false);
+			_sample2_nested.PointerEntered += (snd, e) =>
+			{
+				e.Handled = true;
+				_enterResult.Text = "ENTERED ";
+			};
+
+			_sample2_container.AddHandler(
 				PointerExitedEvent,
 				new PointerEventHandler((snd, e) =>
 				{
-					if (e.OriginalSource != _container)
+					if (ReferenceEquals(e.OriginalSource, _sample2_nested)
+						|| ReferenceEquals(e.OriginalSource, _sample2_intermediate2)
+						|| ReferenceEquals(e.OriginalSource, _sample2_intermediate))
 					{
-						_exitResult.Text = "FAILED";
+						_exitResult.Text += "FAILED (container)";
 					}
 				}),
 				handledEventsToo: true);
-			_nested.PointerExited += (snd, e) => _exitResult.Text = "SUCCESS";
+			_sample2_intermediate.AddHandler(
+				PointerExitedEvent,
+				new PointerEventHandler((snd, e) => _exitResult.Text += "SUCCESS"),
+				handledEventsToo: true);
+			_sample2_intermediate2.AddHandler(
+				PointerExitedEvent,
+				new PointerEventHandler((snd, e) => _exitResult.Text += "FAILED (intermediate 2)"),
+				handledEventsToo: false);
+			_sample2_nested.PointerExited += (snd, e) =>
+			{
+				e.Handled = true;
+				_exitResult.Text = "EXITED ";
+			};
 		}
 	}
 }

@@ -1,13 +1,13 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Windows.UI.Xaml;
+using Microsoft.UI.Xaml;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Uno.UI.DataBinding;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 
 namespace Uno.UI.Tests
 {
@@ -122,6 +122,21 @@ namespace Uno.UI.Tests
 			Assert.AreEqual(1, typeof(MyObject).GetCustomAttributes(typeof(BindableAttribute), true).Length);
 		}
 
+		[TestMethod]
+		public void When_LayoutLoop()
+		{
+			var SUT = new ContentControl();
+			var inner1 = new Grid();
+			var inner2 = new Grid();
+
+			SUT.Content = inner1;
+			inner1.Children.Add(inner2);
+			inner2.Children.Add(SUT);
+
+			// No exception should be raised for this test, until
+			// Children.Add validates for cycles.
+		}
+
 		public partial class MyObject : DependencyObject
 		{
 			public MyObject(int value)
@@ -145,11 +160,10 @@ namespace Uno.UI.Tests
 
 			public override int GetHashCode() => Value.GetHashCode();
 		}
-
 	}
 
 	public partial class MyProvider : DependencyObject
 	{
-			
+
 	}
 }
