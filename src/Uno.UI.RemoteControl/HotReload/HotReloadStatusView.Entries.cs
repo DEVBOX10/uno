@@ -144,7 +144,7 @@ public enum EntryIcon
 }
 
 
-[Microsoft.UI.Xaml.Data.Bindable]
+[Windows.UI.Xaml.Data.Bindable]
 internal record HotReloadLogEntry(EntrySource Source, long Id, DateTimeOffset Timestamp) : INotifyPropertyChanged
 {
 	/// <inheritdoc />
